@@ -65,7 +65,7 @@ const u=new SpeechSynthesisUtterance(text);u.lang='ar-EG';u.rate=.92;u.pitch=.82
 u.onstart=()=>state.textContent='DAGA بتتكلم…';
 u.onend=()=>{replying=false;if(live&&!muted){state.textContent='مستعدة أسمعك';setTimeout(startListening,100)}};
 u.onerror=()=>{replying=false;if(live&&!muted)setTimeout(startListening,100)};
-speechSynthesis.speak(u)
+fetch('https://daga-voice.dagamobile10.workers.dev/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})}).then(async r=>{if(!r.ok)throw new Error(await r.text());const a=new Audio(URL.createObjectURL(await r.blob()));state.textContent='DAGA بتتكلم…';a.onended=()=>{replying=false;if(live&&!muted){state.textContent='مستعدة أسمعك';setTimeout(startListening,100)}};a.onerror=()=>{replying=false;if(live&&!muted)setTimeout(startListening,100)};await a.play()}).catch(e=>{console.error(e);replying=false;state.textContent='حصلت مشكلة في صوت DAGA';if(live&&!muted)setTimeout(startListening,100)})
 }
 function stopVoice(){if('speechSynthesis'in window)speechSynthesis.cancel();replying=false;if(live&&!muted)setTimeout(startListening,100)}
 function playReference(){audio.currentTime=0;audio.play()}
