@@ -5,3 +5,4 @@ DAGA Live Phase 2 — User Voice v3
 - منع التقاط صوت DAGA بواسطة الميكروفون أثناء الرد.
 - زر لتشغيل عينة صوت المستخدم.
 - مهم: عينة الصوت ليست Voice Clone. تحويل نصوص جديدة إلى صوت المستخدم يتطلب محرك Voice Cloning/TTS خارجي متصل بالـBackend؛ لا يتم ادعاء تنفيذ ذلك محليا.
+Cloudflare build trigger
