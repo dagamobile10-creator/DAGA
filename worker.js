@@ -15,6 +15,51 @@ export default {
       });
     }
 
+    if (url.pathname === "/chat" && request.method === "POST") {
+      try {
+        if (!env.OPENAI_API_KEY) {
+          return json({ error: "OPENAI_API_KEY is not configured" }, 503);
+        }
+
+        const body = await request.json();
+        const userText = String(body?.text || "").trim();
+        if (!userText) return json({ error: "text is required" }, 400);
+
+        const ai = await fetch("https://api.openai.com/v1/responses", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${env.OPENAI_API_KEY}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            model: "gpt-4.1-mini",
+            instructions: "أنت DAGA، مساعد صوتي يتحدث باللهجة المصرية العامية الطبيعية فقط، بصيغة ودودة وواضحة. أجب مباشرة على كلام المستخدم، لا تستخدم الفصحى الرسمية ولا تقول إنك سترد حسب بيانات الشركة إلا إذا كان السياق يقتضي ذلك. اجعل الرد مناسبًا للنطق الصوتي وقصيرًا غالبًا. لا تخترع معلومات عن شركة المستخدم.",
+            input: userText,
+            max_output_tokens: 220
+          })
+        });
+
+        const data = await ai.json();
+        if (!ai.ok) {
+          return json({ error: "OpenAI request failed", detail: data?.error?.message || "Unknown API error" }, ai.status);
+        }
+
+        const reply = String(
+          data.output_text ||
+          (data.output || []).flatMap(item => item.content || [])
+            .filter(item => item.type === "output_text")
+            .map(item => item.text || "")
+            .join("\\n") ||
+          ""
+        ).trim();
+
+        if (!reply) return json({ error: "Empty reply from OpenAI" }, 502);
+        return json({ reply });
+      } catch (error) {
+        return json({ error: "Chat failure", detail: String(error) }, 500);
+      }
+    }
+
     if (url.pathname !== "/tts" || request.method !== "POST") {
       return json({ error: "Not found" }, 404);
     }
