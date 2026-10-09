@@ -50,13 +50,27 @@ function handleUser(text){
 stopListening();replying=true;state.textContent='DAGA بتجهز الرد…';daga.textContent='سمعتك: «'+text+'»';
 setTimeout(()=>respond(text),120)
 }
-function respond(text){
+async function respond(text){
 if(!live){replying=false;return}
-state.textContent='DAGA بترد عليك…';
-/* This is the deterministic reply path. The production build will replace this function
-   with the real DAGA conversational backend + cloned-voice TTS endpoint. */
-const response='سمعتك. أنا معاك، وهرد عليك حسب سياق الكلام وبيانات شركتك.';
-speak(response)
+state.textContent='DAGA بتفكر وبتجهز الرد…';
+try{
+const r=await fetch('https://daga-voice.dagamobile10.workers.dev/chat',{
+method:'POST',
+headers:{'Content-Type':'application/json'},
+body:JSON.stringify({text})
+});
+const data=await r.json();
+if(!r.ok||!data.reply)throw new Error(data.detail||data.error||'Chat request failed');
+if(!live){replying=false;return}
+daga.textContent=data.reply;
+speak(data.reply);
+}catch(e){
+console.error(e);
+replying=false;
+state.textContent='تعذر الرد من DAGA';
+daga.textContent='مش قادرة أوصل لخدمة المحادثة دلوقتي. اتأكد من إعداد OPENAI_API_KEY في Cloudflare.';
+if(live&&!muted)setTimeout(startListening,500);
+}
 }
 function speak(text){
 if(window.__dagaAudio){window.__dagaAudio.pause();window.__dagaAudio=null}
