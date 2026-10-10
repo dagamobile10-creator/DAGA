@@ -23,7 +23,7 @@
 <div class="chat"><div class="bubble"><div class="who">DAGA</div><div id="daga">أنا جاهز أسمعك. لما تبدأ الـLive هسمعك وأرد عليك.</div></div><div class="bubble me"><div class="who">أنت</div><div id="you">—</div></div></div>
 <div class="voiceRef"><span>مرجع الصوت: صوت المستخدم محمّل</span><button onclick="playReference()">▶ تشغيل العينة</button></div>
 <div class="controls"><button id="mic" onclick="toggleMute()" disabled>🎙️</button><button id="start" class="primary" onclick="toggleLive()">ابدأ Live</button><button onclick="stopVoice()">إيقاف صوت DAGA</button></div>
-<div class="help">تم إصلاح دورة المحادثة: استماع → رد → رجوع تلقائي للاستماع. العينة الصوتية المرفوعة محفوظة كمرجع للصوت. تحويل أي نص جديد إلى نفس صوتك يحتاج محرك Voice Cloning/TTS متصل بالـBackend؛ هذه الواجهة لا تدّعي أنها تنفذ الاستنساخ محليًا.</div>
+<div class="help">دورة المحادثة: استماع → رد → رجوع تلقائي للاستماع. العينة الصوتية المرفوعة محفوظة كمرجع فقط. تحويل النص إلى صوتك يحتاج محرك استنساخ صوت متصل بالخادم.</div>
 <audio id="refAudio" preload="auto" src="daga_user_voice_reference.m4a"></audio>
 </div></div>
 <script>
