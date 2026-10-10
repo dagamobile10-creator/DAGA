@@ -11,7 +11,9 @@ export default {
     if (url.pathname === "/health") {
       return json({
         ok: true,
-        voiceConfigured: Boolean(env.ELEVENLABS_API_KEY)
+        voiceConfigured: Boolean(env.ELEVENLABS_API_KEY),
+        chatConfigured: Boolean(env.OPENAI_API_KEY),
+        freeChatConfigured: Boolean(env.GROQ_API_KEY)
       });
     }
 
