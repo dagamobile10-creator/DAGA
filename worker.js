@@ -19,44 +19,91 @@ export default {
 
     if (url.pathname === "/chat" && request.method === "POST") {
       try {
-        if (!env.OPENAI_API_KEY) {
-          return json({ error: "OPENAI_API_KEY is not configured" }, 503);
-        }
-
         const body = await request.json();
         const userText = String(body?.text || "").trim();
         if (!userText) return json({ error: "text is required" }, 400);
 
-        const ai = await fetch("https://api.openai.com/v1/responses", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${env.OPENAI_API_KEY}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            model: "gpt-4.1-mini",
-            instructions: "أنت DAGA، مساعد صوتي رجل، وتتكلم باللهجة المصرية العامية الطبيعية فقط. استخدم صيغة المذكر دائمًا عند الإشارة إلى نفسك: أنا جاهز، فاهمك، سامعك، هساعدك. لا تستخدم أبدًا صيغة المؤنث مثل جاهزة أو فاهمة أو مستعدة. كن ودودًا وواضحًا، وأجب مباشرة وباختصار مناسب للصوت. لا تستخدم الفصحى الرسمية ولا تخترع معلومات عن شركة المستخدم.",
-            input: userText,
-            max_output_tokens: 220
-          })
-        });
+        const instructions = "أنت DAGA، مساعد صوتي رجل، وتتكلم باللهجة المصرية العامية الطبيعية فقط. استخدم صيغة المذكر دائمًا عند الإشارة إلى نفسك: أنا جاهز، فاهمك، سامعك، هساعدك. لا تستخدم أبدًا صيغة المؤنث مثل جاهزة أو فاهمة أو مستعدة. كن ودودًا وواضحًا، وأجب مباشرة وباختصار مناسب للصوت. لا تستخدم الفصحى الرسمية ولا تخترع معلومات عن شركة المستخدم.";
+        const failures = [];
 
-        const data = await ai.json();
-        if (!ai.ok) {
-          return json({ error: "OpenAI request failed", detail: data?.error?.message || "Unknown API error" }, ai.status);
+        // Try OpenAI first when configured. If its account has no credits or
+        // the request fails, try Groq when a Groq key has been configured.
+        if (env.OPENAI_API_KEY) {
+          try {
+            const ai = await fetch("https://api.openai.com/v1/responses", {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${env.OPENAI_API_KEY}`,
+                "Content-Type": "application/json"
+              },
+              body: JSON.stringify({
+                model: "gpt-4.1-mini",
+                instructions,
+                input: userText,
+                max_output_tokens: 220
+              })
+            });
+            const data = await ai.json();
+            if (ai.ok) {
+              const reply = String(
+                data.output_text ||
+                (data.output || []).flatMap(item => item.content || [])
+                  .filter(item => item.type === "output_text")
+                  .map(item => item.text || "")
+                  .join("\\n") ||
+                ""
+              ).trim();
+              if (reply) return json({ reply, provider: "openai" });
+              failures.push("OpenAI returned an empty reply");
+            } else {
+              failures.push("OpenAI: " + (data?.error?.message || "request failed"));
+            }
+          } catch (error) {
+            failures.push("OpenAI: " + String(error));
+          }
         }
 
-        const reply = String(
-          data.output_text ||
-          (data.output || []).flatMap(item => item.content || [])
-            .filter(item => item.type === "output_text")
-            .map(item => item.text || "")
-            .join("\\n") ||
-          ""
-        ).trim();
+        if (env.GROQ_API_KEY) {
+          try {
+            const ai = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${env.GROQ_API_KEY}`,
+                "Content-Type": "application/json"
+              },
+              body: JSON.stringify({
+                model: "llama-3.3-70b-versatile",
+                messages: [
+                  { role: "system", content: instructions },
+                  { role: "user", content: userText }
+                ],
+                max_tokens: 220,
+                temperature: 0.7
+              })
+            });
+            const data = await ai.json();
+            if (ai.ok) {
+              const reply = String(data?.choices?.[0]?.message?.content || "").trim();
+              if (reply) return json({ reply, provider: "groq" });
+              failures.push("Groq returned an empty reply");
+            } else {
+              failures.push("Groq: " + (data?.error?.message || "request failed"));
+            }
+          } catch (error) {
+            failures.push("Groq: " + String(error));
+          }
+        }
 
-        if (!reply) return json({ error: "Empty reply from OpenAI" }, 502);
-        return json({ reply });
+        if (!env.OPENAI_API_KEY && !env.GROQ_API_KEY) {
+          return json({
+            error: "No chat provider configured",
+            detail: "Add GROQ_API_KEY for the free-tier chat fallback, or configure OPENAI_API_KEY."
+          }, 503);
+        }
+        return json({
+          error: "All configured chat providers failed",
+          detail: failures.join(" | ")
+        }, 502);
       } catch (error) {
         return json({ error: "Chat failure", detail: String(error) }, 500);
       }
