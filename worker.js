@@ -13,7 +13,7 @@ export default {
         ok: true,
         voiceConfigured: Boolean(env.ELEVENLABS_API_KEY),
         chatConfigured: Boolean(env.OPENAI_API_KEY),
-        freeChatConfigured: Boolean(env.GROQ_API_KEY)
+        freeChatConfigured: Boolean(env.GROQ_API_KEY || env.AI)
       });
     }
 
@@ -94,10 +94,29 @@ export default {
           }
         }
 
-        if (!env.OPENAI_API_KEY && !env.GROQ_API_KEY) {
+        // Cloudflare Workers AI binding is a no-extra-secret fallback.
+        // Enable it in Worker settings or deploy with the included wrangler.toml.
+        if (env.AI) {
+          try {
+            const result = await env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
+              messages: [
+                { role: "system", content: instructions },
+                { role: "user", content: userText }
+              ],
+              max_tokens: 220
+            });
+            const reply = String(result?.response || "").trim();
+            if (reply) return json({ reply, provider: "cloudflare-ai" });
+            failures.push("Cloudflare AI returned an empty reply");
+          } catch (error) {
+            failures.push("Cloudflare AI: " + String(error));
+          }
+        }
+
+        if (!env.OPENAI_API_KEY && !env.GROQ_API_KEY && !env.AI) {
           return json({
             error: "No chat provider configured",
-            detail: "Add GROQ_API_KEY for the free-tier chat fallback, or configure OPENAI_API_KEY."
+            detail: "Enable the AI binding in Cloudflare Workers, or configure GROQ_API_KEY / OPENAI_API_KEY."
           }, 503);
         }
         return json({
