@@ -57,12 +57,12 @@ export default {
 
         const historyText = history.map(item =>
           (item.role === "assistant" ? "ضجّة: " : "المستخدم: ") + item.content
-        ).join("\\n");
+        ).join("\n");
         const userInput = [
-          contextText ? "سياق مرجعي للاستخدام في الإجابة:\\n" + contextText : "",
-          historyText ? "آخر رسائل المحادثة:\\n" + historyText : "",
-          "رسالة المستخدم الحالية:\\n" + userText
-        ].filter(Boolean).join("\\n\\n");
+          contextText ? "سياق مرجعي للاستخدام في الإجابة:\n" + contextText : "",
+          historyText ? "آخر رسائل المحادثة:\n" + historyText : "",
+          "رسالة المستخدم الحالية:\n" + userText
+        ].filter(Boolean).join("\n\n");
         const failures = [];
 
         if (env.OPENAI_API_KEY) {
