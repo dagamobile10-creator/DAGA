@@ -48,7 +48,7 @@ try{rec.start()}catch(e){rec=null;setTimeout(startListening,250)}
 function stopListening(){if(rec){let r=rec;rec=null;try{r.onend=null;r.stop()}catch(e){}}}
 function handleUser(text){
 stopListening();replying=true;state.textContent='ضجه بتجهز الرد…';daga.textContent='سمعتك: «'+text+'»';
-setTimeout(()=>respond(text),120)
+respond(text)
 }
 const DAGA_MEMORY_KEY='daga_mh_memory_v1';
 function loadDagaMemory(){
