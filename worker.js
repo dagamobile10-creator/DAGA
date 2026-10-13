@@ -98,7 +98,7 @@ export default {
         // Enable it in Worker settings or deploy with the included wrangler.toml.
         if (env.AI) {
           try {
-            const result = await env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
+            const result = await env.AI.run("@cf/meta/llama-3.1-8b-instruct-fast", {
               messages: [
                 { role: "system", content: instructions },
                 { role: "user", content: userText }
