@@ -157,7 +157,7 @@ export default {
       }
 
       const body = await request.json();
-      const text = String(body?.text || "").trim();
+      let text = String(body?.text || "").trim();
 
       if (!text) {
         return json(
@@ -165,6 +165,12 @@ export default {
           400
         );
       }
+
+      // Normalize the assistant/app name before synthesis so TTS doesn't read Latin DAGA/G.
+      // Arabic spelling is preferred; the phonetic cue helps the speech model produce Egyptian /g/.
+      text = text
+        .replace(/\\bDAGA\\b/gi, "ضَجَّة")
+        .replace(/\\bMH\\b/g, "إم إتش");
 
       const response = await fetch(
         `https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}/stream`,
