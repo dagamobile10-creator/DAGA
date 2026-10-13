@@ -54,7 +54,7 @@ async function respond(text){
 if(!live){replying=false;return}
 state.textContent='DAGA بتفكر وبتجهز الرد…';
 try{
-const r=await fetch('https://daga-voice.dagamobile10.workers.dev/chat',{
+const r=await fetch('https://fix-refresh-daga-preview-secret-daga-voice.dagamobile10.workers.dev/chat',{
 method:'POST',
 headers:{'Content-Type':'application/json'},
 body:JSON.stringify({text})
@@ -75,7 +75,7 @@ if(live&&!muted)setTimeout(startListening,500);
 function speak(text){
 if(window.__dagaAudio){window.__dagaAudio.pause();window.__dagaAudio=null}
 if('speechSynthesis' in window)speechSynthesis.cancel();
-fetch('https://daga-voice.dagamobile10.workers.dev/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})})
+fetch('https://fix-refresh-daga-preview-secret-daga-voice.dagamobile10.workers.dev/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})})
 .then(async r=>{if(!r.ok)throw new Error(await r.text());const url=URL.createObjectURL(await r.blob());const a=new Audio(url);window.__dagaAudio=a;state.textContent='DAGA بتتكلم…';a.onended=()=>{URL.revokeObjectURL(url);window.__dagaAudio=null;replying=false;if(live&&!muted){state.textContent='مستعد أسمعك';setTimeout(startListening,100)}};a.onerror=()=>{URL.revokeObjectURL(url);window.__dagaAudio=null;replying=false;state.textContent='حصلت مشكلة في صوت DAGA';if(live&&!muted)setTimeout(startListening,100)};await a.play()})
 .catch(e=>{console.error(e);replying=false;state.textContent='حصلت مشكلة في صوت DAGA';if(live&&!muted)setTimeout(startListening,100)})
 }
