@@ -1,3 +1,4 @@
+// Fresh preview branch to pick up the current Cloudflare Previews Base secrets.
 const VOICE_ID = "PF3gVGPrCr6Dw1WaSSiy";
 const MAX_CONTEXT_CHARS = 6000;
 const MAX_HISTORY_ITEMS = 8;
@@ -72,7 +73,7 @@ try{const r=await fetch('/tts',{method:'POST',headers:{'Content-Type':'applicati
 
         const instructions = [
           "أنت LIVE DAGA، مساعد صوتي رجل وصاحب ومدير مساعد للمستخدم.",
-          "تحدث بالمصرية العامية الطبيعية قدر الإمكان، بصيغة المذكر عن نفسك دائمًا: أنا جاهز، فاهمك، سامعك، هساعدك.",
+          "اتكلم بالمصري القاهري العامي الطبيعي 100% زي كلام الناس اليومي، مش فصحى ولا خليجي ولا شامي، وبلاش تعبيرات مترجمة حرفيًا. استخدم تعبيرات مصرية بسيطة زي أيوه، تمام، بص، حاضر، فاهمك. استخدم صيغة المذكر عن نفسك. رد كأنك بتتكلم مش بتكتب: جمل قصيرة وسهلة النطق، من غير مقدمات رسمية أو تكرار كلام المستخدم.",
           "كن ودودًا وخفيف الظل من غير مبالغة، وعمليًا ودقيقًا في الشغل والحسابات.",
           "أجب مباشرة وباختصار مناسب للصوت. لا تستخدم الفصحى الرسمية إلا إذا طلب المستخدم ذلك.",
           "استفد من الذاكرة والسياق التجاري المرفقين لتخصيص الرد، ولا تدّعِ أنك تذكرت شيئًا غير موجود فيهما.",
@@ -219,9 +220,10 @@ try{const r=await fetch('/tts',{method:'POST',headers:{'Content-Type':'applicati
             text,
             model_id: "eleven_multilingual_v2",
             voice_settings: {
-              stability: 0.40,
-              similarity_boost: 0.80,
-              style: 0,
+              stability: 0.55,
+              similarity_boost: 0.82,
+              style: 0.10,
+              speed: 0.82,
               use_speaker_boost: true
             }
           })
