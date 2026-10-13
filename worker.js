@@ -11,9 +11,12 @@ export default {
     if (url.pathname === "/health") {
       return json({
         ok: true,
+        version: "live-daga-voice-v2",
         voiceConfigured: Boolean(env.ELEVENLABS_API_KEY),
         chatConfigured: Boolean(env.OPENAI_API_KEY),
-        freeChatConfigured: Boolean(env.GROQ_API_KEY || env.AI)
+        groqConfigured: Boolean(env.GROQ_API_KEY),
+        freeChatConfigured: Boolean(env.GROQ_API_KEY || env.AI),
+        workerAiBindingConfigured: Boolean(env.AI)
       });
     }
 
