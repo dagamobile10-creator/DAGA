@@ -54,7 +54,7 @@ async function respond(text){
 if(!live){replying=false;return}
 state.textContent='ضجه بتفكر وبتجهز الرد…';
 try{
-const r=await fetch('https://fix-refresh-daga-preview-secret-daga-voice.dagamobile10.workers.dev/chat',{
+const r=await fetch('https://daga-voice.dagamobile10.workers.dev/chat',{
 method:'POST',
 headers:{'Content-Type':'application/json'},
 body:JSON.stringify({text,businessContext:"صاحب التطبيق يدير محل إكسسوارات موبايل ويستخدم DAGA كمساعد إداري ومحاسبي صوتي. دورك مساعدته في إدارة ومراجعة رأس المال ورصيد الخزنة والنقدية وكروت الشحن وأسعارها والإكسسوارات وأسعارها ومخزونها والمصروفات والربح والخسارة والإقفال اليومي، ومتابعة الموظفين والمديرين والصلاحيات. في تصميم الداشبورد توجد أعمدة مصروفات باسم خارج واحد وخارج اتنين وخارج تلاتة، وأربعة أعمدة للنقدية، وقسم للكروت وأسعارها وقسم للإكسسوارات وأسعارها. هذه معلومات عن طبيعة العمل وتصميم التطبيق فقط، وليست أرقامًا فعلية أو بيانات حية للمحل. لا تخترع أرقامًا ولا تدّعِ الاطلاع على سجلات المتجر ما لم تُرسل لك فعليًا."})
@@ -75,7 +75,7 @@ if(live&&!muted)setTimeout(startListening,500);
 function speak(text){
 if(window.__dagaAudio){window.__dagaAudio.pause();window.__dagaAudio=null}
 if('speechSynthesis' in window)speechSynthesis.cancel();
-fetch('https://fix-refresh-daga-preview-secret-daga-voice.dagamobile10.workers.dev/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})})
+fetch('https://daga-voice.dagamobile10.workers.dev/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})})
 .then(async r=>{if(!r.ok)throw new Error(await r.text());const url=URL.createObjectURL(await r.blob());const a=new Audio(url);window.__dagaAudio=a;state.textContent='ضجه بتتكلم…';a.onended=()=>{URL.revokeObjectURL(url);window.__dagaAudio=null;replying=false;if(live&&!muted){state.textContent='مستعد أسمعك';setTimeout(startListening,100)}};a.onerror=()=>{URL.revokeObjectURL(url);window.__dagaAudio=null;replying=false;state.textContent='حصلت مشكلة في صوت ضجه';if(live&&!muted)setTimeout(startListening,100)};await a.play()})
 .catch(e=>{console.error(e);replying=false;state.textContent='حصلت مشكلة في صوت DAGA';if(live&&!muted)setTimeout(startListening,100)})
 }
