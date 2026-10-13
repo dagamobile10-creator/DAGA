@@ -22,6 +22,13 @@ export default {
         const body = await request.json();
         const userText = String(body?.text || "").trim();
         if (!userText) return json({ error: "text is required" }, 400);
+        const history = Array.isArray(body?.history)
+          ? body.history.slice(-16).filter(item =>
+              item && ["user", "assistant"].includes(item.role) &&
+              typeof item.content === "string" && item.content.trim()
+            ).map(item => ({ role: item.role, content: item.content.trim().slice(0, 2000) }))
+          : [];
+        const conversation = [...history, { role: "user", content: userText }];
 
         const instructions = [
           "أنت MH، العقل والمساعد الإداري والصوتي داخل تطبيق DAGA (ضجه)، مش مجرد منفذ أوامر. أنت مساعد صاحب محل إكسسوارات موبايل ومسؤول عن مساعدته في فهم شغله وتنظيمه ومراجعته.",
@@ -55,8 +62,8 @@ export default {
               body: JSON.stringify({
                 model: "gpt-4.1-mini",
                 instructions,
-                input: userText,
-                max_output_tokens: 90
+                input: conversation,
+                max_output_tokens: 120
               })
             });
             const data = await ai.json();
@@ -91,9 +98,9 @@ export default {
                 model: "llama-3.3-70b-versatile",
                 messages: [
                   { role: "system", content: instructions },
-                  { role: "user", content: userText }
+                  ...conversation
                 ],
-                max_tokens: 110,
+                max_tokens: 140,
                 temperature: 0.25
               })
             });
@@ -117,9 +124,9 @@ export default {
             const result = await env.AI.run("@cf/meta/llama-3.1-8b-instruct-fast", {
               messages: [
                 { role: "system", content: instructions },
-                { role: "user", content: userText }
+                ...conversation
               ],
-              max_tokens: 110
+              max_tokens: 140
             });
             const reply = String(result?.response || "").trim();
             if (reply) return json({ reply, provider: "cloudflare-ai" });

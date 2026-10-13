@@ -50,18 +50,32 @@ function handleUser(text){
 stopListening();replying=true;state.textContent='ضجه بتجهز الرد…';daga.textContent='سمعتك: «'+text+'»';
 setTimeout(()=>respond(text),120)
 }
+const DAGA_MEMORY_KEY='daga_mh_memory_v1';
+function loadDagaMemory(){
+try{
+const value=JSON.parse(localStorage.getItem(DAGA_MEMORY_KEY)||'[]');
+return Array.isArray(value)?value.filter(x=>x&&['user','assistant'].includes(x.role)&&typeof x.content==='string').slice(-16):[];
+}catch(e){return[]}
+}
+function saveDagaMemory(items){
+try{localStorage.setItem(DAGA_MEMORY_KEY,JSON.stringify(items.slice(-16)))}catch(e){console.warn('DAGA memory unavailable',e)}
+}
 async function respond(text){
 if(!live){replying=false;return}
 state.textContent='ضجه بتفكر وبتجهز الرد…';
+const priorHistory=loadDagaMemory();
+const nextHistory=[...priorHistory,{role:'user',content:text}].slice(-16);
+saveDagaMemory(nextHistory);
 try{
 const r=await fetch('https://daga-voice.dagamobile10.workers.dev/chat',{
 method:'POST',
 headers:{'Content-Type':'application/json'},
-body:JSON.stringify({text,businessContext:"صاحب التطبيق يدير محل إكسسوارات موبايل ويستخدم DAGA كمساعد إداري ومحاسبي صوتي. دورك مساعدته في إدارة ومراجعة رأس المال ورصيد الخزنة والنقدية وكروت الشحن وأسعارها والإكسسوارات وأسعارها ومخزونها والمصروفات والربح والخسارة والإقفال اليومي، ومتابعة الموظفين والمديرين والصلاحيات. في تصميم الداشبورد توجد أعمدة مصروفات باسم خارج واحد وخارج اتنين وخارج تلاتة، وأربعة أعمدة للنقدية، وقسم للكروت وأسعارها وقسم للإكسسوارات وأسعارها. هذه معلومات عن طبيعة العمل وتصميم التطبيق فقط، وليست أرقامًا فعلية أو بيانات حية للمحل. لا تخترع أرقامًا ولا تدّعِ الاطلاع على سجلات المتجر ما لم تُرسل لك فعليًا."})
+body:JSON.stringify({text,history:priorHistory,businessContext:"صاحب التطبيق يدير محل إكسسوارات موبايل ويستخدم DAGA كمساعد إداري ومحاسبي صوتي. دورك مساعدته في إدارة ومراجعة رأس المال ورصيد الخزنة والنقدية وكروت الشحن وأسعارها والإكسسوارات وأسعارها ومخزونها والمصروفات والربح والخسارة والإقفال اليومي، ومتابعة الموظفين والمديرين والصلاحيات. في تصميم الداشبورد توجد أعمدة مصروفات باسم خارج واحد وخارج اتنين وخارج تلاتة، وأربعة أعمدة للنقدية، وقسم للكروت وأسعارها وقسم للإكسسوارات وأسعارها. هذه معلومات عن طبيعة العمل وتصميم التطبيق فقط، وليست أرقامًا فعلية أو بيانات حية للمحل. لا تخترع أرقامًا ولا تدّعِ الاطلاع على سجلات المتجر ما لم تُرسل لك فعليًا."})
 });
 const data=await r.json();
 if(!r.ok||!data.reply)throw new Error(data.detail||data.error||'Chat request failed');
 if(!live){replying=false;return}
+saveDagaMemory([...nextHistory,{role:'assistant',content:data.reply}]);
 daga.textContent=data.reply;
 speak(data.reply);
 }catch(e){
