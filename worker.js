@@ -23,7 +23,7 @@ export default {
         const userText = String(body?.text || "").trim();
         if (!userText) return json({ error: "text is required" }, 400);
         const history = Array.isArray(body?.history)
-          ? body.history.slice(-16).filter(item =>
+          ? body.history.slice(-8).filter(item =>
               item && ["user", "assistant"].includes(item.role) &&
               typeof item.content === "string" && item.content.trim()
             ).map(item => ({ role: item.role, content: item.content.trim().slice(0, 2000) }))
@@ -63,7 +63,7 @@ export default {
                 model: "gpt-4.1-mini",
                 instructions,
                 input: conversation,
-                max_output_tokens: 120
+                max_output_tokens: 90
               })
             });
             const data = await ai.json();
