@@ -10,6 +10,34 @@ export default {
       return new Response(null, { headers: cors() });
     }
 
+    if (url.pathname === "/test" && request.method === "GET") {
+      return new Response(`<!doctype html>
+<html lang="ar" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>اختبار LIVE DAGA</title>
+<style>
+body{font-family:Arial,sans-serif;background:#10100f;color:#f6f0e4;max-width:650px;margin:24px auto;padding:16px}
+main{border:1px solid #51452d;border-radius:18px;padding:20px;background:#191816}
+h1{color:#e4bd68;font-size:24px}button{padding:12px 16px;margin:5px;border:0;border-radius:10px;background:#dfb45d;font-weight:bold}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#080808;padding:12px;border-radius:10px}
+audio{width:100%;margin-top:12px}small{color:#c4bba8}
+</style><main><h1>DAGA — اختبار الصوت والرد</h1>
+<p>الاختبار ده بيستخدم معاينة الـ Worker الحالية، ومش بيغير بيانات المتجر.</p>
+<button id="chat">اختبر الرد المصري</button><button id="tts">اختبر الصوت</button>
+<pre id="out">جاهز للاختبار.</pre><audio id="audio" controls></audio>
+<small>لو ظهر خطأ، انسخ نص الخطأ فقط. ما تبعتش أي مفاتيح سرية.</small></main>
+<script>
+const out=document.getElementById('out'),audio=document.getElementById('audio');
+document.getElementById('chat').onclick=async()=>{
+out.textContent='بختبر الرد الذكي...';
+try{const r=await fetch('/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:'رد بالمصري في جملة واحدة: الصوت والرد شغالين؟'})});const d=await r.json();out.textContent='HTTP '+r.status+'\\n'+JSON.stringify(d,null,2)}catch(e){out.textContent='فشل الاتصال: '+e}
+};
+document.getElementById('tts').onclick=async()=>{
+out.textContent='بختبر توليد الصوت...';audio.removeAttribute('src');
+try{const r=await fetch('/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:'أهلاً يا رايس، أنا ضجّة، جاهز أساعدك بالمصري.'})});if(!r.ok){out.textContent='HTTP '+r.status+'\\n'+await r.text();return}const b=await r.blob();audio.src=URL.createObjectURL(b);out.textContent='نجاح: تم توليد ملف صوتي بحجم '+b.size+' بايت. اضغط تشغيل لسماع الصوت.';await audio.play()}catch(e){out.textContent='فشل اختبار الصوت: '+e}
+};
+</script></html>`, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+    }
+
     if (url.pathname === "/health") {
       return json({
         ok: true,
