@@ -71,7 +71,16 @@ export default {
               body: JSON.stringify({
                 model: "gpt-4.1-mini",
                 instructions,
-                input: userInput,
+                input: [
+                  ...history.map(item => ({
+                    role: item.role,
+                    content: [{ type: "input_text", text: item.content }]
+                  })),
+                  {
+                    role: "user",
+                    content: [{ type: "input_text", text: userInput }]
+                  }
+                ],
                 max_output_tokens: 180
               })
             });
