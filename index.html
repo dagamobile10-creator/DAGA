@@ -63,7 +63,7 @@ const data=await r.json();
 if(!r.ok||!data.reply)throw new Error(data.detail||data.error||'Chat request failed');
 if(!live){replying=false;return}
 daga.textContent=data.reply;
-speak(data.reply);
+await speak(data.reply);
 }catch(e){
 console.error(e);
 replying=false;
@@ -72,12 +72,27 @@ daga.textContent='تعذر الرد من خدمة المحادثة: '+(e.message
 if(live&&!muted)setTimeout(startListening,500);
 }
 }
-function speak(text){
+async function speak(text){
 if(window.__dagaAudio){window.__dagaAudio.pause();window.__dagaAudio=null}
+if(window.__dagaObjectUrl){URL.revokeObjectURL(window.__dagaObjectUrl);window.__dagaObjectUrl=null}
 if('speechSynthesis' in window)speechSynthesis.cancel();
-fetch('https://daga-voice.dagamobile10.workers.dev/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})})
-.then(async r=>{if(!r.ok)throw new Error(await r.text());const url=URL.createObjectURL(await r.blob());const a=new Audio(url);window.__dagaAudio=a;state.textContent='DAGA بتتكلم…';a.onended=()=>{URL.revokeObjectURL(url);window.__dagaAudio=null;replying=false;if(live&&!muted){state.textContent='مستعد أسمعك';setTimeout(startListening,100)}};a.onerror=()=>{URL.revokeObjectURL(url);window.__dagaAudio=null;replying=false;state.textContent='حصلت مشكلة في صوت DAGA';if(live&&!muted)setTimeout(startListening,100)};await a.play()})
-.catch(e=>{console.error(e);replying=false;state.textContent='حصلت مشكلة في صوت DAGA';if(live&&!muted)setTimeout(startListening,100)})
+let url=null;
+try{
+const r=await fetch('https://daga-voice.dagamobile10.workers.dev/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})});
+if(!r.ok){const detail=await r.text();throw new Error('ElevenLabs TTS '+r.status+': '+detail)}
+const blob=await r.blob();
+if(!blob.size)throw new Error('خدمة الصوت رجعت ملفًا فارغًا');
+url=URL.createObjectURL(blob);window.__dagaObjectUrl=url;
+const a=new Audio(url);window.__dagaAudio=a;state.textContent='DAGA بتتكلم…';
+await new Promise((resolve,reject)=>{a.onended=resolve;a.onerror=()=>reject(new Error('تعذر تشغيل الملف الصوتي على الجهاز'));a.play().catch(reject)});
+}catch(e){
+console.error(e);state.textContent='الرد النصي وصل لكن الصوت فشل';
+daga.textContent+='\n\n[خطأ الصوت: '+(e.message||'خطأ غير معروف')+']';
+}finally{
+if(url){URL.revokeObjectURL(url);window.__dagaObjectUrl=null}
+window.__dagaAudio=null;replying=false;
+if(live&&!muted){if(state.textContent==='DAGA بتتكلم…'||state.textContent==='الرد النصي وصل لكن الصوت فشل')state.textContent='مستعد أسمعك';setTimeout(startListening,150)}
+}
 }
 function stopVoice(){if('speechSynthesis'in window)speechSynthesis.cancel();replying=false;if(live&&!muted)setTimeout(startListening,100)}
 function playReference(){audio.currentTime=0;audio.play()}
