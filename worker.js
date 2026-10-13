@@ -102,9 +102,10 @@ export default {
 
         if (env.GROQ_API_KEY) {
           try {
-            const messages = [{ role: "system", content: instructions }];
-            for (const item of history) messages.push(item);
-            messages.push({ role: "user", content: userInput });
+            const messages = [
+              { role: "system", content: instructions },
+              { role: "user", content: userInput }
+            ];
             const ai = await fetch("https://api.groq.com/openai/v1/chat/completions", {
               method: "POST",
               headers: {
@@ -133,9 +134,10 @@ export default {
 
         if (env.AI) {
           try {
-            const messages = [{ role: "system", content: instructions }];
-            for (const item of history) messages.push(item);
-            messages.push({ role: "user", content: userInput });
+            const messages = [
+              { role: "system", content: instructions },
+              { role: "user", content: userInput }
+            ];
             const result = await env.AI.run("@cf/meta/llama-3.1-8b-instruct-fast", {
               messages,
               max_tokens: 180
