@@ -30,7 +30,28 @@ jobs:
             echo "::error::Missing repository secret CLOUDFLARE_ACCOUNT_ID"
             exit 1
           fi
-          echo "Cloudflare token and account ID are configured."
+          echo "Cloudflare secrets are present."
+
+      - name: Diagnose Cloudflare token and account access
+        env:
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+
+          verify="$(curl -sS --get             -H "Authorization: Bearer $CF_API_TOKEN"             "https://api.cloudflare.com/client/v4/user/tokens/verify")"
+          if ! echo "$verify" | jq -e '.success == true and .result.status == "active"' >/dev/null; then
+            echo "::error::Cloudflare token verification failed or token is not active. Replace CLOUDFLARE_API_TOKEN with a fresh active Account API token."
+            exit 1
+          fi
+          echo "Cloudflare token is active."
+
+          account="$(curl -sS             -H "Authorization: Bearer $CF_API_TOKEN"             "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID")"
+          if ! echo "$account" | jq -e '.success == true' >/dev/null; then
+            echo "::error::Token is active but cannot access CLOUDFLARE_ACCOUNT_ID. Check that the ID belongs to the same Cloudflare account and the token has Workers Editor access at the account/Worker scope."
+            exit 1
+          fi
+          echo "Cloudflare account ID is accessible with this token."
 
       - name: Deploy daga-voice to Cloudflare
         uses: cloudflare/wrangler-action@v3
