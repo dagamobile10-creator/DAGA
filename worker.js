@@ -169,7 +169,7 @@ export default {
       // Normalize the assistant/app name before synthesis so TTS doesn't read Latin DAGA/G.
       // Arabic spelling is preferred; the phonetic cue helps the speech model produce Egyptian /g/.
       text = text
-        .replace(/\\bDAGA\\b/gi, "ضَجَّة")
+        .replace(/DAGA/gi, "ضَجَّة")
         .replace(/\\bMH\\b/g, "إم إتش");
 
       const response = await fetch(
