@@ -55,9 +55,14 @@ export default {
           "لا تقل إنك بحثت على الإنترنت أو وصلت إلى الداشبورد ما لم تكن هذه الأدوات متصلة بالفعل في الطلب الحالي."
         ].join(" ");
 
-        const userInput = contextText
-          ? "سياق مرجعي للاستخدام في الإجابة:\n" + contextText + "\n\nرسالة المستخدم الحالية:\n" + userText
-          : userText;
+        const historyText = history.map(item =>
+          (item.role === "assistant" ? "ضجّة: " : "المستخدم: ") + item.content
+        ).join("\\n");
+        const userInput = [
+          contextText ? "سياق مرجعي للاستخدام في الإجابة:\\n" + contextText : "",
+          historyText ? "آخر رسائل المحادثة:\\n" + historyText : "",
+          "رسالة المستخدم الحالية:\\n" + userText
+        ].filter(Boolean).join("\\n\\n");
         const failures = [];
 
         if (env.OPENAI_API_KEY) {
@@ -71,16 +76,7 @@ export default {
               body: JSON.stringify({
                 model: "gpt-4.1-mini",
                 instructions,
-                input: [
-                  ...history.map(item => ({
-                    role: item.role,
-                    content: [{ type: "input_text", text: item.content }]
-                  })),
-                  {
-                    role: "user",
-                    content: [{ type: "input_text", text: userInput }]
-                  }
-                ],
+                input: userInput,
                 max_output_tokens: 180
               })
             });
