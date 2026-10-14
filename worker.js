@@ -60,7 +60,7 @@ export default {
         if (env.OPENAI_API_KEY) {
           try {
             const ai = await fetch("https://api.openai.com/v1/responses", {
-              signal: AbortSignal.timeout(3000),
+              signal: AbortSignal.timeout(5000),
               method: "POST",
               headers: {
                 "Authorization": `Bearer ${env.OPENAI_API_KEY}`,
@@ -80,7 +80,7 @@ export default {
                 (data.output || []).flatMap(item => item.content || [])
                   .filter(item => item.type === "output_text")
                   .map(item => item.text || "")
-                  .join("\\n") ||
+                  .join("\n") ||
                 ""
               ).trim();
               if (reply) return json({ reply, provider: "openai" });
@@ -191,6 +191,7 @@ export default {
       const response = await fetch(
         `https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}/stream`,
         {
+          signal: AbortSignal.timeout(12000),
           method: "POST",
           headers: {
             "xi-api-key": env.ELEVENLABS_API_KEY,
