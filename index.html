@@ -42,7 +42,7 @@ rec=new SR();rec.lang='ar-EG';rec.continuous=false;rec.interimResults=true;rec.m
 let finalGot=false;
 rec.onstart=()=>state.textContent='بتسمعك دلوقتي…';
 rec.onresult=e=>{let finalText='',interim='';for(let i=e.resultIndex;i<e.results.length;i++){let t=e.results[i][0].transcript;if(e.results[i].isFinal)finalText+=t;else interim+=t}you.textContent=finalText||interim||'—';if(finalText.trim()&&!finalGot){finalGot=true;handleUser(finalText.trim())}};
-rec.onerror=e=>{rec=null;const errors={not-allowed:'اسمح للمتصفح باستخدام الميكروفون من إعدادات الموقع.',service-not-allowed:'التعرف الصوتي غير متاح من المتصفح الحالي.',audio-capture:'مش قادر أوصل للميكروفون.',network:'في مشكلة اتصال أثناء التعرف على الكلام.'};state.textContent=errors[e.error]||('تعذّر تشغيل الميكروفون: '+(e.error||'خطأ غير معروف'));if(live&&!muted&&!replying&&e.error!=='not-allowed'&&e.error!=='service-not-allowed')setTimeout(startListening,700)}
+rec.onerror=e=>{rec=null;const errors={'not-allowed':'اسمح للمتصفح باستخدام الميكروفون من إعدادات الموقع.','service-not-allowed':'التعرف الصوتي غير متاح من المتصفح الحالي.','audio-capture':'مش قادر أوصل للميكروفون.','network':'في مشكلة اتصال أثناء التعرف على الكلام.'};state.textContent=errors[e.error]||('تعذّر تشغيل الميكروفون: '+(e.error||'خطأ غير معروف'));if(live&&!muted&&!replying&&e.error!=='not-allowed'&&e.error!=='service-not-allowed')setTimeout(startListening,700)}
 rec.onend=()=>{rec=null;if(live&&!muted&&!replying&&!finalGot)setTimeout(startListening,160)};
 try{rec.start()}catch(e){rec=null;setTimeout(startListening,250)}
 }
