@@ -23,12 +23,13 @@ export default {
         const userText = String(body?.text || "").trim();
         if (!userText) return json({ error: "text is required" }, 400);
         const history = Array.isArray(body?.history)
-          ? body.history.slice(-8).filter(item =>
+          ? body.history.slice(-12).filter(item =>
               item && ["user", "assistant"].includes(item.role) &&
               typeof item.content === "string" && item.content.trim()
             ).map(item => ({ role: item.role, content: item.content.trim().slice(0, 2000) }))
           : [];
         const conversation = [...history, { role: "user", content: userText }];
+        const businessContext = typeof body?.businessContext === "string" ? body.businessContext.trim().slice(0, 3000) : "";
 
         // All user messages go through the language model; no canned chat replies.
 
@@ -44,8 +45,8 @@ export default {
           "أنت نموذج محادثة ذكي، ولست شجرة قرارات أو نظام ردود محفوظة. كل رسالة جديدة يجب أن تفهمها في سياقها وتكوّن لها ردًا جديدًا مناسبًا، حتى التحية والكلام الاجتماعي البسيط. لو قال المستخدم عامل إيه، رد بتحية طبيعية من عندك. لا تستخدم ردًا ثابتًا لمجرد مطابقة عبارة، ولا تكرر وصف المشكلة بدل الاستجابة لطلبه.",
           "افهم وظيفة الرسالة قبل الرد: قد تكون تحية، أو سؤالًا، أو تصحيحًا، أو أمرًا، أو متابعة لما سبق. إذا صحح المستخدم شيئًا، أظهر أنك فهمت التصحيح وطبّقه بدل إعادة شرحه. إذا كان قصده واضحًا، لا تسأل سؤالًا زائدًا. إذا كان ملتبسًا فعلًا، اسأل سؤالًا واحدًا محددًا.",
           "التعلّم والتخصيص: استعمل سجل المحادثة الذي يصلك فعليًا، وميّز تفضيلات المستخدم وقواعد العمل التي أكدها عن التخمين. لا تدّعِ أنك طوّرت نفسك أو حفظت شيئًا بشكل دائم ما لم توجد ذاكرة دائمة فعلية. عندما تكون هناك ذاكرة محفوظة متاحة، تعامل معها كتفضيلات وسياق قابلين للاسترجاع، لا كأوامر جامدة تلغي فهم الرسالة الحالية.",
-          "لا تكرر السؤال في الرد، ولا تبدأ بمقدمات طويلة. لا تستخدم كلمات إنجليزية مثل plus أو minus في رد عربي. لا تقل إنك نفذت إجراءً إن كنت فقط تشرحه."
-        ].join(" ");
+          "أجب عن آخر رسالة مباشرة وبشكل مرتبط بها. لا تغيّر الموضوع، ولا تجب عن سؤال مختلف، ولا تكرر نص المستخدم بدل الرد عليه. لو الرسالة متابعة لكلام سابق، اربطها بالسياق السابق. لو المستخدم صححك، طبّق التصحيح فورًا. لو المعلومة غير موجودة، وضّح ذلك بدل اختراع إجابة. لا تكرر السؤال في الرد، ولا تبدأ بمقدمات طويلة. لا تستخدم كلمات إنجليزية مثل plus أو minus في رد عربي. لا تقل إنك نفذت إجراءً إن كنت فقط تشرحه."
+        ].join(" ") + (businessContext ? "\\n\\nسياق العمل المؤكد من التطبيق (استخدمه عند ارتباطه بالسؤال فقط، ولا تعتبره بيانات حية): " + businessContext : "");
         const failures = [];
 
         // Try OpenAI first when configured. If its account has no credits or
@@ -53,7 +54,7 @@ export default {
         if (env.OPENAI_API_KEY) {
           try {
             const ai = await fetch("https://api.openai.com/v1/responses", {
-              signal: AbortSignal.timeout(5000),
+              signal: AbortSignal.timeout(12000),
               method: "POST",
               headers: {
                 "Authorization": `Bearer ${env.OPENAI_API_KEY}`,
@@ -63,7 +64,7 @@ export default {
                 model: "gpt-4.1-mini",
                 instructions,
                 input: conversation,
-                max_output_tokens: 220
+                max_output_tokens: 320
               })
             });
             const data = await ai.json();
@@ -89,7 +90,7 @@ export default {
         if (env.GROQ_API_KEY) {
           try {
             const ai = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-              signal: AbortSignal.timeout(3000),
+              signal: AbortSignal.timeout(8000),
               method: "POST",
               headers: {
                 "Authorization": `Bearer ${env.GROQ_API_KEY}`,
@@ -101,8 +102,8 @@ export default {
                   { role: "system", content: instructions },
                   ...conversation
                 ],
-                max_tokens: 140,
-                temperature: 0.25
+                max_tokens: 260,
+                temperature: 0.45
               })
             });
             const data = await ai.json();
@@ -127,8 +128,8 @@ export default {
                 { role: "system", content: instructions },
                 ...conversation
               ],
-              max_tokens: 140
-            }), new Promise((_, reject) => setTimeout(() => reject(new Error("Cloudflare AI timeout")), 3000))]);
+              max_tokens: 220
+            }), new Promise((_, reject) => setTimeout(() => reject(new Error("Cloudflare AI timeout")), 7000))]);
             const reply = String(result?.response || "").trim();
             if (reply) return json({ reply, provider: "cloudflare-ai" });
             failures.push("Cloudflare AI returned an empty reply");
