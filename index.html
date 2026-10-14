@@ -75,7 +75,7 @@ body:JSON.stringify({text,history:priorHistory,businessContext:"صاحب الت�
 });
 const data=await r.json();
 if(!r.ok||!data.reply)throw new Error(data.detail||data.error||'Chat request failed');
-if(!live){replying=false;return}
+if(!live&&!singleMode){replying=false;return}
 saveDagaMemory([...nextHistory,{role:'assistant',content:data.reply}]);
 daga.textContent=data.reply;
 speak(data.reply);
