@@ -27,23 +27,23 @@
 <audio id="refAudio" preload="auto" src="daga_user_voice_reference.m4a"></audio>
 </div></div>
 <script>
-let live=false,muted=false,rec=null,replying=false;
+let live=false,muted=false,rec=null,replying=false,singleMode=false,speechToken=0;
 const shell=document.getElementById('shell'),start=document.getElementById('start'),mic=document.getElementById('mic'),status=document.getElementById('status'),state=document.getElementById('state'),you=document.getElementById('you'),daga=document.getElementById('daga'),audio=document.getElementById('refAudio');
 
 function toggleLive(){live=!live;shell.classList.toggle('live',live);start.classList.toggle('stop',live);start.textContent=live?'إنهاء Live':'ابدأ Live';
 if(live){muted=false;mic.textContent='🎙️';status.textContent='Live شغال';startListening()}else{stopListening();stopVoice();status.textContent='جاهز';state.textContent='اضغط «ابدأ Live» للتحدث'}}
-function toggleMicControl(){if(!live){live=true;muted=false;shell.classList.add('live');start.classList.add('stop');start.textContent='إنهاء Live';mic.textContent='🎙️';status.textContent='Live شغال';startListening();return}toggleMute()}
+function toggleMicControl(){if(live){toggleMute();return}if(singleMode){singleMode=false;stopListening();status.textContent='جاهز';state.textContent='اتلغى تسجيل الأمر';mic.textContent='🎙️';return}singleMode=true;muted=false;mic.textContent='🎙️';status.textContent='تسجيل أمر واحد';state.textContent='اتكلم دلوقتي، والمايك هيقف بعد ما تخلص';startListening()}
 function toggleMute(){muted=!muted;mic.textContent=muted?'🔇':'🎙️';if(muted){stopListening();state.textContent='الميكروفون مكتوم'}else if(live)startListening()}
 function startListening(){
-if(!live||muted||rec||replying)return;
+if((!live&&!singleMode)||muted||rec||replying)return;
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
 if(!SR){status.textContent='التعرف الصوتي غير متاح';state.textContent='المتصفح لا يدعم الاستماع الصوتي';return}
 rec=new SR();rec.lang='ar-EG';rec.continuous=false;rec.interimResults=true;rec.maxAlternatives=1;
 let finalGot=false;
 rec.onstart=()=>state.textContent='أنا ضجه، سامعك دلوقتي…';
 rec.onresult=e=>{let finalText='',interim='';for(let i=e.resultIndex;i<e.results.length;i++){let t=e.results[i][0].transcript;if(e.results[i].isFinal)finalText+=t;else interim+=t}you.textContent=finalText||interim||'—';if(finalText.trim()&&!finalGot){finalGot=true;handleUser(finalText.trim())}};
-rec.onerror=e=>{rec=null;const errors={'not-allowed':'اسمح للمتصفح باستخدام الميكروفون من إعدادات الموقع.','service-not-allowed':'التعرف الصوتي غير متاح من المتصفح الحالي.','audio-capture':'مش قادر أوصل للميكروفون.','network':'في مشكلة اتصال أثناء التعرف على الكلام.'};state.textContent=errors[e.error]||('تعذّر تشغيل الميكروفون: '+(e.error||'خطأ غير معروف'));if(live&&!muted&&!replying&&e.error!=='not-allowed'&&e.error!=='service-not-allowed')setTimeout(startListening,700)}
-rec.onend=()=>{rec=null;if(live&&!muted&&!replying&&!finalGot)setTimeout(startListening,160)};
+rec.onerror=e=>{rec=null;const errors={'not-allowed':'اسمح للمتصفح باستخدام الميكروفون من إعدادات الموقع.','service-not-allowed':'التعرف الصوتي غير متاح من المتصفح الحالي.','audio-capture':'مش قادر أوصل للميكروفون.','network':'في مشكلة اتصال أثناء التعرف على الكلام.'};state.textContent=errors[e.error]||('تعذّر تشغيل الميكروفون: '+(e.error||'خطأ غير معروف'));if(singleMode){singleMode=false;status.textContent='جاهز'}if(live&&!muted&&!replying&&e.error!=='not-allowed'&&e.error!=='service-not-allowed')setTimeout(startListening,700)}
+rec.onend=()=>{rec=null;if(live&&!muted&&!replying&&!finalGot)setTimeout(startListening,160);else if(singleMode&&!replying&&!finalGot){singleMode=false;status.textContent='جاهز';state.textContent='ملحقتش أسمع الأمر. اضغط المايك وجرب تاني'}};
 try{rec.start()}catch(e){rec=null;setTimeout(startListening,250)}
 }
 function stopListening(){if(rec){let r=rec;rec=null;try{r.onend=null;r.stop()}catch(e){}}}
@@ -62,7 +62,7 @@ function saveDagaMemory(items){
 try{localStorage.setItem(DAGA_MEMORY_KEY,JSON.stringify(items.slice(-16)))}catch(e){console.warn('DAGA memory unavailable',e)}
 }
 async function respond(text){
-if(!live){replying=false;return}
+if(!live&&!singleMode){replying=false;return}
 state.textContent='ضجه بيفكر وبيجهز الرد…';
 const priorHistory=loadDagaMemory();
 const nextHistory=[...priorHistory,{role:'user',content:text}].slice(-16);
@@ -88,13 +88,14 @@ if(live&&!muted)setTimeout(startListening,500);
 }
 }
 function speak(text){
-if(window.__dagaAudio){window.__dagaAudio.pause();window.__dagaAudio=null}
+const token=++speechToken;
+if(window.__dagaAudio){try{window.__dagaAudio.pause();window.__dagaAudio.currentTime=0}catch(e){}window.__dagaAudio=null}
 if('speechSynthesis' in window)speechSynthesis.cancel();
 fetch('https://daga-voice.dagamobile10.workers.dev/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})})
-.then(async r=>{if(!r.ok)throw new Error(await r.text());const url=URL.createObjectURL(await r.blob());const a=new Audio(url);window.__dagaAudio=a;state.textContent='ضجه بتتكلم…';a.onended=()=>{URL.revokeObjectURL(url);window.__dagaAudio=null;replying=false;if(live&&!muted){state.textContent='مستعد أسمعك';setTimeout(startListening,100)}};a.onerror=()=>{URL.revokeObjectURL(url);window.__dagaAudio=null;replying=false;state.textContent='حصلت مشكلة في صوت ضجه';if(live&&!muted)setTimeout(startListening,100)};await a.play()})
-.catch(e=>{console.error(e);replying=false;state.textContent='حصلت مشكلة في صوت ضجه';if(live&&!muted)setTimeout(startListening,100)})
+.then(async r=>{if(!r.ok)throw new Error(await r.text());const blob=await r.blob();const url=URL.createObjectURL(blob);if(token!==speechToken){URL.revokeObjectURL(url);return}const a=new Audio(url);window.__dagaAudio=a;state.textContent='ضجه بيتكلم…';a.onended=()=>{URL.revokeObjectURL(url);if(window.__dagaAudio===a)window.__dagaAudio=null;replying=false;if(live&&!muted){state.textContent='مستعد أسمعك';setTimeout(startListening,100)}else{singleMode=false;mic.textContent='🎙️';status.textContent='جاهز';state.textContent='خلصنا الأمر. اضغط المايك لو عندك أمر تاني'}};a.onerror=()=>{URL.revokeObjectURL(url);if(window.__dagaAudio===a)window.__dagaAudio=null;replying=false;state.textContent='حصلت مشكلة في صوت ضجه';if(live&&!muted)setTimeout(startListening,100);else singleMode=false};await a.play()})
+.catch(e=>{if(token!==speechToken)return;console.error(e);replying=false;state.textContent='حصلت مشكلة في صوت ضجه';if(live&&!muted)setTimeout(startListening,100);else singleMode=false})
 }
-function stopVoice(){if('speechSynthesis'in window)speechSynthesis.cancel();if(window.__dagaAudio){try{window.__dagaAudio.pause();window.__dagaAudio.currentTime=0;}catch(e){}window.__dagaAudio=null;}replying=false;state.textContent='تم إيقاف الصوت';if(live&&!muted)setTimeout(startListening,100)}
+function stopVoice(){speechToken++;if('speechSynthesis'in window)speechSynthesis.cancel();if(window.__dagaAudio){const a=window.__dagaAudio;window.__dagaAudio=null;try{a.onended=null;a.onerror=null;a.pause();a.currentTime=0}catch(e){}}replying=false;if(!live)singleMode=false;state.textContent='تم إيقاف الصوت';if(live&&!muted)setTimeout(startListening,100);else status.textContent='جاهز'}
 async function playVoiceTest(){
   const testText="أهلاً بيك، أنا المساعد الصوتي لضجه. خلّينا نجرّب الصوت المصري الطبيعي، ونسمع وضوح الكلام ومخارج الحروف.";
   try{
