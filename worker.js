@@ -174,9 +174,9 @@ export default {
       // Keep spoken output Arabic-only and normalize the app name before synthesis.
       // Avoid Latin brand spellings in Arabic speech to reduce language switching.
       text = text
-        .replace(/DAGA/gi, "ضَجْه")
-        .replace(/داجا|داجة|ضجه|ضجة/gu, "ضَجْه")
-        .replace(/\\bMH\\b/g, "إم إتش");
+        .replace(/DAGA/gi, "ضَجَه")
+        .replace(/داجا|داجة|ضجه|ضجة|ضَجْه/gu, "ضَجَه")
+        .replace(/\bMH\b/gi, "إم إتش");
 
       const response = await fetch(
         `https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}/stream`,
