@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -12,7 +15,25 @@ permissions:
   id-token: write
 
 jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate live app source
+        run: |
+          test -s index.html
+          grep -q 'workers.dev/chat' index.html
+          grep -q 'workers.dev/tts' index.html
+          grep -q 'daga_mh_memory_v1' index.html
+          grep -q 'playVoiceTest' index.html
+          test -s daga_user_voice_reference.m4a
+          echo "Root index.html includes chat, TTS, and local conversation memory."
+
   deploy:
+    if: github.event_name != 'pull_request'
+    needs: validate
     runs-on: ubuntu-latest
 
     environment:
@@ -27,7 +48,9 @@ jobs:
         run: |
           rm -rf _site
           mkdir _site
-          unzip -o DAGA_Live_Phase2_Premium_v3_UserVoice.zip -d _site
+          cp index.html _site/index.html
+          test -s daga_user_voice_reference.m4a
+          cp daga_user_voice_reference.m4a _site/daga_user_voice_reference.m4a
           touch _site/.nojekyll
 
       - name: Configure Pages
