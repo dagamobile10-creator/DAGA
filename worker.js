@@ -261,8 +261,8 @@ export default {
         .replace(/هساعدك/gu, "هَسَاعْدَك")
         .replace(/صيانة/gu, "صِيَانَة")
         .replace(/بسهولة/gu, "بِسُهُولَة")
-        .replace(/بسرعة/gu, "بِسُرْعَة")
-        .replace(/ضَجَه|ضَجْه|ضَجَّة|ضجه|ضجّة|ضجة|داجا|داجة/gu, "ضَجَّة")
+        .replace(/بسرعة/gu, "بِسُرْعَةٍ")
+        .replace(/ضَجَه|ضَجَّة|ضجه|ضجّة|ضجة|داجا|داجة/gu, "ضَجْه")
         .replace(/\s{2,}/g, " ")
         .trim();
 
@@ -331,13 +331,20 @@ function cors(extra = {}) {
 }
 
 function normalizeArabicReply(value, userText = "") {
+  const question = String(userText || "");
   let reply = String(value || "").trim();
 
-  // If the user did not ask about spelling, remove any whole sentence that
-  // exposes the internal spelling/pronunciation instructions.
-  const asksAboutSpelling = /الهاء|التاء المربوطة|التشكيل|النطق|مخارج الحروف/.test(String(userText || ""));
-  if (!asksAboutSpelling) {
+  // Answer identity questions directly and consistently; don't let the model
+  // invent alternate spellings/pronunciations of the assistant's name.
+  if (/(اسمك\s*(?:إيه|ايه|ما|ماذا)|مين\s*إنت|من\s*أنت|عرفني\s*بنفسك)/u.test(question)) {
+    return "أنا ضَجْه، مساعدك الذكي.";
+  }
+
+  // Internal spelling instructions must never leak into an unrelated answer.
+  if (!/(الهاء|التاء المربوطة|التشكيل|مخارج الحروف|النطق)/u.test(question)) {
     reply = reply
+      .replace(/[^.!؟،,\n]*(?:هفرق|هفرّق|هشرحلك|هشرح لك)\s+بين\s+(?:الهاء|حرف الهاء)[^.!؟،,\n]*(?:التاء المربوطة|التاء المربوطه)[^.!؟،,\n]*/gu, "")
+      .replace(/[^.!؟،,\n]*(?:التاء المربوطة|الهاء والتاء المربوطة)[^.!؟،,\n]*/gu, "")
       .split(/(?<=[.!؟])\s+|\n+/u)
       .filter(sentence => !/(الهاء|التاء المربوطة|التشكيل|مخارج الحروف)/u.test(sentence))
       .join(" ");
@@ -355,14 +362,4 @@ function normalizeArabicReply(value, userText = "") {
     .replace(/هترد عليك/gu, "هرد عليك")
     .replace(/\s{2,}/gu, " ")
     .trim();
-}function json(data, status = 200) {
-  return new Response(
-    JSON.stringify(data),
-    {
-      status,
-      headers: cors({
-        "Content-Type": "application/json"
-      })
-    }
-  );
 }
