@@ -321,6 +321,13 @@ export default {
   }
 };
 
+function json(data, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: cors({ "Content-Type": "application/json; charset=utf-8" })
+  });
+}
+
 function cors(extra = {}) {
   return {
     "Access-Control-Allow-Origin": "*",
