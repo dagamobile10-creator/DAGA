@@ -70,6 +70,11 @@ try{const value=JSON.parse(localStorage.getItem(DAGA_PROFILE_KEY)||'{}');return 
 function updateDagaProfile(userText){
 const text=String(userText||'').trim();if(!text)return;
 const profile=loadDagaProfile();
+// Save identity only when the user explicitly introduces themselves.
+const intro=text.match(/(?:^|[،.!؟\\s])(?:أنا اسمي|انا اسمي|اسمي)\\s+([\\p{L}][\\p{L}\\s'-]{1,35}?)(?=\\s*(?:[،.!؟]|$))/u);
+if(intro){profile.userName=intro[1].trim().replace(/\\s+/g,' ');profile.nameExplicit=true;profile.updatedAt=new Date().toISOString();}
+if(/(?:أنا بنت|انا بنت|أنا ست|انا ست|أنا امرأة|انا امرأة)/u.test(text)){profile.addressForm='feminine';profile.genderExplicit=true;}
+else if(/(?:أنا ولد|انا ولد|أنا راجل|انا راجل|أنا رجل|انا رجل)/u.test(text)){profile.addressForm='masculine';profile.genderExplicit=true;}
 const rules=[
 [/(?:أنا بحب|انا بحب|بحب دايمًا|بحب دايما)\s+(.{3,180})/u,'likes'],
 [/(?:أنا بفضّل|انا بفضل|أنا أفضل|انا افضل|أفضل إن|افضل ان)\s+(.{3,180})/u,'preferences'],
