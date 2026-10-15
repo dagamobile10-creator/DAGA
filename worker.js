@@ -284,7 +284,7 @@ export default {
               stability: 0.32,
               similarity_boost: 0.80,
               style: 0.22,
-              speed: 0.78,
+              speed: 0.70,
               use_speaker_boost: true
             }
           })
@@ -334,17 +334,14 @@ function normalizeArabicReply(value, userText = "") {
   const question = String(userText || "");
   let reply = String(value || "").trim();
 
-  // Answer identity questions directly and consistently; don't let the model
-  // invent alternate spellings/pronunciations of the assistant's name.
   if (/(اسمك\s*(?:إيه|ايه|ما|ماذا)|مين\s*إنت|من\s*أنت|عرفني\s*بنفسك)/u.test(question)) {
     return "أنا ضَجْه، مساعدك الذكي.";
   }
 
-  // Internal spelling instructions must never leak into an unrelated answer.
   if (!/(الهاء|التاء المربوطة|التشكيل|مخارج الحروف|النطق)/u.test(question)) {
     reply = reply
-      .replace(/[^.!؟،,\n]*(?:هفرق|هفرّق|هشرحلك|هشرح لك)\s+بين\s+(?:الهاء|حرف الهاء)[^.!؟،,\n]*(?:التاء المربوطة|التاء المربوطه)[^.!؟،,\n]*/gu, "")
-      .replace(/[^.!؟،,\n]*(?:التاء المربوطة|الهاء والتاء المربوطة)[^.!؟،,\n]*/gu, "")
+      .replace(/[^،؛.!؟\n]*(?:هفرق|هفرّق|هشرحلك|هشرح لك)\s+بين\s+(?:الهاء|حرف الهاء)[^،؛.!؟\n]*(?:التاء المربوطة|التاء المربوطه)[^،؛.!؟\n]*/gu, "")
+      .replace(/[^،؛.!؟\n]*(?:الهاء والتاء المربوطة|التاء المربوطة)[^،؛.!؟\n]*/gu, "")
       .split(/(?<=[.!؟])\s+|\n+/u)
       .filter(sentence => !/(الهاء|التاء المربوطة|التشكيل|مخارج الحروف)/u.test(sentence))
       .join(" ");
@@ -354,10 +351,7 @@ function normalizeArabicReply(value, userText = "") {
     .replace(/أنا\s+هتساعدك/gu, "أنا هساعدك")
     .replace(/أنا\s+هتجاوبك/gu, "أنا هجاوبك")
     .replace(/أنا\s+هترد عليك/gu, "أنا هرد عليك")
-    .replace(/أنا\s+هتجاوب عليك/gu, "أنا هجاوبك")
-    .replace(/أنا\s+هتساعد عليك/gu, "أنا هساعدك")
     .replace(/هتجاوبك/gu, "هجاوبك")
-    .replace(/هتجاوب عليك/gu, "هجاوبك")
     .replace(/هتساعدك/gu, "هساعدك")
     .replace(/هترد عليك/gu, "هرد عليك")
     .replace(/\s{2,}/gu, " ")
