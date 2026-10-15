@@ -53,7 +53,7 @@ export default {
           "استخدم عامية مصرية قاهرية حقيقية، لا فصحى متكلفة ولا لهجة خليجية أو شامية. الجيم المصرية /g/ صلبة مثل «جمال» و«مجدي»، وليست /dʒ/ مثل نطق الإنجليزية لكلمة job. تجنب التشكيل غير الضروري، لكن استخدمه صوتيًا عندما يمنع خطأ النطق.",
           "استعمل سجل المحادثة والذاكرة المرسلة لفهم الإشارات والتصحيحات، وقدّم أحدث تصحيح على القديم. لا تختلق ذكريات أو معلومات شخصية. لا تخترع أرقامًا أو بيانات محل؛ استخدم فقط البيانات التي أُرسلت فعلًا، ولا تدّع تنفيذ شيء لم تنفذه.",
           "راجع الرد أخيرًا: هل جاوب السؤال فعلًا؟ هل الاسم والهوية والضمائر صحيحة؟ هل الصرف والنحو طبيعيان؟ هل توجد جملة زائدة أو معلومة مخترعة؟ أصلحها قبل الإرسال."
-        ].join("\\n") + (memory ? "\\n\\nذاكرة المستخدم المتاحة (مرجع سياقي، استخدم المرتبط بالسؤال فقط): " + memory : "") + (businessContext ? "\\n\\nسياق العمل الثابت (ليس بيانات حية): " + businessContext : "");
+        ].join("\n") + (memory ? "\n\nذاكرة المستخدم المتاحة (مرجع سياقي، استخدم المرتبط بالسؤال فقط): " + memory : "") + (businessContext ? "\n\nسياق العمل الثابت (ليس بيانات حية): " + businessContext : "");
         const failures = [];
 
         if (env.OPENAI_API_KEY) {
@@ -65,7 +65,7 @@ export default {
             });
             const data = await ai.json();
             if (ai.ok) {
-              let reply = String(data.output_text || (data.output || []).flatMap(item => item.content || []).filter(item => item.type === "output_text").map(item => item.text || "").join("\\n") || "").trim();
+              let reply = String(data.output_text || (data.output || []).flatMap(item => item.content || []).filter(item => item.type === "output_text").map(item => item.text || "").join("\n") || "").trim();
               reply = normalizeArabicReply(reply, userText);
               if (reply) return json({ reply, provider: "openai" });
               failures.push("OpenAI returned an empty reply");
@@ -113,13 +113,13 @@ export default {
       if (!text) return json({ error: "text is required" }, 400);
 
       text = text
-        .replace(/\\bplus\\b|\\bپلس\\b/gi, " زائد ")
-        .replace(/\\bminus\\b/gi, " ناقص ")
-        .replace(/\\bequals?\\b/gi, " يساوي ")
-        .replace(/\\bmultipl(?:y|ied|ication)\\b/gi, " ضرب ")
-        .replace(/\\bdivid(?:e|ed|ing)\\b/gi, " قسمة ")
-        .replace(/\\bDAGA\\b/gi, "ضَگْه")
-        .replace(/\\bMH\\b/gi, "المساعد")
+        .replace(/\bplus\b|\bپلس\b/gi, " زائد ")
+        .replace(/\bminus\b/gi, " ناقص ")
+        .replace(/\bequals?\b/gi, " يساوي ")
+        .replace(/\bmultipl(?:y|ied|ication)\b/gi, " ضرب ")
+        .replace(/\bdivid(?:e|ed|ing)\b/gi, " قسمة ")
+        .replace(/\bDAGA\b/gi, "ضَگْه")
+        .replace(/\bMH\b/gi, "المساعد")
         .replace(/عاميه/gu, "عامية").replace(/دقه/gu, "دقة").replace(/حلوه/gu, "حلوة")
         .replace(/فكره/gu, "فكرة").replace(/طريقه/gu, "طريقة").replace(/حاجه/gu, "حاجة")
         .replace(/مره/gu, "مرة").replace(/مشكله/gu, "مشكلة").replace(/خدمه/gu, "خدمة")
@@ -128,12 +128,12 @@ export default {
         .replace(/قراءه/gu, "قراءة").replace(/كتابه/gu, "كتابة").replace(/اجابه/gu, "إجابة")
         .replace(/اضافه/gu, "إضافة").replace(/خلاصه/gu, "خلاصة").replace(/مباشره/gu, "مباشرة").replace(/طبيعه/gu, "طبيعة")
         .replace(/هفرأ/gu, "هَفَرَّق").replace(/هفرق/gu, "هَفَرَّق")
-        .replace(/أنا\\s+هتساعدك/gu, "أنا هساعدك").replace(/أنا\\s+هتجاوبك/gu, "أنا هجاوبك")
+        .replace(/أنا\s+هتساعدك/gu, "أنا هساعدك").replace(/أنا\s+هتجاوبك/gu, "أنا هجاوبك")
         .replace(/هتساعدك/gu, "هساعدك").replace(/هتجاوبك/gu, "هجاوبك")
         .replace(/هجاوبك/gu, "هَجَاوْبَك").replace(/هساعدك/gu, "هَسَاعْدَك")
         .replace(/صيانة/gu, "صِيَانَة").replace(/بسهولة/gu, "بِسُهُولَة").replace(/بسرعة/gu, "بِسُرْعَةٍ")
         .replace(/ضَگْه|ضَجَه|ضَجَّة|ضجه|ضجّة|ضجة|دقة|دقّة|داجا|داجة/gu, "ضَگْه")
-        .replace(/\\s{2,}/g, " ").trim();
+        .replace(/\s{2,}/g, " ").trim();
 
       const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}/stream`, {
         signal: AbortSignal.timeout(12000), method: "POST",
@@ -155,16 +155,16 @@ function cors(extra = {}) {
 function normalizeArabicReply(value, userText = "") {
   const question = String(userText || "");
   let reply = String(value || "").trim();
-  if (/(اسمك\\s*(?:إيه|ايه|ما|ماذا)|مين\\s*إنت|من\\s*أنت|عرفني\\s*بنفسك)/u.test(question)) return "أنا ضَگْه، مساعدك الذكي.";
+  if (/(اسمك\s*(?:إيه|ايه|ما|ماذا)|مين\s*إنت|من\s*أنت|عرفني\s*بنفسك)/u.test(question)) return "أنا ضَگْه، مساعدك الذكي.";
   if (!/(الهاء|التاء المربوطة|التشكيل|مخارج الحروف|النطق)/u.test(question)) {
     reply = reply
-      .replace(/[^،؛.!؟\\n]*(?:هفرق|هفرّق|هشرحلك|هشرح لك)\\s+بين\\s+(?:الهاء|حرف الهاء)[^،؛.!؟\\n]*(?:التاء المربوطة|التاء المربوطه)[^،؛.!؟\\n]*/gu, "")
-      .replace(/[^،؛.!؟\\n]*(?:الهاء والتاء المربوطة|التاء المربوطة)[^،؛.!؟\\n]*/gu, "")
-      .split(/(?<=[.!؟])\\s+|\\n+/u).filter(sentence => !/(الهاء|التاء المربوطة|التشكيل|مخارج الحروف)/u.test(sentence)).join(" ");
+      .replace(/[^،؛.!؟\n]*(?:هفرق|هفرّق|هشرحلك|هشرح لك)\s+بين\s+(?:الهاء|حرف الهاء)[^،؛.!؟\n]*(?:التاء المربوطة|التاء المربوطه)[^،؛.!؟\n]*/gu, "")
+      .replace(/[^،؛.!؟\n]*(?:الهاء والتاء المربوطة|التاء المربوطة)[^،؛.!؟\n]*/gu, "")
+      .split(/(?<=[.!؟])\s+|\n+/u).filter(sentence => !/(الهاء|التاء المربوطة|التشكيل|مخارج الحروف)/u.test(sentence)).join(" ");
   }
   return reply
-    .replace(/أنا\\s+هتساعدك/gu, "أنا هساعدك").replace(/أنا\\s+هتجاوبك/gu, "أنا هجاوبك")
-    .replace(/أنا\\s+هترد عليك/gu, "أنا هرد عليك").replace(/هتجاوبك/gu, "هجاوبك")
+    .replace(/أنا\s+هتساعدك/gu, "أنا هساعدك").replace(/أنا\s+هتجاوبك/gu, "أنا هجاوبك")
+    .replace(/أنا\s+هترد عليك/gu, "أنا هرد عليك").replace(/هتجاوبك/gu, "هجاوبك")
     .replace(/هتساعدك/gu, "هساعدك").replace(/هترد عليك/gu, "هرد عليك")
-    .replace(/\\s{2,}/gu, " ").trim();
+    .replace(/\s{2,}/gu, " ").trim();
 }
