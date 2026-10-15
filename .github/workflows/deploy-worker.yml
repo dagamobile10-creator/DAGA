@@ -53,6 +53,28 @@ jobs:
           fi
           echo "Cloudflare account ID is accessible with this token."
 
+      - name: Provision persistent D1 memory database
+        env:
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          endpoint="https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/d1/database"
+          listing="$(curl -fsS -G -H "Authorization: Bearer $CF_API_TOKEN" --data-urlencode "name=daga-live-memory" "$endpoint")"
+          db_id="$(echo "$listing" | jq -r '.result[]? | select(.name=="daga-live-memory") | .uuid' | head -n1)"
+          if [ -z "$db_id" ] || [ "$db_id" = "null" ]; then
+            created="$(curl -fsS -X POST "$endpoint" -H "Authorization: Bearer $CF_API_TOKEN" -H "Content-Type: application/json" --data '{"name":"daga-live-memory"}')"
+            echo "$created" | jq -e '.success == true' >/dev/null
+            db_id="$(echo "$created" | jq -r '.result.uuid')"
+          fi
+          test -n "$db_id" && test "$db_id" != "null"
+          echo "DAGA_DB_ID=$db_id" >> "$GITHUB_ENV"
+          printf '\n[[d1_databases]]\nbinding = "DAGA_MEMORY_DB"\ndatabase_name = "daga-live-memory"\ndatabase_id = "%s"\n' "$db_id" >> wrangler.toml
+          sql='CREATE TABLE IF NOT EXISTS daga_user_memory (user_id TEXT PRIMARY KEY, profile_json TEXT NOT NULL DEFAULT "{}", history_json TEXT NOT NULL DEFAULT "[]", updated_at TEXT NOT NULL);'
+          applied="$(curl -fsS -X POST "$endpoint/$db_id/query" -H "Authorization: Bearer $CF_API_TOKEN" -H "Content-Type: application/json" --data "$(jq -n --arg sql "$sql" '{sql:$sql}')")"
+          echo "$applied" | jq -e '.success == true' >/dev/null
+          echo "Persistent D1 memory database and table are ready."
+
       - name: Deploy daga-voice to Cloudflare
         uses: cloudflare/wrangler-action@v3
         with:
