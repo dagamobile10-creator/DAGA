@@ -217,7 +217,7 @@ export default {
               stability: 0.32,
               similarity_boost: 0.80,
               style: 0.22,
-              speed: 0.89,
+              speed: 0.88,
               use_speaker_boost: true
             }
           })
