@@ -214,7 +214,7 @@ export default {
         .replace(/\bequals?\b/gi, " يساوي ")
         .replace(/\bmultipl(?:y|ied|ication)\b/gi, " ضرب ")
         .replace(/\bdivid(?:e|ed|ing)\b/gi, " قسمة ")
-        .replace(/\bDAGA\b/gi, "ضَجَّة")
+        .replace(/\bDAGA\b/gi, "ضَجْه")
         .replace(/\bMH\b/gi, "المساعد")
         // Speech-only normalization: normalize common Egyptian misspellings without
         // globally replacing genuine ه letters. The visible app brand is unchanged.
