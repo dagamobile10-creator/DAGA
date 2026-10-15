@@ -258,7 +258,7 @@ export default {
         .replace(/هتجاوبك/gu, "هجاوبك")
         .replace(/هجاوبك/gu, "هَجَاوْبَك")
         .replace(/هساعدك/gu, "هَسَاعْدَك")
-        .replace(/صيانة/gu, "صِيَانَه")
+        .replace(/صيانة/gu, "صِيَانَة")
         .replace(/بسهولة/gu, "بِسُهُولَة")
         .replace(/بسرعة/gu, "بِسُرْعَة")
         .replace(/ضَجَه|ضَجْه|ضَجَّة|ضجه|ضجّة|ضجة|داجا|داجة/gu, "ضَجَّة")
@@ -332,9 +332,12 @@ function cors(extra = {}) {
 function normalizeArabicReply(value) {
   return String(value || "")
     // Fix only clear first-person assistant mistakes; preserve quoted/user text otherwise.
-    .replace(/أنا\\s+هتساعدك/gu, "أنا هساعدك")
-    .replace(/أنا\\s+هتجاوبك/gu, "أنا هجاوبك")
-    .replace(/أنا\\s+هترد عليك/gu, "أنا هرد عليك")
+        .replace(/أنا\s+هتساعدك/gu, "أنا هساعدك")
+        .replace(/أنا\s+هتجاوبك/gu, "أنا هجاوبك")
+        .replace(/أنا\s+هترد عليك/gu, "أنا هرد عليك")
+    .replace(/هتساعدك/gu, "هساعدك")
+    .replace(/هتجاوبك/gu, "هجاوبك")
+    .replace(/هترد عليك/gu, "هرد عليك")
     // Keep the known-good brand pronunciation in TTS spelling.
     .replace(/ضَجَه|ضَجْه|ضجه|ضجّة|ضجة|داجا|داجة/gu, "ضَجَّة")
     .trim();
