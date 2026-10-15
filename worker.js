@@ -4,9 +4,7 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
-    if (request.method === "OPTIONS") {
-      return new Response(null, { headers: cors() });
-    }
+    if (request.method === "OPTIONS") return new Response(null, { headers: cors() });
 
     if (url.pathname === "/memory" && (request.method === "GET" || request.method === "POST")) {
       if (!env.DAGA_MEMORY_DB) return json({ error: "persistent_memory_not_configured", detail: "D1 binding DAGA_MEMORY_DB is not configured" }, 503);
@@ -29,12 +27,7 @@ export default {
     }
 
     if (url.pathname === "/health") {
-      return json({
-        ok: true,
-        voiceConfigured: Boolean(env.ELEVENLABS_API_KEY),
-        chatConfigured: Boolean(env.OPENAI_API_KEY),
-        freeChatConfigured: Boolean(env.GROQ_API_KEY || env.AI)
-      });
+      return json({ ok: true, voiceConfigured: Boolean(env.ELEVENLABS_API_KEY), chatConfigured: Boolean(env.OPENAI_API_KEY), freeChatConfigured: Boolean(env.GROQ_API_KEY || env.AI) });
     }
 
     if (url.pathname === "/chat" && request.method === "POST") {
@@ -42,98 +35,50 @@ export default {
         const body = await request.json();
         const userText = String(body?.text || "").trim();
         if (!userText) return json({ error: "text is required" }, 400);
-        const history = Array.isArray(body?.history)
-          ? body.history.slice(-16).filter(item =>
-              item && ["user", "assistant"].includes(item.role) &&
-              typeof item.content === "string" && item.content.trim()
-            ).map(item => ({ role: item.role, content: item.content.trim().slice(0, 2000) }))
-          : [];
+        const history = Array.isArray(body?.history) ? body.history.slice(-20).filter(item => item && ["user", "assistant"].includes(item.role) && typeof item.content === "string" && item.content.trim()).map(item => ({ role: item.role, content: item.content.trim().slice(0, 2500) })) : [];
         const conversation = [...history, { role: "user", content: userText }];
         const businessContext = typeof body?.businessContext === "string" ? body.businessContext.trim().slice(0, 3000) : "";
-        const memory = body?.memory && typeof body.memory === "object" ? JSON.stringify(body.memory).slice(0, 2500) : "";
+        const memory = body?.memory && typeof body.memory === "object" ? JSON.stringify(body.memory).slice(0, 3000) : "";
 
-        // Stable project memory for direct recall questions. This is grounded in
-        // confirmed project history, not the shop's live ledger or recent model guesses.
         const recallQuestion = /(?:فاكر|تفتكر|متذكر|تتذكر|عارف)\s*(?:إحنا|احنا|كنا|احنا كنا)?[\s\S]{0,90}(?:بنحاول نصلح|بنصلح|نصلح فيك|نصلح|نظبط فيك|نظبطك|المشكلة فيك|كنا عايزين نصلح)/u.test(userText)
           || /إيه اللي كنا بنحاول نصلحه فيك|احنا كنا بنصلح فيك ايه|إحنا كنا بنصلح فيك إيه/u.test(userText);
-        if (recallQuestion) {
-          return json({
-            reply: "أيوه يا صاحبي، فاكر. كنا بنظبط كلامي عشان أبقى مصري طبيعي من غير تكلّف، وأنطق الحروف والأرقام والمبالغ صح، والأهم أفهم سؤالك وأرد على نفس الموضوع بدل ما أخترع أرقام للمحل. اللي حصل إني رديت عليك بمعلومات مالهاش علاقة بسؤالك، وده لازم يتصلح. ولسه ما نعتبرش الذاكرة الدائمة مضمونة لمجرد إن فيه سجل محادثة محفوظ.",
-            provider: "project-memory"
-          });
-        }
-
-        // All user messages go through the language model; no canned chat replies.
+        if (recallQuestion) return json({ reply: "كنا بنظبط فهمي وسياق كلامي، والنطق المصري، والجيم القاهرية، والصرف والنحو والضمائر، وإنّي أجاوب على السؤال نفسه من غير تخمين أو ردود محفوظة. وكمان نفرّق بين اسم المساعد واسم صاحب البرنامج وهوية أي مستخدم جديد.", provider: "project-memory" });
 
         const instructions = [
-          "أنت مساعد ذكاء اصطناعي اسمه ضجه، رجل مصري بيتكلم بالعامية القاهرية الطبيعية. اسمك المكتوب والمنطوق «ضجه»، مش «دقة» ولا «ضجة». لو اتسألت عن اسمك قل: «أنا اسمي ضجه».",
-          "افهم كلام المستخدم وسياقه، وفكّر في المطلوب قبل الإجابة. جاوب على السؤال نفسه وبالقدر المناسب له. لا تستخدم ردودًا محفوظة، ولا تكرر السؤال أو المجاملات، ولا تضف نصائح أو شرحًا غير مطلوب. اسأل سؤالًا واحدًا فقط إذا كان ضروريًا لفهم المقصود.",
-          "استخدم ذكاء النموذج في الاستدلال والفهم، لا تتعامل مع هذه التعليمات كبديل عن التفكير. لا تخترع حقائق أو أرقامًا، وميّز بوضوح بين ما تعرفه وما تستنتجه. لا تدّعِ رؤية بيانات المحل أو تنفيذ عملية لم تحدث.",
-          "تحدث بعامية مصرية قاهرية طبيعية، لا بفصحى متكلفة ولا بلهجة خليجية أو شامية. كن واضحًا ومختصرًا ومتجاوبًا مع نبرة المستخدم، من غير تكرار عبارة «يا صاحبي» أو أي افتتاحية ثابتة.",
-          "التزم بصحة اللغة العربية: راجع الإملاء والنحو والصرف، وترابط الجملة، والفاعل والضمير والزمن والتذكير والتأنيث والمفرد والجمع. عن نفسك استخدم المذكر: «أنا هساعدك، أنا هجاوبك، أنا هرد عليك». خاطب المستخدم بصيغة «إنت». لا تخلط بين «هجاوبك» و«هتجاوبني» أو بين «سألتني» و«سألتك». أعد صياغة أي جملة ملتبسة قبل إرسالها.",
-          "النطق مصري قاهري: الجيم /g/ صلبة مثل «جمال» و«مجدي» و«جيهان»، وليست /dʒ/. اسمك «ضجه» بالهاء الأصلية، وانطقه «ضَجْه» لا «دقة». في نص الصوت استخدم «ضَجْه» لتوجيه النطق. لا تحوّل الهاء إلى تاء مربوطة، ولا تغيّر هاء صحيحة في كلمات مثل «الله» و«له» و«فيه» و«وجه» و«صيانة». لا تطبّق استبدالات إملائية عامة على كلمات لا تحتاجها.",
-          "إذا كان الكلام عن المحل، استخدم بيانات فعلية أُرسلت لك فقط. راجع الحسابات والأرقام والوحدات ولا تخمّن. استعمل سجل المحادثة المتاح لفهم الإشارات والتصحيحات، واتبع أحدث تصحيح. لا تدّعِ ذاكرة دائمة غير مؤكدة.",
-          "مراجعة أخيرة قبل الرد: أجب عن المقصود مباشرة، وتأكد أن المعنى واللغة والضمائر صحيحة، واحذف أي حشو أو ادعاء غير مؤكد."
+          "أنت مساعد ذكاء اصطناعي اسمه ضجه. أنت رجل وتتحدث بلهجة مصرية قاهرية طبيعية. اسمك أنت «ضجه»، وليس اسم المستخدم. إذا سُئلت عن اسمك، قل: «أنا ضَگْه، مساعدك الذكي»؛ استخدم في الكلام الصوتي الصيغة «ضَگْه» لتوجيه الجيم إلى صوت G القاهري الصلب مثل أول صوت في «جمال» و«مجدي»، وليس صوت J في الإنجليزية. لا تقل «دقة».",
+          "الهوية والملكية: مالك ومؤسس البرنامج هو محمد حامد. هذه معلومة عن صاحب البرنامج وليست اسم المساعد، وليست دليلًا أن كل شخص يتحدث معك هو محمد حامد. لا تنادِ المستخدم باسم محمد حامد ولا تعتبره المالك إلا إذا عرّف نفسه بذلك في المحادثة أو أثبتت بيانات الحساب ذلك. عندما يقول المستخدم صراحة «أنا محمد حامد» أو يعرّف نفسه باسم آخر، استخدم الاسم في سياق هذه المحادثة واحترم تصحيحاته. لا تدّعِ أنك تتذكر الاسم في محادثة جديدة إلا إذا وصلتك ذاكرة فعلية.",
+          "تعامل مع أول تعريف من المستخدم باعتباره ملفه الشخصي في هذه المحادثة: استخرج الاسم والصفة التي صرّح بها، واستخدمهما بشكل طبيعي. استدل على التذكير أو التأنيث من صيغة تعريف المستخدم وضمائره وكلامه، لكن لا تخمّن الجنس من الاسم وحده إذا كان ملتبسًا؛ عند الحاجة اسأل مرة واحدة بلطف. لا تتحدث مع الجميع بصيغة واحدة عمياء، ولا تغيّر صيغة مخاطبة المستخدم بلا سبب.",
+          "افهم المقصود وسياق آخر الرسائل قبل الرد. أجب مباشرة عن السؤال المحدد، ووازن طول الرد مع السؤال: مختصر في البسيط، ومفصل عند الحاجة. لا تستخدم إجابات محفوظة أو افتتاحيات متكررة، ولا تكرر كلام المستخدم، ولا تتهرب من السؤال بنصائح عامة. إذا كان هناك أكثر من تفسير مؤثر، اسأل سؤالًا واحدًا واضحًا.",
+          "طبّق العربية الصحيحة في الصرف والنحو والإملاء وتركيب الجملة، مع عامية مصرية طبيعية: طابق الفعل مع الفاعل، والضمير مع صاحبه، والزمن، والتذكير والتأنيث، والمفرد والجمع. قبل إرسال الرد راجعه كأنك محرر لغوي. عن نفسك استخدم المذكر: «أنا هساعدك، أنا هجاوبك، أنا هرد عليك». لا تقل «أنا هتساعدك» أو «أنا هتجاوبك». افصل بوضوح بين «أنا» و«إنت» و«هو» و«هي»، وبين «هجاوبك» و«هتجاوبني»، وبين «سألتني» و«سألتك». لا تستخدم التذكير مع مستخدمة صرحت أنها أنثى ولا التأنيث مع مستخدم صرّح أنه ذكر.",
+          "استخدم عامية مصرية قاهرية حقيقية، لا فصحى متكلفة ولا لهجة خليجية أو شامية. الجيم المصرية /g/ صلبة مثل «جمال» و«مجدي»، وليست /dʒ/ مثل نطق الإنجليزية لكلمة job. تجنب التشكيل غير الضروري، لكن استخدمه صوتيًا عندما يمنع خطأ النطق.",
+          "استعمل سجل المحادثة والذاكرة المرسلة لفهم الإشارات والتصحيحات، وقدّم أحدث تصحيح على القديم. لا تختلق ذكريات أو معلومات شخصية. لا تخترع أرقامًا أو بيانات محل؛ استخدم فقط البيانات التي أُرسلت فعلًا، ولا تدّع تنفيذ شيء لم تنفذه.",
+          "راجع الرد أخيرًا: هل جاوب السؤال فعلًا؟ هل الاسم والهوية والضمائر صحيحة؟ هل الصرف والنحو طبيعيان؟ هل توجد جملة زائدة أو معلومة مخترعة؟ أصلحها قبل الإرسال."
         ].join("\\n") + (memory ? "\\n\\nذاكرة المستخدم المتاحة (مرجع سياقي، استخدم المرتبط بالسؤال فقط): " + memory : "") + (businessContext ? "\\n\\nسياق العمل الثابت (ليس بيانات حية): " + businessContext : "");
         const failures = [];
 
-        // Try OpenAI first when configured. If its account has no credits or
-        // the request fails, try Groq when a Groq key has been configured.
         if (env.OPENAI_API_KEY) {
           try {
             const ai = await fetch("https://api.openai.com/v1/responses", {
-              signal: AbortSignal.timeout(4500),
-              method: "POST",
-              headers: {
-                "Authorization": `Bearer ${env.OPENAI_API_KEY}`,
-                "Content-Type": "application/json"
-              },
-              body: JSON.stringify({
-                model: "gpt-4.1-mini",
-                instructions,
-                input: conversation,
-                max_output_tokens: 240
-              })
+              signal: AbortSignal.timeout(6500), method: "POST",
+              headers: { "Authorization": `Bearer ${env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
+              body: JSON.stringify({ model: "gpt-4.1-mini", instructions, input: conversation, max_output_tokens: 320 })
             });
             const data = await ai.json();
             if (ai.ok) {
-              let reply = String(
-                data.output_text ||
-                (data.output || []).flatMap(item => item.content || [])
-                  .filter(item => item.type === "output_text")
-                  .map(item => item.text || "")
-                  .join("\n") ||
-                ""
-              ).trim();
+              let reply = String(data.output_text || (data.output || []).flatMap(item => item.content || []).filter(item => item.type === "output_text").map(item => item.text || "").join("\\n") || "").trim();
               reply = normalizeArabicReply(reply, userText);
               if (reply) return json({ reply, provider: "openai" });
               failures.push("OpenAI returned an empty reply");
-            } else {
-              failures.push("OpenAI: " + (data?.error?.message || "request failed"));
-            }
-          } catch (error) {
-            failures.push("OpenAI: " + String(error));
-          }
+            } else failures.push("OpenAI: " + (data?.error?.message || "request failed"));
+          } catch (error) { failures.push("OpenAI: " + String(error)); }
         }
 
         if (env.GROQ_API_KEY) {
           try {
             const ai = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-              signal: AbortSignal.timeout(4000),
-              method: "POST",
-              headers: {
-                "Authorization": `Bearer ${env.GROQ_API_KEY}`,
-                "Content-Type": "application/json"
-              },
-              body: JSON.stringify({
-                model: "llama-3.3-70b-versatile",
-                messages: [
-                  { role: "system", content: instructions },
-                  ...conversation
-                ],
-                max_tokens: 220,
-                temperature: 0.45
-              })
+              signal: AbortSignal.timeout(5000), method: "POST",
+              headers: { "Authorization": `Bearer ${env.GROQ_API_KEY}`, "Content-Type": "application/json" },
+              body: JSON.stringify({ model: "llama-3.3-70b-versatile", messages: [{ role: "system", content: instructions }, ...conversation], max_tokens: 300, temperature: 0.35 })
             });
             const data = await ai.json();
             if (ai.ok) {
@@ -141,216 +86,85 @@ export default {
               reply = normalizeArabicReply(reply, userText);
               if (reply) return json({ reply, provider: "groq" });
               failures.push("Groq returned an empty reply");
-            } else {
-              failures.push("Groq: " + (data?.error?.message || "request failed"));
-            }
-          } catch (error) {
-            failures.push("Groq: " + String(error));
-          }
+            } else failures.push("Groq: " + (data?.error?.message || "request failed"));
+          } catch (error) { failures.push("Groq: " + String(error)); }
         }
 
-        // Cloudflare Workers AI binding is a no-extra-secret fallback.
-        // Enable it in Worker settings or deploy with the included wrangler.toml.
         if (env.AI) {
           try {
-            const result = await Promise.race([env.AI.run("@cf/meta/llama-3.1-8b-instruct-fast", {
-              messages: [
-                { role: "system", content: instructions },
-                ...conversation
-              ],
-              max_tokens: 220
-            }), new Promise((_, reject) => setTimeout(() => reject(new Error("Cloudflare AI timeout")), 4500))]);
-            let reply = String(result?.response || "").trim();
-            reply = normalizeArabicReply(reply, userText);
+            const result = await Promise.race([env.AI.run("@cf/meta/llama-3.1-8b-instruct-fast", { messages: [{ role: "system", content: instructions }, ...conversation], max_tokens: 300 }), new Promise((_, reject) => setTimeout(() => reject(new Error("Cloudflare AI timeout")), 5000))]);
+            let reply = normalizeArabicReply(String(result?.response || "").trim(), userText);
             if (reply) return json({ reply, provider: "cloudflare-ai" });
             failures.push("Cloudflare AI returned an empty reply");
-          } catch (error) {
-            failures.push("Cloudflare AI: " + String(error));
-          }
+          } catch (error) { failures.push("Cloudflare AI: " + String(error)); }
         }
 
-        if (!env.OPENAI_API_KEY && !env.GROQ_API_KEY && !env.AI) {
-          return json({
-            error: "No chat provider configured",
-            detail: "Enable the AI binding in Cloudflare Workers, or configure GROQ_API_KEY / OPENAI_API_KEY."
-          }, 503);
-        }
-        return json({
-          error: "All configured chat providers failed",
-          detail: failures.join(" | ")
-        }, 502);
-      } catch (error) {
-        return json({ error: "Chat failure", detail: String(error) }, 500);
-      }
+        if (!env.OPENAI_API_KEY && !env.GROQ_API_KEY && !env.AI) return json({ error: "No chat provider configured", detail: "Enable the AI binding in Cloudflare Workers, or configure GROQ_API_KEY / OPENAI_API_KEY." }, 503);
+        return json({ error: "All configured chat providers failed", detail: failures.join(" | ") }, 502);
+      } catch (error) { return json({ error: "Chat failure", detail: String(error) }, 500); }
     }
 
-    if (url.pathname !== "/tts" || request.method !== "POST") {
-      return json({ error: "Not found" }, 404);
-    }
+    if (url.pathname !== "/tts" || request.method !== "POST") return json({ error: "Not found" }, 404);
 
     try {
-      if (!env.ELEVENLABS_API_KEY) {
-        return json(
-          { error: "DAGA voice is not configured" },
-          503
-        );
-      }
-
+      if (!env.ELEVENLABS_API_KEY) return json({ error: "DAGA voice is not configured" }, 503);
       const body = await request.json();
       let text = String(body?.text || "").trim();
+      if (!text) return json({ error: "text is required" }, 400);
 
-      if (!text) {
-        return json(
-          { error: "text is required" },
-          400
-        );
-      }
-
-      // Keep spoken output Arabic-only and normalize the app name before synthesis.
-      // Avoid Latin brand spellings in Arabic speech to reduce language switching.
       text = text
-        .replace(/\bplus\b|\bپلس\b/gi, " زائد ")
-        .replace(/\bminus\b/gi, " ناقص ")
-        .replace(/\bequals?\b/gi, " يساوي ")
-        .replace(/\bmultipl(?:y|ied|ication)\b/gi, " ضرب ")
-        .replace(/\bdivid(?:e|ed|ing)\b/gi, " قسمة ")
-        .replace(/\bDAGA\b/gi, "ضَجْه")
-        .replace(/\bMH\b/gi, "المساعد")
-        // Speech-only normalization: normalize common Egyptian misspellings without
-        // globally replacing genuine ه letters. The visible app brand is unchanged.
-        .replace(/عاميه/gu, "عامية")
-        .replace(/دقه/gu, "دقة")
-        .replace(/حلوه/gu, "حلوة")
-        .replace(/فكره/gu, "فكرة")
-        .replace(/طريقه/gu, "طريقة")
-        .replace(/حاجه/gu, "حاجة")
-        .replace(/مره/gu, "مرة")
-        .replace(/مشكله/gu, "مشكلة")
-        .replace(/خدمه/gu, "خدمة")
-        .replace(/معلومه/gu, "معلومة")
-        .replace(/شخصيه/gu, "شخصية")
-        .replace(/سهوله/gu, "سهولة")
-        .replace(/بسرعه/gu, "بسرعة")
-        .replace(/عامه/gu, "عامة")
-        .replace(/اداره/gu, "إدارة")
-        .replace(/قراءه/gu, "قراءة")
-        .replace(/كتابه/gu, "كتابة")
-        .replace(/اجابه/gu, "إجابة")
-        .replace(/اضافه/gu, "إضافة")
-        .replace(/خلاصه/gu, "خلاصة")
-        .replace(/مباشره/gu, "مباشرة")
-        .replace(/طبيعه/gu, "طبيعة")
-        // Add diacritics only to a few known phrases to guide Arabic TTS.
-        .replace(/هفرأ/gu, "هَفَرَّق")
-        .replace(/هفرق/gu, "هَفَرَّق")
-        .replace(/أنا\s+هتساعدك/gu, "أنا هساعدك")
-        .replace(/أنا\s+هتجاوبك/gu, "أنا هجاوبك")
-        .replace(/هتساعدك/gu, "هساعدك")
-        .replace(/هتجاوبك/gu, "هجاوبك")
-        .replace(/هجاوبك/gu, "هَجَاوْبَك")
-        .replace(/هساعدك/gu, "هَسَاعْدَك")
-        .replace(/صيانة/gu, "صِيَانَة")
-        .replace(/بسهولة/gu, "بِسُهُولَة")
-        .replace(/بسرعة/gu, "بِسُرْعَةٍ")
-        .replace(/ضَجَه|ضَجَّة|ضجه|ضجّة|ضجة|دقة|دقّة|داجا|داجة/gu, "ضَجْه")
-        .replace(/\s{2,}/g, " ")
-        .trim();
+        .replace(/\\bplus\\b|\\bپلس\\b/gi, " زائد ")
+        .replace(/\\bminus\\b/gi, " ناقص ")
+        .replace(/\\bequals?\\b/gi, " يساوي ")
+        .replace(/\\bmultipl(?:y|ied|ication)\\b/gi, " ضرب ")
+        .replace(/\\bdivid(?:e|ed|ing)\\b/gi, " قسمة ")
+        .replace(/\\bDAGA\\b/gi, "ضَگْه")
+        .replace(/\\bMH\\b/gi, "المساعد")
+        .replace(/عاميه/gu, "عامية").replace(/دقه/gu, "دقة").replace(/حلوه/gu, "حلوة")
+        .replace(/فكره/gu, "فكرة").replace(/طريقه/gu, "طريقة").replace(/حاجه/gu, "حاجة")
+        .replace(/مره/gu, "مرة").replace(/مشكله/gu, "مشكلة").replace(/خدمه/gu, "خدمة")
+        .replace(/معلومه/gu, "معلومة").replace(/شخصيه/gu, "شخصية").replace(/سهوله/gu, "سهولة")
+        .replace(/بسرعه/gu, "بسرعة").replace(/عامه/gu, "عامة").replace(/اداره/gu, "إدارة")
+        .replace(/قراءه/gu, "قراءة").replace(/كتابه/gu, "كتابة").replace(/اجابه/gu, "إجابة")
+        .replace(/اضافه/gu, "إضافة").replace(/خلاصه/gu, "خلاصة").replace(/مباشره/gu, "مباشرة").replace(/طبيعه/gu, "طبيعة")
+        .replace(/هفرأ/gu, "هَفَرَّق").replace(/هفرق/gu, "هَفَرَّق")
+        .replace(/أنا\\s+هتساعدك/gu, "أنا هساعدك").replace(/أنا\\s+هتجاوبك/gu, "أنا هجاوبك")
+        .replace(/هتساعدك/gu, "هساعدك").replace(/هتجاوبك/gu, "هجاوبك")
+        .replace(/هجاوبك/gu, "هَجَاوْبَك").replace(/هساعدك/gu, "هَسَاعْدَك")
+        .replace(/صيانة/gu, "صِيَانَة").replace(/بسهولة/gu, "بِسُهُولَة").replace(/بسرعة/gu, "بِسُرْعَةٍ")
+        .replace(/ضَگْه|ضَجَه|ضَجَّة|ضجه|ضجّة|ضجة|دقة|دقّة|داجا|داجة/gu, "ضَگْه")
+        .replace(/\\s{2,}/g, " ").trim();
 
-      const response = await fetch(
-        `https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}/stream`,
-        {
-          signal: AbortSignal.timeout(12000),
-          method: "POST",
-          headers: {
-            "xi-api-key": env.ELEVENLABS_API_KEY,
-            "Content-Type": "application/json",
-            "Accept": "audio/mpeg"
-          },
-          body: JSON.stringify({
-            text,
-            model_id: "eleven_flash_v2_5",
-            language_code: "ar",
-            voice_settings: {
-              stability: 0.32,
-              similarity_boost: 0.80,
-              style: 0.22,
-              speed: 0.70,
-              use_speaker_boost: true
-            }
-          })
-        }
-      );
-
-      if (!response.ok) {
-        return new Response(await response.text(), {
-          status: response.status,
-          headers: cors({
-            "Content-Type": "application/json"
-          })
-        });
-      }
-
-      return new Response(response.body, {
-        headers: cors({
-          "Content-Type":
-            response.headers.get("content-type") ||
-            "audio/mpeg",
-          "Cache-Control": "no-store"
-        })
+      const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}/stream`, {
+        signal: AbortSignal.timeout(12000), method: "POST",
+        headers: { "xi-api-key": env.ELEVENLABS_API_KEY, "Content-Type": "application/json", "Accept": "audio/mpeg" },
+        body: JSON.stringify({ text, model_id: "eleven_flash_v2_5", language_code: "ar", voice_settings: { stability: 0.32, similarity_boost: 0.80, style: 0.22, speed: 0.70, use_speaker_boost: true } })
       });
-
-    } catch (error) {
-      return json(
-        {
-          error: "Worker failure",
-          detail: String(error)
-        },
-        500
-      );
-    }
+      if (!response.ok) return new Response(await response.text(), { status: response.status, headers: cors({ "Content-Type": "application/json" }) });
+      return new Response(response.body, { headers: cors({ "Content-Type": response.headers.get("content-type") || "audio/mpeg", "Cache-Control": "no-store" }) });
+    } catch (error) { return json({ error: "Worker failure", detail: String(error) }, 500); }
   }
 };
 
 function json(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: cors({ "Content-Type": "application/json; charset=utf-8" })
-  });
+  return new Response(JSON.stringify(data), { status, headers: cors({ "Content-Type": "application/json; charset=utf-8" }) });
 }
-
 function cors(extra = {}) {
-  return {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
-    ...extra
-  };
+  return { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET,POST,OPTIONS", "Access-Control-Allow-Headers": "Content-Type", ...extra };
 }
-
 function normalizeArabicReply(value, userText = "") {
   const question = String(userText || "");
   let reply = String(value || "").trim();
-
-  if (/(اسمك\s*(?:إيه|ايه|ما|ماذا)|مين\s*إنت|من\s*أنت|عرفني\s*بنفسك)/u.test(question)) {
-    return "أنا ضَجْه، مساعدك الذكي.";
-  }
-
+  if (/(اسمك\\s*(?:إيه|ايه|ما|ماذا)|مين\\s*إنت|من\\s*أنت|عرفني\\s*بنفسك)/u.test(question)) return "أنا ضَگْه، مساعدك الذكي.";
   if (!/(الهاء|التاء المربوطة|التشكيل|مخارج الحروف|النطق)/u.test(question)) {
     reply = reply
-      .replace(/[^،؛.!؟\n]*(?:هفرق|هفرّق|هشرحلك|هشرح لك)\s+بين\s+(?:الهاء|حرف الهاء)[^،؛.!؟\n]*(?:التاء المربوطة|التاء المربوطه)[^،؛.!؟\n]*/gu, "")
-      .replace(/[^،؛.!؟\n]*(?:الهاء والتاء المربوطة|التاء المربوطة)[^،؛.!؟\n]*/gu, "")
-      .split(/(?<=[.!؟])\s+|\n+/u)
-      .filter(sentence => !/(الهاء|التاء المربوطة|التشكيل|مخارج الحروف)/u.test(sentence))
-      .join(" ");
+      .replace(/[^،؛.!؟\\n]*(?:هفرق|هفرّق|هشرحلك|هشرح لك)\\s+بين\\s+(?:الهاء|حرف الهاء)[^،؛.!؟\\n]*(?:التاء المربوطة|التاء المربوطه)[^،؛.!؟\\n]*/gu, "")
+      .replace(/[^،؛.!؟\\n]*(?:الهاء والتاء المربوطة|التاء المربوطة)[^،؛.!؟\\n]*/gu, "")
+      .split(/(?<=[.!؟])\\s+|\\n+/u).filter(sentence => !/(الهاء|التاء المربوطة|التشكيل|مخارج الحروف)/u.test(sentence)).join(" ");
   }
-
   return reply
-    .replace(/أنا\s+هتساعدك/gu, "أنا هساعدك")
-    .replace(/أنا\s+هتجاوبك/gu, "أنا هجاوبك")
-    .replace(/أنا\s+هترد عليك/gu, "أنا هرد عليك")
-    .replace(/هتجاوبك/gu, "هجاوبك")
-    .replace(/هتساعدك/gu, "هساعدك")
-    .replace(/هترد عليك/gu, "هرد عليك")
-    .replace(/\s{2,}/gu, " ")
-    .trim();
+    .replace(/أنا\\s+هتساعدك/gu, "أنا هساعدك").replace(/أنا\\s+هتجاوبك/gu, "أنا هجاوبك")
+    .replace(/أنا\\s+هترد عليك/gu, "أنا هرد عليك").replace(/هتجاوبك/gu, "هجاوبك")
+    .replace(/هتساعدك/gu, "هساعدك").replace(/هترد عليك/gu, "هرد عليك")
+    .replace(/\\s{2,}/gu, " ").trim();
 }
