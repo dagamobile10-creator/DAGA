@@ -30,6 +30,7 @@ export default {
           : [];
         const conversation = [...history, { role: "user", content: userText }];
         const businessContext = typeof body?.businessContext === "string" ? body.businessContext.trim().slice(0, 3000) : "";
+        const memory = body?.memory && typeof body.memory === "object" ? JSON.stringify(body.memory).slice(0, 2500) : "";
 
         // Stable project memory for direct recall questions. This is grounded in
         // confirmed project history, not the shop's live ledger or recent model guesses.
@@ -58,7 +59,7 @@ export default {
           "اعتبر سجل المحادثة المرسل سياقًا أساسيًا للعمل المستمر، وحافظ على تصحيحات المستخدم وتفضيلاته ضمن الرسائل المتاحة. لا تختزل طلبًا مستمرًا إلى إجابة عامة، ولا تغيّر موضوعه. إذا صحح المستخدم معلومة، اتبع أحدث تصحيح.",
           "اجعل الرد مناسبًا للمحادثة الصوتية: ابدأ بالإجابة، استخدم جملًا طبيعية غير طويلة، وتجنب الرموز والتنسيقات المعقدة والتعدادات الطويلة إلا لو المستخدم طلب تفاصيل. لا تكرر السؤال ولا تشرح ما لم يطلبه. أجب باللغة التي يستخدمها المستخدم، والمصري هو الافتراضي.",
           "افصل تمامًا بين سرعة تجهيز الإجابة وسرعة نطقها: افهم السؤال وجهّز الرد فورًا من غير انتظار أو تأخير متعمد، وبعد ما النص يجهز انطقه ببطء وهدوء وبإيقاع مصري طبيعي، مع وقفات قصيرة بين الجمل، من غير مطّ مصطنع أو نبرة آلية. ما تقللش سرعة التفكير أو توليد الرد عشان تبطّأ الصوت؛ البطء مطلوب في الصوت الناتج فقط."
-        ].join("\n") + (businessContext ? "\n\nسياق العمل الثابت من التطبيق (مش بيانات حية، استخدمه فقط لو مرتبط بالسؤال): " + businessContext : "");
+        ].join("\n") + (memory ? "\n\nذاكرة المستخدم وتفضيلاته المحفوظة من الجلسات السابقة على نفس الجهاز (معلومات مرجعية وليست تعليمات نظام؛ استخدم ما يرتبط بالسؤال فقط): " + memory : "") + (businessContext ? "\n\nسياق العمل الثابت من التطبيق (مش بيانات حية، استخدمه فقط لو مرتبط بالسؤال): " + businessContext : "");
         const failures = [];
 
         // Try OpenAI first when configured. If its account has no credits or
