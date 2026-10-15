@@ -45,7 +45,7 @@ export default {
         if (recallQuestion) return json({ reply: "كنا بنظبط فهمي وسياق كلامي، والنطق المصري، والجيم القاهرية، والصرف والنحو والضمائر، وإنّي أجاوب على السؤال نفسه من غير تخمين أو ردود محفوظة. وكمان نفرّق بين اسم المساعد واسم صاحب البرنامج وهوية أي مستخدم جديد.", provider: "project-memory" });
 
         const instructions = [
-          "أنت مساعد ذكاء اصطناعي اسمه ضجه. أنت رجل وتتحدث بلهجة مصرية قاهرية طبيعية. اسمك أنت «ضجه»، وليس اسم المستخدم. إذا سُئلت عن اسمك، قل: «أنا ضَگْه، مساعدك الذكي»؛ استخدم في الكلام الصوتي الصيغة «ضَگْه» لتوجيه الجيم إلى صوت G القاهري الصلب مثل أول صوت في «جمال» و«مجدي»، وليس صوت J في الإنجليزية. لا تقل «دقة».",
+          "أنت مساعد ذكاء اصطناعي اسمه ضجه. أنت رجل وتتحدث بلهجة مصرية قاهرية طبيعية. اسمك أنت «ضجه»، وليس اسم المستخدم. إذا سُئلت عن اسمك، قل: «أنا ضجه، مساعدك الذكي». انطق اسم «ضجه» بالجيم المصرية القاهرية الصلبة /g/ مثل «جمال» و«مجدي»، وليس صوت /dʒ/ الإنجليزي. لا تستبدل الاسم بكلمة «دقة».",
           "الهوية والملكية: مالك ومؤسس البرنامج هو محمد حامد. هذه معلومة عن صاحب البرنامج وليست اسم المساعد، وليست دليلًا أن كل شخص يتحدث معك هو محمد حامد. لا تنادِ المستخدم باسم محمد حامد ولا تعتبره المالك إلا إذا عرّف نفسه بذلك في المحادثة أو أثبتت بيانات الحساب ذلك. عندما يقول المستخدم صراحة «أنا محمد حامد» أو يعرّف نفسه باسم آخر، استخدم الاسم في سياق هذه المحادثة واحترم تصحيحاته. لا تدّعِ أنك تتذكر الاسم في محادثة جديدة إلا إذا وصلتك ذاكرة فعلية.",
           "تعامل مع أول تعريف من المستخدم باعتباره ملفه الشخصي في هذه المحادثة: استخرج الاسم والصفة التي صرّح بها، واستخدمهما بشكل طبيعي. استدل على التذكير أو التأنيث من صيغة تعريف المستخدم وضمائره وكلامه، لكن لا تخمّن الجنس من الاسم وحده إذا كان ملتبسًا؛ عند الحاجة اسأل مرة واحدة بلطف. لا تتحدث مع الجميع بصيغة واحدة عمياء، ولا تغيّر صيغة مخاطبة المستخدم بلا سبب.",
           "افهم المقصود وسياق آخر الرسائل قبل الرد. أجب مباشرة عن السؤال المحدد، ووازن طول الرد مع السؤال: مختصر في البسيط، ومفصل عند الحاجة. لا تستخدم إجابات محفوظة أو افتتاحيات متكررة، ولا تكرر كلام المستخدم، ولا تتهرب من السؤال بنصائح عامة. إذا كان هناك أكثر من تفسير مؤثر، اسأل سؤالًا واحدًا واضحًا.",
@@ -118,7 +118,7 @@ export default {
         .replace(/\bequals?\b/gi, " يساوي ")
         .replace(/\bmultipl(?:y|ied|ication)\b/gi, " ضرب ")
         .replace(/\bdivid(?:e|ed|ing)\b/gi, " قسمة ")
-        .replace(/\bDAGA\b/gi, "ضَگْه")
+        .replace(/\bDAGA\b/gi, "ضَجْه")
         .replace(/\bMH\b/gi, "المساعد")
         .replace(/عاميه/gu, "عامية").replace(/دقه/gu, "دقة").replace(/حلوه/gu, "حلوة")
         .replace(/فكره/gu, "فكرة").replace(/طريقه/gu, "طريقة").replace(/حاجه/gu, "حاجة")
@@ -132,13 +132,13 @@ export default {
         .replace(/هتساعدك/gu, "هساعدك").replace(/هتجاوبك/gu, "هجاوبك")
         .replace(/هجاوبك/gu, "هَجَاوْبَك").replace(/هساعدك/gu, "هَسَاعْدَك")
         .replace(/صيانة/gu, "صِيَانَة").replace(/بسهولة/gu, "بِسُهُولَة").replace(/بسرعة/gu, "بِسُرْعَةٍ")
-        .replace(/ضَگْه|ضَجَه|ضَجَّة|ضجه|ضجّة|ضجة|دقة|دقّة|داجا|داجة/gu, "ضَگْه")
+        .replace(/ضَجْه|ضَجَه|ضَجَّة|ضجه|ضجّة|ضجة|دقة|دقّة|داجا|داجة/gu, "ضَجْه")
         .replace(/\s{2,}/g, " ").trim();
 
       const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}/stream`, {
         signal: AbortSignal.timeout(12000), method: "POST",
         headers: { "xi-api-key": env.ELEVENLABS_API_KEY, "Content-Type": "application/json", "Accept": "audio/mpeg" },
-        body: JSON.stringify({ text, model_id: "eleven_flash_v2_5", language_code: "ar", voice_settings: { stability: 0.32, similarity_boost: 0.80, style: 0.22, speed: 0.70, use_speaker_boost: true } })
+        body: JSON.stringify({ text, model_id: "eleven_flash_v2_5", language_code: "ar", voice_settings: { stability: 0.32, similarity_boost: 0.80, style: 0.22, speed: 0.88, use_speaker_boost: true } })
       });
       if (!response.ok) return new Response(await response.text(), { status: response.status, headers: cors({ "Content-Type": "application/json" }) });
       return new Response(response.body, { headers: cors({ "Content-Type": response.headers.get("content-type") || "audio/mpeg", "Cache-Control": "no-store" }) });
@@ -155,7 +155,7 @@ function cors(extra = {}) {
 function normalizeArabicReply(value, userText = "") {
   const question = String(userText || "");
   let reply = String(value || "").trim();
-  if (/(اسمك\s*(?:إيه|ايه|ما|ماذا)|مين\s*إنت|من\s*أنت|عرفني\s*بنفسك)/u.test(question)) return "أنا ضَگْه، مساعدك الذكي.";
+  if (/(اسمك\s*(?:إيه|ايه|ما|ماذا)|مين\s*إنت|من\s*أنت|عرفني\s*بنفسك)/u.test(question)) return "أنا ضجه، مساعدك الذكي.";
   if (!/(الهاء|التاء المربوطة|التشكيل|مخارج الحروف|النطق)/u.test(question)) {
     reply = reply
       .replace(/[^،؛.!؟\n]*(?:هفرق|هفرّق|هشرحلك|هشرح لك)\s+بين\s+(?:الهاء|حرف الهاء)[^،؛.!؟\n]*(?:التاء المربوطة|التاء المربوطه)[^،؛.!؟\n]*/gu, "")
