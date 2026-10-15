@@ -107,7 +107,7 @@ export default {
             });
             const data = await ai.json();
             if (ai.ok) {
-              const reply = String(
+              let reply = String(
                 data.output_text ||
                 (data.output || []).flatMap(item => item.content || [])
                   .filter(item => item.type === "output_text")
@@ -115,6 +115,7 @@ export default {
                   .join("\n") ||
                 ""
               ).trim();
+              reply = normalizeArabicReply(reply);
               if (reply) return json({ reply, provider: "openai" });
               failures.push("OpenAI returned an empty reply");
             } else {
