@@ -331,18 +331,22 @@ function cors(extra = {}) {
 
 function normalizeArabicReply(value) {
   return String(value || "")
-    // Fix only clear first-person assistant mistakes; preserve quoted/user text otherwise.
-        .replace(/أنا\s+هتساعدك/gu, "أنا هساعدك")
-        .replace(/أنا\s+هتجاوبك/gu, "أنا هجاوبك")
-        .replace(/أنا\s+هترد عليك/gu, "أنا هرد عليك")
-    .replace(/هتساعدك/gu, "هساعدك")
+    // Normalize first-person future verbs: the assistant says what IT will do.
+    .replace(/أنا\s+هتساعدك/gu, "أنا هساعدك")
+    .replace(/أنا\s+هتجاوبك/gu, "أنا هجاوبك")
+    .replace(/أنا\s+هترد عليك/gu, "أنا هرد عليك")
+    .replace(/أنا\s+هتجاوب عليك/gu, "أنا هجاوبك")
+    .replace(/أنا\s+هتساعد عليك/gu, "أنا هساعدك")
     .replace(/هتجاوبك/gu, "هجاوبك")
+    .replace(/هتجاوب عليك/gu, "هجاوبك")
+    .replace(/هتساعدك/gu, "هساعدك")
     .replace(/هترد عليك/gu, "هرد عليك")
-    // Keep the known-good brand pronunciation in TTS spelling.
-    .replace(/ضَجَه|ضَجْه|ضجه|ضجّة|ضجة|داجا|داجة/gu, "ضَجَّة")
+    // Do not leak internal pronunciation/grammar instructions into normal conversation.
+    .replace(/(?:هفرق|هفرّق|هشرحلك|هشرح لك)\s+بين\s+(?:الهاء|حرف الهاء)\s+و(?:التاء المربوطة|التاء المربوطه)[^.!؟\n]*[.!؟]?/gu, "")
+    .replace(/(?:التاء المربوطة|الهاء والتاء المربوطة)[^.!؟\n]*(?:في كل كلمة|في كل كلمه)[^.!؟\n]*[.!؟]?/gu, "")
+    .replace(/\s{2,}/gu, " ")
     .trim();
 }
-
 function json(data, status = 200) {
   return new Response(
     JSON.stringify(data),
