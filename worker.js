@@ -65,7 +65,7 @@ export default {
         if (env.OPENAI_API_KEY) {
           try {
             const ai = await fetch("https://api.openai.com/v1/responses", {
-              signal: AbortSignal.timeout(8500),
+              signal: AbortSignal.timeout(4500),
               method: "POST",
               headers: {
                 "Authorization": `Bearer ${env.OPENAI_API_KEY}`,
@@ -101,7 +101,7 @@ export default {
         if (env.GROQ_API_KEY) {
           try {
             const ai = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-              signal: AbortSignal.timeout(6500),
+              signal: AbortSignal.timeout(4000),
               method: "POST",
               headers: {
                 "Authorization": `Bearer ${env.GROQ_API_KEY}`,
@@ -140,7 +140,7 @@ export default {
                 ...conversation
               ],
               max_tokens: 220
-            }), new Promise((_, reject) => setTimeout(() => reject(new Error("Cloudflare AI timeout")), 7000))]);
+            }), new Promise((_, reject) => setTimeout(() => reject(new Error("Cloudflare AI timeout")), 4500))]);
             const reply = String(result?.response || "").trim();
             if (reply) return json({ reply, provider: "cloudflare-ai" });
             failures.push("Cloudflare AI returned an empty reply");
