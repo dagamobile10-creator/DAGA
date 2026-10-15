@@ -1,4 +1,4 @@
-const VOICE_ID = "PF3gVGPrCr6Dw1WaSSiy";
+const VOICE_ID = "NG9zqiTuEbX3Nw0gjYcc"; // Previous voice ID backup: PF3gVGPrCr6Dw1WaSSiy
 
 export default {
   async fetch(request, env) {
