@@ -86,12 +86,12 @@ try{localStorage.setItem(DAGA_MEMORY_KEY,JSON.stringify(items.slice(-16)))}catch
 async function respond(text){
 if(!live&&!singleMode){replying=false;return}
 state.textContent='ضجه بيفكر وبيجهز الرد…';
-const priorHistory=loadDagaMemory();
-updateDagaProfile(text);
+let workingHistory=loadDagaMemory();
 let longMemory=loadDagaProfile();
-let workingHistory=priorHistory;
 const serverMemory=await loadServerMemory();
-if(serverMemory){longMemory={...longMemory,...(serverMemory.profile||{})};if(Array.isArray(serverMemory.history)&&serverMemory.history.length)workingHistory=serverMemory.history.slice(-16);try{localStorage.setItem(DAGA_PROFILE_KEY,JSON.stringify(longMemory));saveDagaMemory(workingHistory)}catch(e){}}
+if(serverMemory){longMemory={...(serverMemory.profile||{}),...longMemory};if(Array.isArray(serverMemory.history)&&serverMemory.history.length)workingHistory=serverMemory.history.slice(-100);try{localStorage.setItem(DAGA_PROFILE_KEY,JSON.stringify(longMemory));saveDagaMemory(workingHistory.slice(-16))}catch(e){}}
+updateDagaProfile(text);
+longMemory=loadDagaProfile();
 const spokenText=normalizeArabicInput(text);
 const nextHistory=[...workingHistory,{role:'user',content:spokenText}].slice(-100);
 saveDagaMemory(nextHistory);
