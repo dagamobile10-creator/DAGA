@@ -115,7 +115,7 @@ export default {
                   .join("\n") ||
                 ""
               ).trim();
-              reply = normalizeArabicReply(reply);
+              reply = normalizeArabicReply(reply, userText);
               if (reply) return json({ reply, provider: "openai" });
               failures.push("OpenAI returned an empty reply");
             } else {
@@ -148,7 +148,7 @@ export default {
             const data = await ai.json();
             if (ai.ok) {
               let reply = String(data?.choices?.[0]?.message?.content || "").trim();
-              reply = normalizeArabicReply(reply);
+              reply = normalizeArabicReply(reply, userText);
               if (reply) return json({ reply, provider: "groq" });
               failures.push("Groq returned an empty reply");
             } else {
@@ -171,7 +171,7 @@ export default {
               max_tokens: 220
             }), new Promise((_, reject) => setTimeout(() => reject(new Error("Cloudflare AI timeout")), 4500))]);
             let reply = String(result?.response || "").trim();
-            reply = normalizeArabicReply(reply);
+            reply = normalizeArabicReply(reply, userText);
             if (reply) return json({ reply, provider: "cloudflare-ai" });
             failures.push("Cloudflare AI returned an empty reply");
           } catch (error) {
@@ -330,9 +330,20 @@ function cors(extra = {}) {
   };
 }
 
-function normalizeArabicReply(value) {
-  return String(value || "")
-    // Normalize first-person future verbs: the assistant says what IT will do.
+function normalizeArabicReply(value, userText = "") {
+  let reply = String(value || "").trim();
+
+  // If the user did not ask about spelling, remove any whole sentence that
+  // exposes the internal spelling/pronunciation instructions.
+  const asksAboutSpelling = /الهاء|التاء المربوطة|التشكيل|النطق|مخارج الحروف/.test(String(userText || ""));
+  if (!asksAboutSpelling) {
+    reply = reply
+      .split(/(?<=[.!؟])\s+|\n+/u)
+      .filter(sentence => !/(الهاء|التاء المربوطة|التشكيل|مخارج الحروف)/u.test(sentence))
+      .join(" ");
+  }
+
+  return reply
     .replace(/أنا\s+هتساعدك/gu, "أنا هساعدك")
     .replace(/أنا\s+هتجاوبك/gu, "أنا هجاوبك")
     .replace(/أنا\s+هترد عليك/gu, "أنا هرد عليك")
@@ -342,13 +353,9 @@ function normalizeArabicReply(value) {
     .replace(/هتجاوب عليك/gu, "هجاوبك")
     .replace(/هتساعدك/gu, "هساعدك")
     .replace(/هترد عليك/gu, "هرد عليك")
-    // Do not leak internal pronunciation/grammar instructions into normal conversation.
-    .replace(/(?:هفرق|هفرّق|هشرحلك|هشرح لك)\s+بين\s+(?:الهاء|حرف الهاء)\s+و(?:التاء المربوطة|التاء المربوطه)[^.!؟\n]*[.!؟]?/gu, "")
-    .replace(/(?:التاء المربوطة|الهاء والتاء المربوطة)[^.!؟\n]*(?:في كل كلمة|في كل كلمه)[^.!؟\n]*[.!؟]?/gu, "")
     .replace(/\s{2,}/gu, " ")
     .trim();
-}
-function json(data, status = 200) {
+}function json(data, status = 200) {
   return new Response(
     JSON.stringify(data),
     {
