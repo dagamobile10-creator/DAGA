@@ -247,6 +247,13 @@ export default {
         .replace(/خلاصه/gu, "خلاصة")
         .replace(/مباشره/gu, "مباشرة")
         .replace(/طبيعه/gu, "طبيعة")
+        // Add diacritics only to a few known phrases to guide Arabic TTS.
+        .replace(/هفرأ/gu, "هَفَرَّق")
+        .replace(/هفرق/gu, "هَفَرَّق")
+        .replace(/هجاوبك/gu, "هَجَاوْبَك")
+        .replace(/هساعدك/gu, "هَسَاعْدَك")
+        .replace(/بسهولة/gu, "بِسُهُولَة")
+        .replace(/بسرعة/gu, "بِسُرْعَة")
         .replace(/ضَجَه|ضَجْه|ضَجَّة|ضجه|ضجّة|ضجة|داجا|داجة/gu, "ضَجَّة")
         .replace(/\s{2,}/g, " ")
         .trim();
