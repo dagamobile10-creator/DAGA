@@ -146,7 +146,8 @@ export default {
             });
             const data = await ai.json();
             if (ai.ok) {
-              const reply = String(data?.choices?.[0]?.message?.content || "").trim();
+              let reply = String(data?.choices?.[0]?.message?.content || "").trim();
+              reply = normalizeArabicReply(reply);
               if (reply) return json({ reply, provider: "groq" });
               failures.push("Groq returned an empty reply");
             } else {
@@ -168,7 +169,8 @@ export default {
               ],
               max_tokens: 220
             }), new Promise((_, reject) => setTimeout(() => reject(new Error("Cloudflare AI timeout")), 4500))]);
-            const reply = String(result?.response || "").trim();
+            let reply = String(result?.response || "").trim();
+            reply = normalizeArabicReply(reply);
             if (reply) return json({ reply, provider: "cloudflare-ai" });
             failures.push("Cloudflare AI returned an empty reply");
           } catch (error) {
@@ -221,7 +223,7 @@ export default {
         .replace(/\bequals?\b/gi, " يساوي ")
         .replace(/\bmultipl(?:y|ied|ication)\b/gi, " ضرب ")
         .replace(/\bdivid(?:e|ed|ing)\b/gi, " قسمة ")
-        .replace(/\bDAGA\b/gi, "ضجة")
+        .replace(/\bDAGA\b/gi, "ضَجَّة")
         .replace(/\bMH\b/gi, "المساعد")
         // Speech-only normalization: normalize common Egyptian misspellings without
         // globally replacing genuine ه letters. The visible app brand is unchanged.
@@ -259,7 +261,7 @@ export default {
         .replace(/صيانة/gu, "صِيَانَة")
         .replace(/بسهولة/gu, "بِسُهُولَة")
         .replace(/بسرعة/gu, "بِسُرْعَة")
-        .replace(/ضَجَه|ضَجْه|ضَجَّة|ضجه|ضجّة|ضجة|داجا|داجة/gu, "ضجه")
+        .replace(/ضَجَه|ضَجْه|ضَجَّة|ضجه|ضجّة|ضجة|داجا|داجة/gu, "ضَجَّة")
         .replace(/\s{2,}/g, " ")
         .trim();
 
@@ -325,6 +327,17 @@ function cors(extra = {}) {
     "Access-Control-Allow-Headers": "Content-Type",
     ...extra
   };
+}
+
+function normalizeArabicReply(value) {
+  return String(value || "")
+    // Fix only clear first-person assistant mistakes; preserve quoted/user text otherwise.
+    .replace(/أنا\\s+هتساعدك/gu, "أنا هساعدك")
+    .replace(/أنا\\s+هتجاوبك/gu, "أنا هجاوبك")
+    .replace(/أنا\\s+هترد عليك/gu, "أنا هرد عليك")
+    // Keep the known-good brand pronunciation in TTS spelling.
+    .replace(/ضَجَه|ضَجْه|ضجه|ضجّة|ضجة|داجا|داجة/gu, "ضَجَّة")
+    .trim();
 }
 
 function json(data, status = 200) {
