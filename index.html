@@ -42,8 +42,8 @@ rec=new SR();rec.lang='ar-EG';rec.continuous=false;rec.interimResults=true;rec.m
 let finalGot=false;
 rec.onstart=()=>state.textContent='أنا ضجه، سامعك دلوقتي…';
 rec.onresult=e=>{let finalText='',interim='';for(let i=e.resultIndex;i<e.results.length;i++){let t=e.results[i][0].transcript;if(e.results[i].isFinal)finalText+=t;else interim+=t}you.textContent=finalText||interim||'—';if(finalText.trim()&&!finalGot){finalGot=true;handleUser(finalText.trim())}};
-rec.onerror=e=>{rec=null;const errors={'not-allowed':'اسمح للمتصفح باستخدام الميكروفون من إعدادات الموقع.','service-not-allowed':'التعرف الصوتي غير متاح من المتصفح الحالي.','audio-capture':'مش قادر أوصل للميكروفون.','network':'في مشكلة اتصال أثناء التعرف على الكلام.'};state.textContent=errors[e.error]||('تعذّر تشغيل الميكروفون: '+(e.error||'خطأ غير معروف'));if(singleMode){singleMode=false;status.textContent='جاهز'}if(live&&!muted&&!replying&&e.error!=='not-allowed'&&e.error!=='service-not-allowed')setTimeout(startListening,700)}
-rec.onend=()=>{rec=null;if(live&&!muted&&!replying&&!finalGot)setTimeout(startListening,160);else if(singleMode&&!replying&&!finalGot){singleMode=false;status.textContent='جاهز';state.textContent='ملحقتش أسمع الأمر. اضغط المايك وجرب تاني'}};
+rec.onerror=e=>{rec=null;const errors={'not-allowed':'اسمح للمتصفح باستخدام الميكروفون من إعدادات الموقع.','service-not-allowed':'التعرف الصوتي غير متاح من المتصفح الحالي.','audio-capture':'مش قادر أوصل للميكروفون.','network':'في مشكلة اتصال أثناء التعرف على الكلام.'};state.textContent=errors[e.error]||('تعذّر تشغيل الميكروفون: '+(e.error||'خطأ غير معروف'));if(singleMode){singleMode=false;status.textContent='جاهز'}if(live&&!muted&&!replying&&e.error!=='not-allowed'&&e.error!=='service-not-allowed')setTimeout(()=>{if(live&&!muted&&!replying&&!rec)startListening()},900)}
+rec.onend=()=>{rec=null;if(live&&!muted&&!replying&&!finalGot)setTimeout(()=>{if(live&&!muted&&!replying&&!rec)startListening()},350);else if(singleMode&&!replying&&!finalGot){singleMode=false;status.textContent='جاهز';state.textContent='ملحقتش أسمع الأمر. اضغط المايك وجرب تاني'}};
 try{rec.start()}catch(e){rec=null;setTimeout(startListening,250)}
 }
 function stopListening(){if(rec){let r=rec;rec=null;try{r.onend=null;r.stop()}catch(e){}}}
@@ -53,11 +53,28 @@ respond(text)
 }
 function normalizeArabicInput(value){ return String(value||'').replace(/\bplus\b/gi,' زائد ').replace(/\bminus\b/gi,' ناقص ').replace(/\bequals?\b/gi,' يساوي ').replace(/\bmultipl(?:y|ied|ication)\b/gi,' ضرب ').replace(/\bdivid(?:e|ed|ing)\b/gi,' قسمة ').replace(/\bDAGA\b/gi,'ضجه').replace(/\bMH\b/gi,'المساعد').replace(/\s{2,}/g,' ').trim(); }
 const DAGA_MEMORY_KEY='daga_mh_memory_v1';
+const DAGA_PROFILE_KEY='daga_mh_long_memory_v1';
 function loadDagaMemory(){
 try{
 const value=JSON.parse(localStorage.getItem(DAGA_MEMORY_KEY)||'[]');
 return Array.isArray(value)?value.filter(x=>x&&['user','assistant'].includes(x.role)&&typeof x.content==='string').slice(-16):[];
 }catch(e){return[]}
+}
+function loadDagaProfile(){
+try{const value=JSON.parse(localStorage.getItem(DAGA_PROFILE_KEY)||'{}');return value&&typeof value==='object'&&!Array.isArray(value)?value:{}}catch(e){return{}}
+}
+function updateDagaProfile(userText){
+const text=String(userText||'').trim();if(!text)return;
+const profile=loadDagaProfile();
+const rules=[
+[/(?:أنا بحب|انا بحب|بحب دايمًا|بحب دايما)\s+(.{3,180})/u,'likes'],
+[/(?:أنا بفضّل|انا بفضل|أنا أفضل|انا افضل|أفضل إن|افضل ان)\s+(.{3,180})/u,'preferences'],
+[/(?:افتكر|افتكر دايمًا|خليك فاكر|احفظ عندك|سجّل عندك|سجل عندك)\s+(.{3,220})/u,'remember'],
+[/(?:شغلي هو|أنا شغال في|انا شغال في|عندي محل)\s+(.{3,180})/u,'work']
+];
+for(const [re,key] of rules){const m=text.match(re);if(m){profile[key]=String(m[1]).trim().slice(0,220);profile.updatedAt=new Date().toISOString();}}
+if(/ضجه|DAGA|المحل|الداشبورد|لايف|LIVE/i.test(text)){profile.project='مشروع ضجه: مساعد ذكاء اصطناعي مصري يفهم السياق، يفتكر تصحيحات المستخدم وطريقته، ويساعد في شغل محل إكسسوارات الموبايل. الاسم يُكتب ضجه بالهاء، والواجهة Premium لا تتغير.';}
+try{localStorage.setItem(DAGA_PROFILE_KEY,JSON.stringify(profile))}catch(e){console.warn('DAGA long memory unavailable',e)}
 }
 function saveDagaMemory(items){
 try{localStorage.setItem(DAGA_MEMORY_KEY,JSON.stringify(items.slice(-16)))}catch(e){console.warn('DAGA memory unavailable',e)}
@@ -66,14 +83,17 @@ async function respond(text){
 if(!live&&!singleMode){replying=false;return}
 state.textContent='ضجه بيفكر وبيجهز الرد…';
 const priorHistory=loadDagaMemory();
+updateDagaProfile(text);
+const longMemory=loadDagaProfile();
 const spokenText=normalizeArabicInput(text);
 const nextHistory=[...priorHistory,{role:'user',content:spokenText}].slice(-16);
 saveDagaMemory(nextHistory);
 try{
 const r=await fetch('https://daga-voice.dagamobile10.workers.dev/chat',{
 method:'POST',
+signal:AbortSignal.timeout(16000),
 headers:{'Content-Type':'application/json'},
-body:JSON.stringify({text:spokenText,history:priorHistory,businessContext:"صاحب التطبيق يدير محل إكسسوارات موبايل ويستخدم ضجه كمساعد إداري ومحاسبي صوتي. اتكلم بالمصري فقط. استخدم زائد وناقص ويساوي بدل المصطلحات الإنجليزية. اسم التطبيق والمساعد بالعربية: ضجه. هذه معلومات عن طبيعة العمل وليست بيانات حية. أعمدة المحل: خارج واحد وخارج اتنين وخارج تلاتة، أربعة أعمدة لمكسب فودافون كاش، بند الكاش، بند فودافون كاش، الرصيد، الكروت، والإكسسوارات. أعمدة مكسب فودافون كاش ليست نقدية. لا تخترع أرقامًا ولا تدّعِ رؤية الداشبورد أو تعديل بيانات فعلية ما لم تصلك البيانات أو تنفذ أداة فعلية ذلك."})
+body:JSON.stringify({text:spokenText,history:priorHistory,memory:longMemory,businessContext:"ذاكرة المستخدم وتفضيلاته المحفوظة على هذا الجهاز (استخدم المرتبط بالسؤال فقط، وصحّحها لو المستخدم صحّحك): "+JSON.stringify(longMemory)+"\n\nسياق العمل الثابت: صاحب التطبيق يدير محل إكسسوارات موبايل ويستخدم ضجه كمساعد إداري ومحاسبي صوتي. اتكلم بالمصري فقط. استخدم زائد وناقص ويساوي بدل المصطلحات الإنجليزية. اسم التطبيق والمساعد بالعربية: ضجه. هذه معلومات عن طبيعة العمل وليست بيانات حية. أعمدة المحل: خارج واحد وخارج اتنين وخارج تلاتة، أربعة أعمدة لمكسب فودافون كاش، بند الكاش، بند فودافون كاش، الرصيد، الكروت، والإكسسوارات. أعمدة مكسب فودافون كاش ليست نقدية. لا تخترع أرقامًا ولا تدّعِ رؤية الداشبورد أو تعديل بيانات فعلية ما لم تصلك البيانات أو تنفذ أداة فعلية ذلك."})
 });
 const data=await r.json();
 if(!r.ok||!data.reply)throw new Error(data.detail||data.error||'Chat request failed');
@@ -85,8 +105,8 @@ speak(data.reply);
 console.error(e);
 replying=false;
 state.textContent='تعذر الرد من ضجه';
-daga.textContent='تعذر الرد من خدمة المحادثة: '+(e.message||'خطأ غير معروف')+' — ابعتلي نص الخطأ ده.';
-if(live&&!muted)setTimeout(startListening,500);
+daga.textContent=(e.name==='TimeoutError'?'الرد اتأخر أكتر من اللازم. جرّب تقول سؤالك تاني.':'تعذر الرد من خدمة المحادثة: '+(e.message||'خطأ غير معروف'));
+if(live&&!muted)setTimeout(()=>{if(live&&!muted&&!replying&&!rec)startListening()},450);
 }
 }
 function speak(text){
