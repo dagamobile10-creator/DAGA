@@ -54,6 +54,10 @@ respond(text)
 function normalizeArabicInput(value){ return String(value||'').replace(/\bplus\b/gi,' زائد ').replace(/\bminus\b/gi,' ناقص ').replace(/\bequals?\b/gi,' يساوي ').replace(/\bmultipl(?:y|ied|ication)\b/gi,' ضرب ').replace(/\bdivid(?:e|ed|ing)\b/gi,' قسمة ').replace(/\bDAGA\b/gi,'ضجه').replace(/\bMH\b/gi,'المساعد').replace(/\s{2,}/g,' ').trim(); }
 const DAGA_MEMORY_KEY='daga_mh_memory_v1';
 const DAGA_PROFILE_KEY='daga_mh_long_memory_v1';
+const DAGA_SERVER_USER_KEY='daga_mh_server_user_v1';
+function dagaServerUserId(){try{let id=localStorage.getItem(DAGA_SERVER_USER_KEY);if(!id){id=crypto.randomUUID();localStorage.setItem(DAGA_SERVER_USER_KEY,id)}return id}catch(e){return ''}}
+async function loadServerMemory(){const userId=dagaServerUserId();if(!userId)return null;try{const r=await fetch('https://daga-voice.dagamobile10.workers.dev/memory?userId='+encodeURIComponent(userId),{signal:AbortSignal.timeout(2500)});if(!r.ok)return null;const d=await r.json();return d&&d.ok&&d.persistent?d.memory:null}catch(e){return null}}
+async function saveServerMemory(profile,history){const userId=dagaServerUserId();if(!userId)return false;try{const r=await fetch('https://daga-voice.dagamobile10.workers.dev/memory',{method:'POST',signal:AbortSignal.timeout(2500),headers:{'Content-Type':'application/json'},body:JSON.stringify({userId,profile,history})});return r.ok}catch(e){return false}}
 function loadDagaMemory(){
 try{
 const value=JSON.parse(localStorage.getItem(DAGA_MEMORY_KEY)||'[]');
@@ -84,21 +88,26 @@ if(!live&&!singleMode){replying=false;return}
 state.textContent='ضجه بيفكر وبيجهز الرد…';
 const priorHistory=loadDagaMemory();
 updateDagaProfile(text);
-const longMemory=loadDagaProfile();
+let longMemory=loadDagaProfile();
+let workingHistory=priorHistory;
+const serverMemory=await loadServerMemory();
+if(serverMemory){longMemory={...longMemory,...(serverMemory.profile||{})};if(Array.isArray(serverMemory.history)&&serverMemory.history.length)workingHistory=serverMemory.history.slice(-16);try{localStorage.setItem(DAGA_PROFILE_KEY,JSON.stringify(longMemory));saveDagaMemory(workingHistory)}catch(e){}}
 const spokenText=normalizeArabicInput(text);
-const nextHistory=[...priorHistory,{role:'user',content:spokenText}].slice(-16);
+const nextHistory=[...workingHistory,{role:'user',content:spokenText}].slice(-100);
 saveDagaMemory(nextHistory);
 try{
 const r=await fetch('https://daga-voice.dagamobile10.workers.dev/chat',{
 method:'POST',
 signal:AbortSignal.timeout(16000),
 headers:{'Content-Type':'application/json'},
-body:JSON.stringify({text:spokenText,history:priorHistory,memory:longMemory,businessContext:"ذاكرة المستخدم وتفضيلاته المحفوظة على هذا الجهاز (استخدم المرتبط بالسؤال فقط، وصحّحها لو المستخدم صحّحك): "+JSON.stringify(longMemory)+"\n\nسياق العمل الثابت: صاحب التطبيق يدير محل إكسسوارات موبايل ويستخدم ضجه كمساعد إداري ومحاسبي صوتي. اتكلم بالمصري فقط. استخدم زائد وناقص ويساوي بدل المصطلحات الإنجليزية. اسم التطبيق والمساعد بالعربية: ضجه. هذه معلومات عن طبيعة العمل وليست بيانات حية. أعمدة المحل: خارج واحد وخارج اتنين وخارج تلاتة، أربعة أعمدة لمكسب فودافون كاش، بند الكاش، بند فودافون كاش، الرصيد، الكروت، والإكسسوارات. أعمدة مكسب فودافون كاش ليست نقدية. لا تخترع أرقامًا ولا تدّعِ رؤية الداشبورد أو تعديل بيانات فعلية ما لم تصلك البيانات أو تنفذ أداة فعلية ذلك."})
+body:JSON.stringify({text:spokenText,history:workingHistory.slice(-16),memory:longMemory,businessContext:"ذاكرة المستخدم وتفضيلاته المحفوظة على هذا الجهاز (استخدم المرتبط بالسؤال فقط، وصحّحها لو المستخدم صحّحك): "+JSON.stringify(longMemory)+"\n\nسياق العمل الثابت: صاحب التطبيق يدير محل إكسسوارات موبايل ويستخدم ضجه كمساعد إداري ومحاسبي صوتي. اتكلم بالمصري فقط. استخدم زائد وناقص ويساوي بدل المصطلحات الإنجليزية. اسم التطبيق والمساعد بالعربية: ضجه. هذه معلومات عن طبيعة العمل وليست بيانات حية. أعمدة المحل: خارج واحد وخارج اتنين وخارج تلاتة، أربعة أعمدة لمكسب فودافون كاش، بند الكاش، بند فودافون كاش، الرصيد، الكروت، والإكسسوارات. أعمدة مكسب فودافون كاش ليست نقدية. لا تخترع أرقامًا ولا تدّعِ رؤية الداشبورد أو تعديل بيانات فعلية ما لم تصلك البيانات أو تنفذ أداة فعلية ذلك."})
 });
 const data=await r.json();
 if(!r.ok||!data.reply)throw new Error(data.detail||data.error||'Chat request failed');
 if(!live&&!singleMode){replying=false;return}
-saveDagaMemory([...nextHistory,{role:'assistant',content:data.reply}]);
+const finalHistory=[...nextHistory,{role:'assistant',content:data.reply}].slice(-100);
+saveDagaMemory(finalHistory.slice(-16));
+await saveServerMemory(longMemory,finalHistory);
 daga.textContent=data.reply;
 speak(data.reply);
 }catch(e){
