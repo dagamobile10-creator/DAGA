@@ -70,7 +70,7 @@ const spokenText=normalizeArabicInput(text);
 const nextHistory=[...priorHistory,{role:'user',content:spokenText}].slice(-16);
 saveDagaMemory(nextHistory);
 try{
-const r=await fetch('https://daga-voice.dagamobile10.workers.dev/chat',{
+const r=await fetch('https://daga-voice-test.dagamobile10.workers.dev/chat',{
 method:'POST',
 headers:{'Content-Type':'application/json'},
 body:JSON.stringify({text:spokenText,history:priorHistory,businessContext:"صاحب التطبيق يدير محل إكسسوارات موبايل ويستخدم ضجه كمساعد إداري ومحاسبي صوتي. اتكلم بالمصري فقط. استخدم زائد وناقص ويساوي بدل المصطلحات الإنجليزية. اسم التطبيق والمساعد بالعربية: ضجه. هذه معلومات عن طبيعة العمل وليست بيانات حية. أعمدة المحل: خارج واحد وخارج اتنين وخارج تلاتة، أربعة أعمدة لمكسب فودافون كاش، بند الكاش، بند فودافون كاش، الرصيد، الكروت، والإكسسوارات. أعمدة مكسب فودافون كاش ليست نقدية. لا تخترع أرقامًا ولا تدّعِ رؤية الداشبورد أو تعديل بيانات فعلية ما لم تصلك البيانات أو تنفذ أداة فعلية ذلك."})
@@ -93,7 +93,7 @@ function speak(text){
 const token=++speechToken;
 if(window.__dagaAudio){try{window.__dagaAudio.pause();window.__dagaAudio.currentTime=0}catch(e){}window.__dagaAudio=null}
 if('speechSynthesis' in window)speechSynthesis.cancel();
-fetch('https://daga-voice.dagamobile10.workers.dev/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})})
+fetch('https://daga-voice-test.dagamobile10.workers.dev/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})})
 .then(async r=>{if(!r.ok)throw new Error(await r.text());const blob=await r.blob();const url=URL.createObjectURL(blob);if(token!==speechToken){URL.revokeObjectURL(url);return}const a=new Audio(url);window.__dagaAudio=a;state.textContent='ضجه بيتكلم…';a.onended=()=>{URL.revokeObjectURL(url);if(window.__dagaAudio===a)window.__dagaAudio=null;replying=false;if(live&&!muted){state.textContent='مستعد أسمعك';setTimeout(startListening,100)}else{singleMode=false;mic.textContent='🎙️';status.textContent='جاهز';state.textContent='خلصنا الأمر. اضغط المايك لو عندك أمر تاني'}};a.onerror=()=>{URL.revokeObjectURL(url);if(window.__dagaAudio===a)window.__dagaAudio=null;replying=false;state.textContent='حصلت مشكلة في صوت ضجه';if(live&&!muted)setTimeout(startListening,100);else singleMode=false};await a.play()})
 .catch(e=>{if(token!==speechToken)return;console.error(e);replying=false;state.textContent='حصلت مشكلة في صوت ضجه';if(live&&!muted)setTimeout(startListening,100);else singleMode=false})
 }
@@ -104,7 +104,7 @@ async function playVoiceTest(){
     stopVoice();
     status.textContent='بيجهّز اختبار الصوت…';
     state.textContent='جاري توليد الكلام بالصوت المتصل بالمساعد';
-    const r=await fetch('https://daga-voice.dagamobile10.workers.dev/tts',{
+    const r=await fetch('https://daga-voice-test.dagamobile10.workers.dev/tts',{
       method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:testText})
     });
     if(!r.ok) throw new Error(await r.text());
