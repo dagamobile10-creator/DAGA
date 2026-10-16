@@ -61,7 +61,7 @@ export default {
             const ai = await fetch("https://api.openai.com/v1/responses", {
               signal: AbortSignal.timeout(6500), method: "POST",
               headers: { "Authorization": `Bearer ${env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
-              body: JSON.stringify({ model: "gpt-4.1-mini", instructions, input: conversation, max_output_tokens: 320 })
+              body: JSON.stringify({ model: "gpt-6-luna", instructions, input: conversation, max_output_tokens: 320 })
             });
             const data = await ai.json();
             if (ai.ok) {
@@ -78,7 +78,7 @@ export default {
             const ai = await fetch("https://api.groq.com/openai/v1/chat/completions", {
               signal: AbortSignal.timeout(5000), method: "POST",
               headers: { "Authorization": `Bearer ${env.GROQ_API_KEY}`, "Content-Type": "application/json" },
-              body: JSON.stringify({ model: "llama-3.3-70b-versatile", messages: [{ role: "system", content: instructions }, ...conversation], max_tokens: 300, temperature: 0.35 })
+              body: JSON.stringify({ model: "openai/gpt-oss-120b", messages: [{ role: "system", content: instructions }, ...conversation], max_tokens: 300, temperature: 0.35 })
             });
             const data = await ai.json();
             if (ai.ok) {
@@ -92,7 +92,7 @@ export default {
 
         if (env.AI) {
           try {
-            const result = await Promise.race([env.AI.run("@cf/meta/llama-3.1-8b-instruct-fast", { messages: [{ role: "system", content: instructions }, ...conversation], max_tokens: 300 }), new Promise((_, reject) => setTimeout(() => reject(new Error("Cloudflare AI timeout")), 5000))]);
+            const result = await Promise.race([env.AI.run("@cf/openai/gpt-oss-20b", { messages: [{ role: "system", content: instructions }, ...conversation], max_tokens: 300 }), new Promise((_, reject) => setTimeout(() => reject(new Error("Cloudflare AI timeout")), 5000))]);
             let reply = normalizeArabicReply(String(result?.response || "").trim(), userText);
             if (reply) return json({ reply, provider: "cloudflare-ai" });
             failures.push("Cloudflare AI returned an empty reply");
