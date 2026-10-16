@@ -1,0 +1,44 @@
+name: DAGA V30 owner-auth checks
+
+on:
+  push:
+    branches: [daga-v30-implementation]
+  pull_request:
+    branches: [main]
+
+jobs:
+  syntax-and-schema:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check Worker module syntax
+        run: node --input-type=module --check < worker.js
+      - name: Check owner-auth module syntax
+        run: node --input-type=module --check < owner-auth.js
+      - name: Apply D1 migrations to a fresh SQLite database
+        run: |
+          python3 - <<'PY'
+          import sqlite3
+          db = sqlite3.connect(":memory:")
+          db.execute("PRAGMA foreign_keys=ON")
+          for path in (
+              "migrations/0001_daga_core.sql",
+              "migrations/0002_daga_owner_auth.sql",
+              "migrations/0003_daga_owner_credentials.sql",
+          ):
+              with open(path, encoding="utf-8") as f:
+                  db.executescript(f.read())
+          names = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+          required = {
+              "daga_accounts", "daga_program_owner", "daga_auth_challenges",
+              "daga_auth_sessions", "daga_security_events",
+              "daga_owner_credentials", "daga_owner_bootstrap_state",
+              "daga_auth_rate_limits",
+          }
+          missing = required - names
+          assert not missing, f"Missing tables: {sorted(missing)}"
+          print("All three migrations applied successfully; required tables exist.")
+          PY
