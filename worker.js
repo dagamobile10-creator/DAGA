@@ -35,7 +35,8 @@ export default {
         });
         const data = await response.json();
         if (!response.ok) return json({ error: "LiveAvatar avatar lookup failed", status: response.status, detail: data }, response.status);
-        return json({ ok: true, count: data?.data?.count ?? 0, avatars: (data?.data?.results || []).map(a => ({ id: a.id, name: a.name, status: a.status, preview_url: a.preview_url })) });
+        const avatars = data?.data?.results || [];
+        return json({ ok: true, count: data?.data?.count ?? avatars.length, activeCount: avatars.filter(a => a.status === "ACTIVE").length, hasActiveDaga: avatars.some(a => /daga|ضجه|ضجّة/i.test(String(a.name || "")) && a.status === "ACTIVE") });
       } catch (error) { return json({ error: "LiveAvatar lookup failed", detail: String(error?.message || error) }, 502); }
     }
 
@@ -52,7 +53,7 @@ export default {
           if (!listResponse.ok) return json({ error: "LiveAvatar avatar lookup failed", status: listResponse.status, detail: listData }, listResponse.status);
           const avatars = listData?.data?.results || [];
           const chosen = avatars.find(a => /daga|ضجه|ضجّة/i.test(String(a.name || "")) && a.status === "ACTIVE") || (avatars.length === 1 && avatars[0].status === "ACTIVE" ? avatars[0] : null);
-          if (!chosen) return json({ error: "No active DAGA LiveAvatar found", availableAvatars: avatars.map(a => ({ id: a.id, name: a.name, status: a.status })), detail: "Create/import the DAGA photo in LiveAvatar or set LIVEAVATAR_AVATAR_ID to its LiveAvatar ID." }, 409);
+          if (!chosen) return json({ error: "No active DAGA LiveAvatar found", availableAvatarCount: avatars.length, activeAvatarCount: avatars.filter(a => a.status === "ACTIVE").length, detail: "Create/import the DAGA photo in LiveAvatar or set LIVEAVATAR_AVATAR_ID to its LiveAvatar ID." }, 409);
           avatarId = chosen.id;
         }
         const response = await fetch("https://api.liveavatar.com/v1/sessions/token", {
@@ -68,7 +69,7 @@ export default {
     }
 
     if (url.pathname === "/health") {
-      return json({ ok: true, voiceConfigured: Boolean(env.ELEVENLABS_API_KEY), chatConfigured: Boolean(env.OPENAI_API_KEY), freeChatConfigured: Boolean(env.GROQ_API_KEY || env.AI) });
+      return json({ ok: true, voiceConfigured: Boolean(env.ELEVENLABS_API_KEY), chatConfigured: Boolean(env.OPENAI_API_KEY), freeChatConfigured: Boolean(env.GROQ_API_KEY || env.AI), liveAvatarConfigured: Boolean(env.LIVEAVATAR_API_KEY), liveAvatarIdConfigured: Boolean(env.LIVEAVATAR_AVATAR_ID) });
     }
 
     if (url.pathname === "/chat" && request.method === "POST") {
