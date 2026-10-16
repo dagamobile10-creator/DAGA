@@ -125,6 +125,20 @@ jobs:
           printf '%s' "$LIVEAVATAR_RECOVERED_KEY" | npx wrangler secret put LIVEAVATAR_API_KEY --name daga-voice
           echo "Recovered LiveAvatar key restored as a Worker secret."
 
+      - name: Configure LiveAvatar secret from repository secret if available
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          LIVEAVATAR_API_KEY: ${{ secrets.LIVEAVATAR_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -n "${LIVEAVATAR_API_KEY:-}" ]; then
+            printf '%s' "$LIVEAVATAR_API_KEY" | npx wrangler secret put LIVEAVATAR_API_KEY --name daga-voice
+            echo "LiveAvatar key installed as a Worker secret."
+          else
+            echo "No LIVEAVATAR_API_KEY repository secret is configured."
+          fi
+
       - name: Verify LiveAvatar configuration without exposing private avatar data
         if: always()
         run: |
