@@ -67,3 +67,20 @@ All routes fail closed when required configuration is absent. Sessions expire af
 - The owner endpoints need automated unit/integration tests and a staging deployment before production.
 - Restrict CORS to the real production origins, verify provider delivery, verify D1 migrations, and run `tests/OWNER_AUTH_STAGING_CHECKLIST.md` before release.
 - Do not claim production owner security is enabled until the staging checks pass and the Worker deployment is verified.
+
+
+## Owner console and administration APIs
+
+After the Worker and database are configured, the Arabic RTL owner console is available at `/owner-console.html` on the GitHub Pages site. It keeps the session token in page memory rather than localStorage; refreshing the page requires signing in again.
+
+The console currently calls these owner-session-protected endpoints:
+
+- `GET /owner/admin/overview`
+- `GET|POST /owner/admin/plans`; `PATCH /owner/admin/plans/:uuid`
+- `GET|POST /owner/admin/payment-methods`; `PATCH /owner/admin/payment-methods/:uuid`
+- `GET /owner/admin/stores`; `POST /owner/admin/stores/:uuid/decision`
+- `GET /owner/admin/payments`; `POST /owner/admin/payments/:uuid/review`
+- `POST /owner/admin/words/adjust` (requires a unique request ID for idempotency)
+- `GET|POST /owner/admin/columns`; `PATCH /owner/admin/columns/:uuid` (display label can change while stable key remains fixed)
+
+The payment review route is an explicit owner action. The owner must verify that money actually arrived before choosing “confirmed”; the API cannot independently prove a manual transfer. Automatic payment verification still requires a trusted payment provider webhook. The console is an initial admin surface, not a replacement for integrating the owner role into the existing V30 dashboard.
