@@ -1,8 +1,12 @@
+import { handleOwnerAuth } from "./owner-auth.js";
 const VOICE_ID = "NG9zqiTuEbX3Nw0gjYcc"; // Previous voice ID backup: PF3gVGPrCr6Dw1WaSSiy
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+
+    const ownerAuthResponse = await handleOwnerAuth(request, env, url);
+    if (ownerAuthResponse) return ownerAuthResponse;
 
     if (request.method === "OPTIONS") return new Response(null, { headers: cors() });
 
