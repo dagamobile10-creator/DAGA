@@ -37,3 +37,15 @@ This branch contains a schema and implementation plan only. It does not create a
 - `security/OWNER_IDENTITY_BOOTSTRAP.md` defines the required one-time owner bootstrap and provider/deployment gates.
 - `tests/OWNER_AUTH_STAGING_CHECKLIST.md` lists owner verification, role isolation, session revocation, memory access, and regression checks.
 - These artifacts are not a working login flow. Worker routes, provider integrations, session issuance/validation, and automated tests still need implementation. Do not deploy or claim owner protection is active yet.
+
+
+## Owner authentication implementation progress
+
+- Added `owner-auth.js` with one-time bootstrap start/verify, SMS + email OTP delivery adapters (Twilio and Resend), PBKDF2 password hashing, one-owner-only provisioning, hashed bearer sessions, login, logout, and dual-channel recovery with recovery-code rotation.
+- Wired the owner-auth handler into `worker.js` without replacing the existing chat/TTS/LiveAvatar implementation.
+- Added migrations `0002_daga_owner_auth.sql` and `0003_daga_owner_credentials.sql`, plus `.github/workflows/daga-owner-auth-checks.yml` for syntax and fresh-SQLite migration checks.
+- Added `security/OWNER_AUTH_DEPLOYMENT.md` with the required environment configuration and staging-only bootstrap steps.
+
+## Current release status
+
+The code is committed on the development branch, but the deployment is not yet operational: no D1 database has been provisioned/bound, no provider secrets have been configured, no real SMS/email delivery has been tested, and no staging Worker deployment or successful CI run has been verified. Existing application routes and the store/admin dashboard still require role/tenant authorization before production use.
