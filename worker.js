@@ -68,18 +68,7 @@ export default {
           if (chosen) {
             avatarId = chosen.id;
           } else {
-            // Development fallback: allow the Live button to work with a public preset
-            // while the custom MH avatar is not provisioned in this LiveAvatar account.
-            const publicResponse = await fetch("https://api.liveavatar.com/v1/avatars/public?page=1&page_size=100", {
-              headers: { "X-API-KEY": env.LIVEAVATAR_API_KEY, "Accept": "application/json" },
-              signal: AbortSignal.timeout(10000)
-            });
-            const publicData = await publicResponse.json();
-            if (!publicResponse.ok) return json({ error: "LiveAvatar public avatar lookup failed", status: publicResponse.status, detail: publicData }, publicResponse.status);
-            const publicAvatars = publicData?.data?.results || [];
-            const fallback = publicAvatars.find(a => a.status === "ACTIVE" && !a.is_expired);
-            if (!fallback) return json({ error: "No active LiveAvatar is available", availableAvatarCount: avatars.length, activeAvatarCount: avatars.filter(a => a.status === "ACTIVE").length, publicAvatarCount: publicAvatars.length }, 409);
-            avatarId = fallback.id;
+            return json({ error: "MH LiveAvatar is not configured. Add the custom MH avatar to LiveAvatar and set LIVEAVATAR_AVATAR_ID.", availableAvatarCount: avatars.length, activeAvatarCount: avatars.filter(a => a.status === "ACTIVE").length }, 409);
           }
         }
         const response = await fetch("https://api.liveavatar.com/v1/sessions/token", {
