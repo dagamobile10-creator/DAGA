@@ -59,7 +59,7 @@ export async function handleOwnerAdmin(request, env, url) {
     }
 
     if (path === "/owner/admin/payment-methods" && request.method === "GET") {
-      const r = await db.prepare("SELECT id,provider,display_label,instructions,is_active,updated_at FROM daga_payment_methods ORDER BY provider").all();
+      const r = await db.prepare("SELECT id,provider,display_label,destination_value,instructions,is_active,updated_at FROM daga_payment_methods ORDER BY provider").all();
       return json({ok:true,methods:r.results||[]});
     }
     if (path === "/owner/admin/payment-methods" && request.method === "POST") {
