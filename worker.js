@@ -127,7 +127,9 @@ export default {
 
       // Keep the generated text unchanged; pronunciation should follow general language rules.
       // No word-specific phonetic substitutions or pronunciation exceptions.
-      text = text.replace(/ضجه/gu, "ضَجَّة").replace(/ضجّة/gu, "ضَجَّة").replace(/ضَجّة/gu, "ضَجَّة").replace(/\s{2,}/g, " ").trim();
+      // TTS-only pronunciation hint: use گ to cue the hard Egyptian /g/ sound.
+      // The visible/chat spelling remains «ضجه»; only the spoken text is phoneticized.
+      text = text.replace(/ضَجَّة|ضَجّة|ضجّة|ضجه/gu, "ضَگَّة").replace(/\s{2,}/g, " ").trim();
 
       const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}/stream`, {
         signal: AbortSignal.timeout(12000), method: "POST",
