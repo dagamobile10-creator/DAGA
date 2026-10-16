@@ -59,7 +59,7 @@ export default {
         const response = await fetch("https://api.liveavatar.com/v1/sessions/token", {
           method: "POST",
           headers: { "X-API-KEY": env.LIVEAVATAR_API_KEY, "Content-Type": "application/json", "Accept": "application/json" },
-          body: JSON.stringify({ mode: "CUSTOM", avatar_id: avatarId, is_sandbox: false }),
+          body: JSON.stringify({ mode: "LITE", avatar_id: avatarId, is_sandbox: false }),
           signal: AbortSignal.timeout(12000)
         });
         const data = await response.json();
