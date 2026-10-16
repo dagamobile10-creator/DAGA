@@ -49,3 +49,14 @@ This branch contains a schema and implementation plan only. It does not create a
 ## Current release status
 
 The code is committed on the development branch, but the deployment is not yet operational: no D1 database has been provisioned/bound, no provider secrets have been configured, no real SMS/email delivery has been tested, and no staging Worker deployment or successful CI run has been verified. Existing application routes and the store/admin dashboard still require role/tenant authorization before production use.
+
+
+## Owner admin API and console progress (latest)
+
+- Added `owner-admin.js`, wired into the Worker. The endpoints require a valid, unexpired owner session and implement plan create/update, payment destination create/update, store approval/rejection/suspension, manual payment review, idempotent LIVE DAGA word credits, and column definition create/display-name update.
+- Added `owner-console.html`, an Arabic RTL owner console for login, overview, plans, payment methods, payment review, store decisions, word credits, and column labels. The bearer session is held in page memory and is not written to localStorage.
+- CI run for the current code passed Node syntax checks for the Worker, owner auth, owner admin, and owner-console inline JavaScript, plus all three migrations applied to a fresh SQLite database. The existing live-app validation passed too; the deployment job was skipped for the draft pull request.
+
+## Remaining production blockers
+
+No D1 database or provider secrets have been provisioned through this workflow, and no real SMS/email, end-to-end API, or staging Worker tests have run. The existing store/employee authentication, public store onboarding/order submission, full tenant isolation for existing `/memory`, `/chat`, `/tts`, and LiveAvatar routes, and integration of this console into the original V30 dashboard are still outstanding. The draft pull request must not be merged or described as a completed production release yet.
