@@ -136,7 +136,7 @@ fetch('https://daga-voice.dagamobile10.workers.dev/tts',{method:'POST',headers:{
 .then(async r=>{if(!r.ok)throw new Error(await r.text());const blob=await r.blob();if(token!==speechToken)return;state.textContent='ضجه بيتكلم…';
 if(typeof window.__dagaAvatarSpeak==='function'){
  try{
-  const result=await window.__dagaAvatarSpeak(blob);
+  const result=await window.__dagaAvatarSpeak(blob,text);
   if(result&&result.played){avatar.classList.add('speaking');return}
  }catch(e){console.warn('Live avatar unavailable; using voice fallback',e)}
 }
@@ -222,21 +222,30 @@ function pcm24kBase64(audioBuffer){
   return btoa(binary);
  });
 }
-window.__dagaAvatarSpeak=async function(blob){
+window.__dagaAvatarSpeak=async function(blob,text){
  const session=await startDagaLiveAvatar();
- const audioContext=new (window.AudioContext||window.webkitAudioContext)();
+ const video=document.getElementById("dagaLiveVideo");
+ const avatar=document.querySelector(".avatar");
+ const audioUrl=URL.createObjectURL(blob);
+ const audio=new Audio(audioUrl);
+ audio.preload="auto";
+ if(video)video.muted=true;
  try{
-  const buffer=await audioContext.decodeAudioData(await blob.arrayBuffer());
-  const pcm=await pcm24kBase64(buffer);
-  const ended=new Promise(resolve=>{
-   let done=false;const finish=()=>{if(done)return;done=true;session.off?.("avatar.speak_ended",finish);resolve()};
-   session.on("avatar.speak_ended",finish);
-   setTimeout(finish,Math.max(8000,buffer.duration*1000+5000));
+  await new Promise((resolve,reject)=>{
+   const timer=setTimeout(()=>reject(new Error("LiveAvatar speech timeout")),30000);
+   session.once?.("avatar.speak_ended",()=>{clearTimeout(timer);resolve()});
+   session.on?.("avatar.speak_ended",()=>{clearTimeout(timer);resolve()});
+   session.repeat(String(text||""));
+   audio.onended=()=>{if(avatar)avatar.classList.remove("speaking");};
+   audio.onerror=()=>{clearTimeout(timer);reject(new Error("ElevenLabs audio playback failed"))};
+   audio.play().catch(reject);
   });
-  session.repeatAudio(pcm);
-  await ended;
   return {played:true};
- }finally{await audioContext.close().catch(()=>{})}
+ }finally{
+  if(!audio.paused)audio.pause();
+  audio.src="";
+  URL.revokeObjectURL(audioUrl);
+ }
 };
 window.__dagaStopLiveAvatar=async function(){
  const s=dagaSession;dagaSession=null;dagaSessionPromise=null;dagaStreamReady=null;
