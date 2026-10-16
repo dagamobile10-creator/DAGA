@@ -35,6 +35,7 @@ export default {
         const body = await request.json();
         const userText = String(body?.text || "").trim();
         if (!userText) return json({ error: "text is required" }, 400);
+        if (/(اسمك\s*(?:إيه|ايه|ما|ماذا)|مين\s*إنت|من\s*أنت|عرفني\s*بنفسك)/u.test(userText)) return json({ reply: "أنا ضجه، مساعدك الذكي.", provider: "built-in" });
         const history = Array.isArray(body?.history) ? body.history.slice(-20).filter(item => item && ["user", "assistant"].includes(item.role) && typeof item.content === "string" && item.content.trim()).map(item => ({ role: item.role, content: item.content.trim().slice(0, 2500) })) : [];
         const conversation = [...history, { role: "user", content: userText }];
         const businessContext = typeof body?.businessContext === "string" ? body.businessContext.trim().slice(0, 3000) : "";
@@ -91,13 +92,21 @@ export default {
         }
 
         if (env.AI) {
-          try {
-            const result = await Promise.race([env.AI.run("@cf/openai/gpt-oss-20b", { messages: [{ role: "system", content: instructions }, ...conversation], max_tokens: 300 }), new Promise((_, reject) => setTimeout(() => reject(new Error("Cloudflare AI timeout")), 5000))]);
-            const cloudflareText = String(result?.response || result?.output_text || (Array.isArray(result?.output) ? result.output.flatMap(item => Array.isArray(item.content) ? item.content : []).filter(item => item.type === "output_text" || item.type === "text").map(item => item.text || "").join("\n") : "") || "").trim();
-            let reply = normalizeArabicReply(cloudflareText, userText);
-            if (reply) return json({ reply, provider: "cloudflare-ai" });
-            failures.push("Cloudflare AI returned an empty reply");
-          } catch (error) { failures.push("Cloudflare AI: " + String(error)); }
+          const cloudflareModels = ["@cf/zai-org/glm-4.7-flash", "@cf/openai/gpt-oss-20b"];
+          for (const model of cloudflareModels) {
+            try {
+              const result = await Promise.race([
+                env.AI.run(model, { messages: [{ role: "system", content: instructions }, ...conversation], max_tokens: 300 }),
+                new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 5000))
+              ]);
+              const cloudflareText = String(result?.response || result?.output_text || (Array.isArray(result?.output) ? result.output.flatMap(item => Array.isArray(item.content) ? item.content : []).filter(item => item.type === "output_text" || item.type === "text").map(item => item.text || "").join("\n") : "") || "").trim();
+              let reply = normalizeArabicReply(cloudflareText, userText);
+              if (reply) return json({ reply, provider: "cloudflare-ai", model });
+              failures.push("Cloudflare AI (" + model + ") returned an empty reply");
+            } catch (error) {
+              failures.push("Cloudflare AI (" + model + "): " + String(error?.message || error));
+            }
+          }
         }
 
         if (!env.OPENAI_API_KEY && !env.GROQ_API_KEY && !env.AI) return json({ error: "No chat provider configured", detail: "Enable the AI binding in Cloudflare Workers, or configure GROQ_API_KEY / OPENAI_API_KEY." }, 503);
