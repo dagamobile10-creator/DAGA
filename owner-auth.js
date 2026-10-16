@@ -6,12 +6,14 @@ const PBKDF2_ITERATIONS = 310000;
 export async function handleOwnerAuth(request, env, url) {
   const routes = new Set([
     "/owner/bootstrap/start", "/owner/bootstrap/verify",
-    "/owner/auth/login", "/owner/auth/me", "/owner/auth/logout"
+    "/owner/auth/login", "/owner/auth/me", "/owner/auth/logout", "/owner/recovery/start", "/owner/recovery/complete"
   ]);
   if (!routes.has(url.pathname)) return null;
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors(env) });
   if (url.pathname.endsWith("/me") && request.method === "GET") return ownerMe(request, env);
   if (url.pathname.endsWith("/logout") && request.method === "POST") return ownerLogout(request, env);
+  if (url.pathname === "/owner/recovery/start" && request.method === "POST") return recoveryStart(request, env);
+  if (url.pathname === "/owner/recovery/complete" && request.method === "POST") return recoveryComplete(request, env);
   if (url.pathname.endsWith("/start") && request.method === "POST") return bootstrapStart(request, env);
   if (url.pathname.endsWith("/verify") && request.method === "POST") return bootstrapVerify(request, env);
   if (url.pathname.endsWith("/login") && request.method === "POST") return ownerLogin(request, env);
@@ -122,6 +124,72 @@ async function bootstrapVerify(request, env) {
   return json(env, { ok: true, account: { id: accountId, role: OWNER_ROLE, phoneMasked: maskPhone(phone), emailMasked: maskEmail(email) }, sessionToken: session.token, expiresAt: session.expiresAt, recoveryCodeReminder: "Store the recovery code offline. It is never shown again." });
 }
 
+
+async function recoveryStart(request, env) {
+  const db = env.DAGA_APP_DB;
+  const required = ["DAGA_OWNER_PHONE", "DAGA_OWNER_EMAIL", "TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER", "RESEND_API_KEY", "DAGA_EMAIL_FROM", "DAGA_OTP_PEPPER"];
+  if (!db || required.some(key => !env[key])) return json(env, { error: "owner_recovery_not_configured" }, 503);
+  const owner = await db.prepare("SELECT a.id FROM daga_program_owner o JOIN daga_accounts a ON a.id=o.account_id WHERE o.singleton_id=1 AND a.status='approved'").first();
+  if (!owner) return json(env, { error: "owner_not_provisioned" }, 409);
+  const ip = request.headers.get("CF-Connecting-IP") || "unknown";
+  if (!await rateLimit(db, env, "recovery:" + ip, 3, 3600)) return json(env, { error: "rate_limited" }, 429);
+  const phone = normalizePhone(env.DAGA_OWNER_PHONE), email = String(env.DAGA_OWNER_EMAIL).trim().toLowerCase();
+  if (!phone || !email) return json(env, { error: "owner_contact_configuration_invalid" }, 503);
+  const now = Math.floor(Date.now() / 1000), expires = new Date((now + OTP_TTL_SECONDS) * 1000).toISOString();
+  const phoneCode = randomDigits(), emailCode = randomDigits(), phoneId = crypto.randomUUID(), emailId = crypto.randomUUID();
+  const [phoneHash,emailHash,phoneDest,emailDest] = await Promise.all([
+    sha256(phoneId + ":" + phoneCode + ":" + env.DAGA_OTP_PEPPER), sha256(emailId + ":" + emailCode + ":" + env.DAGA_OTP_PEPPER),
+    sha256("phone:" + phone), sha256("email:" + email)
+  ]);
+  await db.batch([
+    db.prepare("INSERT INTO daga_auth_challenges (id,account_id,purpose,destination_hash,code_hash,expires_at) VALUES (?,?, 'password_reset',?,?,?)").bind(phoneId,owner.id,phoneDest,phoneHash,expires),
+    db.prepare("INSERT INTO daga_auth_challenges (id,account_id,purpose,destination_hash,code_hash,expires_at) VALUES (?,?, 'password_reset',?,?,?)").bind(emailId,owner.id,emailDest,emailHash,expires)
+  ]);
+  try {
+    await Promise.all([sendSms(env,phone,"DAGA account recovery code: "+phoneCode+". Expires in 10 minutes."),
+      sendEmail(env,email,"DAGA account recovery","<p>Your DAGA account recovery code is <strong>"+emailCode+"</strong>.</p><p>It expires in 10 minutes. If you did not request this, ignore this email.</p>")]);
+  } catch (_) {
+    await db.batch([
+      db.prepare("UPDATE daga_auth_challenges SET consumed_at=? WHERE id=?").bind(new Date().toISOString(),phoneId),
+      db.prepare("UPDATE daga_auth_challenges SET consumed_at=? WHERE id=?").bind(new Date().toISOString(),emailId)
+    ]);
+    return json(env,{error:"verification_delivery_failed"},502);
+  }
+  await audit(db,owner.id,"owner_recovery_start","success");
+  return json(env,{ok:true,phoneMasked:maskPhone(phone),emailMasked:maskEmail(email),expiresInSeconds:OTP_TTL_SECONDS});
+}
+
+async function recoveryComplete(request, env) {
+  const db = env.DAGA_APP_DB;
+  if (!db || !env.DAGA_OTP_PEPPER) return json(env,{error:"owner_recovery_not_configured"},503);
+  const body = await safeJson(request);
+  if (!body) return json(env,{error:"invalid_json"},400);
+  const phoneCode=String(body.phoneCode||"").trim(), emailCode=String(body.emailCode||"").trim();
+  const recoveryCode=String(body.recoveryCode||""), newPassword=String(body.newPassword||"");
+  if (!/^\\d{6}$/.test(phoneCode)||!/^\\d{6}$/.test(emailCode)||recoveryCode.length<20||recoveryCode.length>128) return json(env,{error:"valid_codes_and_recovery_code_required"},400);
+  if (newPassword.length<14||newPassword.length>128||!/[a-z]/.test(newPassword)||!/[A-Z]/.test(newPassword)||!/\\d/.test(newPassword)) return json(env,{error:"password_must_be_14_to_128_chars_with_uppercase_lowercase_and_number"},400);
+  const owner=await db.prepare("SELECT a.id,a.phone_e164,a.email,c.recovery_code_hash FROM daga_program_owner o JOIN daga_accounts a ON a.id=o.account_id JOIN daga_owner_credentials c ON c.account_id=a.id WHERE o.singleton_id=1 AND a.status='approved'").first();
+  if (!owner) return json(env,{error:"owner_not_provisioned"},409);
+  if (!await rateLimit(db,env,"recovery-complete:"+(request.headers.get("CF-Connecting-IP")||"unknown"),5,3600)) return json(env,{error:"rate_limited"},429);
+  const [p,e,recoveryHash]=await Promise.all([
+    consumeChallenge(db,env,"password_reset",await sha256("phone:"+owner.phone_e164),phoneCode),
+    consumeChallenge(db,env,"password_reset",await sha256("email:"+String(owner.email).toLowerCase()),emailCode),
+    sha256(recoveryCode+":"+env.DAGA_OTP_PEPPER)
+  ]);
+  if (!p||!e||!owner.recovery_code_hash||!constantTimeEqual(recoveryHash,owner.recovery_code_hash)) {
+    await audit(db,owner.id,"owner_recovery_complete","failure");
+    return json(env,{error:"invalid_expired_or_used_recovery_credentials"},400);
+  }
+  const salt=randomToken(24), hash=await derivePassword(newPassword,salt,PBKDF2_ITERATIONS), now=new Date().toISOString();
+  await db.batch([
+    db.prepare("UPDATE daga_owner_credentials SET password_hash=?,password_salt=?,password_iterations=?,updated_at=? WHERE account_id=?").bind(hash,salt,PBKDF2_ITERATIONS,now,owner.id),
+    db.prepare("UPDATE daga_auth_sessions SET revoked_at=? WHERE account_id=? AND revoked_at IS NULL").bind(now,owner.id),
+    db.prepare("UPDATE daga_auth_challenges SET consumed_at=? WHERE account_id=? AND purpose='password_reset' AND consumed_at IS NULL").bind(now,owner.id)
+  ]);
+  await audit(db,owner.id,"owner_recovery_complete","success");
+  return json(env,{ok:true,message:"Password reset. Log in again with the new password."});
+}
+
 async function ownerLogin(request, env) {
   const db = env.DAGA_APP_DB;
   if (!db || !env.DAGA_OTP_PEPPER) return json(env, { error: "owner_auth_not_configured" }, 503);
@@ -184,7 +252,7 @@ async function createSession(db, accountId) {
 }
 
 async function consumeChallenge(db, env, purpose, destinationHash, code) {
-  const row = await db.prepare("SELECT id,code_hash,expires_at,attempts,consumed_at FROM daga_auth_challenges WHERE purpose=? AND destination_hash=? ORDER BY created_at DESC LIMIT 1").bind(purpose, destinationHash).first();
+  const row = await db.prepare("SELECT id,code_hash,expires_at,attempts,consumed_at FROM daga_auth_challenges WHERE purpose=? AND destination_hash=? ORDER BY rowid DESC LIMIT 1").bind(purpose, destinationHash).first();
   if (!row || row.consumed_at || row.attempts >= 5 || new Date(row.expires_at).getTime() <= Date.now()) return false;
   await db.prepare("UPDATE daga_auth_challenges SET attempts=attempts+1 WHERE id=? AND consumed_at IS NULL").bind(row.id).run();
   const expected = await sha256(row.id + ":" + code + ":" + env.DAGA_OTP_PEPPER);
