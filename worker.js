@@ -96,8 +96,8 @@ export default {
           for (const model of cloudflareModels) {
             try {
               const result = await Promise.race([
-                env.AI.run(model, { messages: [{ role: "system", content: instructions }, ...conversation], max_tokens: 300 }),
-                new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 6500))
+                env.AI.run(model, { messages: [{ role: "system", content: instructions }, ...conversation], max_tokens: 600, reasoning_effort: "low", chat_template_kwargs: { enable_thinking: false } }),
+                new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 12000))
               ]);
               const cloudflareText = extractModelText(result);
               let reply = normalizeArabicReply(cloudflareText, userText);
