@@ -97,9 +97,9 @@ export default {
             try {
               const result = await Promise.race([
                 env.AI.run(model, { messages: [{ role: "system", content: instructions }, ...conversation], max_tokens: 300 }),
-                new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 5000))
+                new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 6500))
               ]);
-              const cloudflareText = String(result?.response || result?.output_text || (Array.isArray(result?.output) ? result.output.flatMap(item => Array.isArray(item.content) ? item.content : []).filter(item => item.type === "output_text" || item.type === "text").map(item => item.text || "").join("\n") : "") || "").trim();
+              const cloudflareText = extractModelText(result);
               let reply = normalizeArabicReply(cloudflareText, userText);
               if (reply) return json({ reply, provider: "cloudflare-ai", model });
               failures.push("Cloudflare AI (" + model + ") returned an empty reply");
@@ -158,4 +158,32 @@ function normalizeArabicReply(value, userText = "") {
     .replace(/أنا\s+هترد عليك/gu, "أنا هرد عليك").replace(/هتجاوبك/gu, "هجاوبك")
     .replace(/هتساعدك/gu, "هساعدك").replace(/هترد عليك/gu, "هرد عليك")
     .replace(/\s{2,}/gu, " ").trim();
+}
+
+
+function extractModelText(result) {
+  if (typeof result === "string") return result.trim();
+  if (!result || typeof result !== "object") return "";
+  const direct = [result.response, result.output_text, result.generated_text, result.text, result.content];
+  for (const value of direct) if (typeof value === "string" && value.trim()) return value.trim();
+  const choices = result.choices;
+  if (Array.isArray(choices)) {
+    for (const choice of choices) {
+      const value = choice?.message?.content ?? choice?.text ?? choice?.delta?.content;
+      if (typeof value === "string" && value.trim()) return value.trim();
+      if (Array.isArray(value)) {
+        const joined = value.map(part => typeof part === "string" ? part : part?.text || "").join("\n").trim();
+        if (joined) return joined;
+      }
+    }
+  }
+  if (Array.isArray(result.output)) {
+    const joined = result.output.flatMap(item => Array.isArray(item?.content) ? item.content : []).map(item => item?.text || item?.content || "").filter(value => typeof value === "string" && value.trim()).join("\n").trim();
+    if (joined) return joined;
+  }
+  if (Array.isArray(result.content)) {
+    const joined = result.content.map(item => typeof item === "string" ? item : item?.text || "").filter(Boolean).join("\n").trim();
+    if (joined) return joined;
+  }
+  return "";
 }
