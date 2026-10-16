@@ -133,7 +133,7 @@ fetch('https://daga-voice.dagamobile10.workers.dev/tts',{method:'POST',headers:{
 }
 function stopVoice(){speechToken++;if('speechSynthesis'in window)speechSynthesis.cancel();if(window.__dagaAudio){const a=window.__dagaAudio;window.__dagaAudio=null;try{a.onended=null;a.onerror=null;a.pause();a.currentTime=0}catch(e){}}replying=false;if(!live)singleMode=false;state.textContent='تم إيقاف الصوت';if(live&&!muted)setTimeout(startListening,100);else status.textContent='جاهز'}
 async function playVoiceTest(){
-  const testText="أهلاً بيك، أنا المساعد الصوتي لضجه. خلّينا نجرّب الصوت المصري الطبيعي، ونسمع وضوح الكلام ومخارج الحروف.";
+  const testText="أهلاً بيك، أنا المساعد الصوتي لضَجَّة. خلّينا نجرّب الصوت المصري الطبيعي، ونسمع وضوح الكلام ومخارج الحروف.";
   try{
     stopVoice();
     status.textContent='بيجهّز اختبار الصوت…';
