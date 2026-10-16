@@ -75,6 +75,20 @@ jobs:
           echo "$applied" | jq -e '.success == true' >/dev/null
           echo "Persistent D1 memory database and table are ready."
 
+      - name: Inspect LiveAvatar binding metadata without reading values
+        env:
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set +e
+          settings="$(curl -fsS --max-time 15 -H "Authorization: Bearer $CF_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/workers/scripts/daga-voice/settings")"
+          echo "$settings" | jq -r '[.result.bindings[]? | select((.name // "") | test("LIVE.?AVATAR"; "i")) | {name, type}]'
+          versions="$(curl -fsS --max-time 15 -H "Authorization: Bearer $CF_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/workers/scripts/daga-voice/versions")"
+          for version_id in $(echo "$versions" | jq -r '.result[:10][]?.id // empty'); do
+            version="$(curl -fsS --max-time 15 -H "Authorization: Bearer $CF_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/workers/scripts/daga-voice/versions/$version_id")"
+            bindings="$(echo "$version" | jq -c '[.. | objects | select((.name? | strings | test("LIVE.?AVATAR"; "i"))) | {name, type}] | unique' 2>/dev/null)"
+            if [ -n "$bindings" ] && [ "$bindings" != "[]" ]; then echo "Version $version_id LiveAvatar binding metadata: $bindings"; fi
+          done
       - name: Recover prior LiveAvatar key without printing it
         env:
           CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
