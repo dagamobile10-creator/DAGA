@@ -36,10 +36,10 @@ export default {
         const userText = String(body?.text || "").trim();
         if (!userText) return json({ error: "text is required" }, 400);
         if (/(اسمك\s*(?:إيه|ايه|ما|ماذا)|مين\s*إنت|من\s*أنت|عرفني\s*بنفسك)/u.test(userText)) return json({ reply: "أنا اسمي ضَجَّة، مساعدك الذكي.", provider: "built-in" });
-        const history = Array.isArray(body?.history) ? body.history.slice(-20).filter(item => item && ["user", "assistant"].includes(item.role) && typeof item.content === "string" && item.content.trim()).map(item => ({ role: item.role, content: item.content.trim().slice(0, 2500) })) : [];
+        const history = Array.isArray(body?.history) ? body.history.slice(-8).filter(item => item && ["user", "assistant"].includes(item.role) && typeof item.content === "string" && item.content.trim()).map(item => ({ role: item.role, content: item.content.trim().slice(0, 1200) })) : [];
         const conversation = [...history, { role: "user", content: userText }];
-        const businessContext = typeof body?.businessContext === "string" ? body.businessContext.trim().slice(0, 3000) : "";
-        const memory = body?.memory && typeof body.memory === "object" ? JSON.stringify(body.memory).slice(0, 3000) : "";
+        const businessContext = typeof body?.businessContext === "string" ? body.businessContext.trim().slice(0, 1200) : "";
+        const memory = body?.memory && typeof body.memory === "object" ? JSON.stringify(body.memory).slice(0, 1600) : "";
 
         const recallQuestion = /(?:فاكر|تفتكر|متذكر|تتذكر|عارف)\s*(?:إحنا|احنا|كنا|احنا كنا)?[\s\S]{0,90}(?:بنحاول نصلح|بنصلح|نصلح فيك|نصلح|نظبط فيك|نظبطك|المشكلة فيك|كنا عايزين نصلح)/u.test(userText)
           || /إيه اللي كنا بنحاول نصلحه فيك|احنا كنا بنصلح فيك ايه|إحنا كنا بنصلح فيك إيه/u.test(userText);
@@ -59,23 +59,6 @@ export default {
           "راجع الرد أخيرًا: هل جاوب السؤال فعلًا؟ هل الاسم والهوية والضمائر صحيحة؟ هل الصرف والنحو طبيعيان؟ هل توجد جملة زائدة أو معلومة مخترعة؟ أصلحها قبل الإرسال."
         ].join("\n") + (memory ? "\n\nذاكرة المستخدم المتاحة (مرجع سياقي، استخدم المرتبط بالسؤال فقط): " + memory : "") + (businessContext ? "\n\nسياق العمل الثابت (ليس بيانات حية): " + businessContext : "");
         const failures = [];
-
-        if (env.OPENAI_API_KEY) {
-          try {
-            const ai = await fetch("https://api.openai.com/v1/responses", {
-              signal: AbortSignal.timeout(6500), method: "POST",
-              headers: { "Authorization": `Bearer ${env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
-              body: JSON.stringify({ model: "gpt-5-mini", instructions, input: conversation, max_output_tokens: 320 })
-            });
-            const data = await ai.json();
-            if (ai.ok) {
-              let reply = String(data.output_text || (data.output || []).flatMap(item => item.content || []).filter(item => item.type === "output_text").map(item => item.text || "").join("\n") || "").trim();
-              reply = normalizeArabicReply(reply, userText);
-              if (reply) return json({ reply, provider: "openai" });
-              failures.push("OpenAI returned an empty reply");
-            } else failures.push("OpenAI: " + (data?.error?.message || "request failed"));
-          } catch (error) { failures.push("OpenAI: " + String(error)); }
-        }
 
         if (env.GROQ_API_KEY) {
           try {
@@ -110,6 +93,23 @@ export default {
               failures.push("Cloudflare AI (" + model + "): " + String(error?.message || error));
             }
           }
+        }
+
+        if (env.OPENAI_API_KEY) {
+          try {
+            const ai = await fetch("https://api.openai.com/v1/responses", {
+              signal: AbortSignal.timeout(6500), method: "POST",
+              headers: { "Authorization": `Bearer ${env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
+              body: JSON.stringify({ model: "gpt-5-mini", instructions, input: conversation, max_output_tokens: 320 })
+            });
+            const data = await ai.json();
+            if (ai.ok) {
+              let reply = String(data.output_text || (data.output || []).flatMap(item => item.content || []).filter(item => item.type === "output_text").map(item => item.text || "").join("\n") || "").trim();
+              reply = normalizeArabicReply(reply, userText);
+              if (reply) return json({ reply, provider: "openai" });
+              failures.push("OpenAI returned an empty reply");
+            } else failures.push("OpenAI: " + (data?.error?.message || "request failed"));
+          } catch (error) { failures.push("OpenAI: " + String(error)); }
         }
 
         if (!env.OPENAI_API_KEY && !env.GROQ_API_KEY && !env.AI) return json({ error: "No chat provider configured", detail: "Enable the AI binding in Cloudflare Workers, or configure GROQ_API_KEY / OPENAI_API_KEY." }, 503);
