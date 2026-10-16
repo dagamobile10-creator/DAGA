@@ -20,6 +20,16 @@ jobs:
         run: node --input-type=module --check < owner-auth.js
       - name: Check owner-admin module syntax
         run: node --input-type=module --check < owner-admin.js
+      - name: Check owner console inline JavaScript syntax
+        run: |
+          python3 - <<'PY'
+          import re
+          html = open("owner-console.html", encoding="utf-8").read()
+          scripts = re.findall(r"<script>(.*?)</script>", html, re.S)
+          assert len(scripts) == 1, f"Expected one inline script, found {len(scripts)}"
+          open("/tmp/owner-console.js", "w", encoding="utf-8").write(scripts[0])
+          PY
+          node --check /tmp/owner-console.js
       - name: Apply D1 migrations to a fresh SQLite database
         run: |
           python3 - <<'PY'
