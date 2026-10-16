@@ -23,7 +23,7 @@ Set these server-side in Cloudflare Worker settings (never in GitHub files or br
 - `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`: valid Twilio SMS configuration.
 - `RESEND_API_KEY`, `DAGA_EMAIL_FROM`: valid Resend email configuration; sender must be verified.
 
-The phone and email values must be configured out-of-band. Never copy passwords, OTPs, recovery codes, provider keys, or bootstrap tokens into chat or source control.
+Optionally set `DAGA_ALLOWED_ORIGINS` to the exact deployed frontend origin(s); do not use `*` in production. The phone and email values must be configured out-of-band. Never copy passwords, OTPs, recovery codes, provider keys, or bootstrap tokens into chat or source control.
 
 ## One-time bootstrap
 
@@ -46,7 +46,7 @@ curl -X POST "https://YOUR-WORKER/owner/bootstrap/verify" \
   -d '{"phoneCode":"$PHONE_CODE","emailCode":"$EMAIL_CODE","password":"$NEW_PASSWORD","recoveryCode":"$NEW_RECOVERY_CODE"}'
 ```
 
-The JSON example is illustrative only: normal shell single quotes do **not** expand variables, so construct the JSON safely with a local script or prompt. The response contains a session token; keep it private. After the owner is provisioned, rotate/delete `DAGA_OWNER_BOOTSTRAP_TOKEN` in Worker secrets.
+The recovery code must be a new, unique secret of at least 20 characters. The response contains a session token; keep it private. After the owner is provisioned, rotate/delete `DAGA_OWNER_BOOTSTRAP_TOKEN` in Worker secrets.
 
 ## Routes implemented in this branch
 
@@ -56,7 +56,7 @@ The JSON example is illustrative only: normal shell single quotes do **not** exp
 - `GET /owner/auth/me`: validates the bearer session and returns masked owner contact details.
 - `POST /owner/auth/logout`: revokes the bearer session.
 - `POST /owner/recovery/start`: sends recovery OTPs to the configured owner phone and email.
-- `POST /owner/recovery/complete`: requires both OTPs, the recovery code, and a new password; revokes all sessions.
+- `POST /owner/recovery/complete`: requires both OTPs, the current recovery code, a new password, and a new recovery code; revokes all sessions and rotates the recovery code.
 
 All routes fail closed when required configuration is absent. Sessions expire after eight hours. Passwords use PBKDF2-HMAC-SHA256 with 310,000 iterations and a per-password random salt; OTPs and session tokens are stored as hashes.
 
