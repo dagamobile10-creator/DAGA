@@ -173,11 +173,11 @@ async function playVoiceTest(){
 function playReference(){audio.currentTime=0;audio.play()}
 </script>
 <script type="module">
-import { LiveAvatarSession } from "https://esm.sh/@heygen/liveavatar-web-sdk@0.3.4";
+import { LiveAvatarSession } from "https://esm.sh/@heygen/liveavatar-web-sdk@0.0.19";
 let dagaSession=null,dagaSessionPromise=null,dagaStreamReady=null;
 const LIVE_ENDPOINT="https://daga-voice.dagamobile10.workers.dev/liveavatar/token";
 async function startDagaLiveAvatar(){
- if(dagaSession&&dagaSession.state==="connected")return dagaSession;
+ if(dagaSession&&dagaSession.state==="CONNECTED")return dagaSession;
  if(dagaSessionPromise)return dagaSessionPromise;
  dagaSessionPromise=(async()=>{
   const response=await fetch(LIVE_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});
