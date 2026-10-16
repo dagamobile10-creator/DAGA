@@ -75,12 +75,41 @@ jobs:
           echo "$applied" | jq -e '.success == true' >/dev/null
           echo "Persistent D1 memory database and table are ready."
 
+      - name: Recover prior LiveAvatar key without printing it
+        env:
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set +e
+          versions="$(curl -fsS --max-time 20 -H "Authorization: Bearer $CF_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/workers/scripts/daga-voice/versions")"
+          for version_id in $(echo "$versions" | jq -r '.result[]?.id // empty'); do
+            version="$(curl -fsS --max-time 20 -H "Authorization: Bearer $CF_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/workers/scripts/daga-voice/versions/$version_id")"
+            recovered="$(echo "$version" | jq -r '.. | objects | select((.name? == "LIVEAVATAR_API_KEY" or .name? == "LIVE_AVATAR_API_KEY" or .name? == "LIVEAVATAR_KEY") and (.type? == "plain_text" or .type? == "text") ) | (.text // .value // empty)' | head -n1)"
+            if [ -n "$recovered" ] && [ "$recovered" != "null" ]; then
+              echo "::add-mask::$recovered"
+              echo "LIVEAVATAR_RECOVERED_KEY=$recovered" >> "$GITHUB_ENV"
+              echo "A prior plain-text LiveAvatar key was recovered securely."
+              exit 0
+            fi
+          done
+          echo "No recoverable plain-text LiveAvatar key exists in Worker version history."
       - name: Deploy daga-voice to Cloudflare
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: deploy
+
+      - name: Restore recovered LiveAvatar key as a Worker secret
+        if: env.LIVEAVATAR_RECOVERED_KEY != ''
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          LIVEAVATAR_RECOVERED_KEY: ${{ env.LIVEAVATAR_RECOVERED_KEY }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$LIVEAVATAR_RECOVERED_KEY" | npx wrangler secret put LIVEAVATAR_API_KEY --name daga-voice
+          echo "Recovered LiveAvatar key restored as a Worker secret."
 
       - name: Verify LiveAvatar configuration without exposing private avatar data
         if: always()
