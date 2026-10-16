@@ -81,3 +81,16 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: deploy
+
+      - name: Verify LiveAvatar configuration without exposing private avatar data
+        if: always()
+        run: |
+          set +e
+          echo "Worker health configuration:"
+          curl -fsS --max-time 15 "https://daga-voice.dagamobile10.workers.dev/health" | jq '{ok, voiceConfigured, chatConfigured, freeChatConfigured, liveAvatarConfigured, liveAvatarIdConfigured}'
+          echo "LiveAvatar account status:"
+          result="$(curl -sS --max-time 20 -w '\nHTTP_STATUS:%{http_code}' "https://daga-voice.dagamobile10.workers.dev/liveavatar/avatars")"
+          body="${result%HTTP_STATUS:*}"
+          status="${result##*HTTP_STATUS:}"
+          echo "HTTP status: $status"
+          echo "$body" | jq 'if .ok then {ok, count, activeCount, hasActiveDaga} else {error, status} end' 2>/dev/null || echo "LiveAvatar endpoint returned a non-JSON response."
