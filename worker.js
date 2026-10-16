@@ -1,4 +1,5 @@
 import { handleOwnerAuth } from "./owner-auth.js";
+import { handleOwnerAdmin } from "./owner-admin.js";
 const VOICE_ID = "NG9zqiTuEbX3Nw0gjYcc"; // Previous voice ID backup: PF3gVGPrCr6Dw1WaSSiy
 
 export default {
@@ -7,6 +8,8 @@ export default {
 
     const ownerAuthResponse = await handleOwnerAuth(request, env, url);
     if (ownerAuthResponse) return ownerAuthResponse;
+    const ownerAdminResponse = await handleOwnerAdmin(request, env, url);
+    if (ownerAdminResponse) return ownerAdminResponse;
 
     if (request.method === "OPTIONS") return new Response(null, { headers: cors() });
 
