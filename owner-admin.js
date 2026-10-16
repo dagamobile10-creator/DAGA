@@ -152,6 +152,19 @@ export async function handleOwnerAdmin(request, env, url) {
       const r=await db.prepare("SELECT id,scope,store_id,stable_key,display_name,data_type,behavior_json,calculation_key,is_enabled,updated_at FROM daga_column_definitions ORDER BY scope,store_id,stable_key").all();
       return json(env, {ok:true,columns:r.results||[]});
     }
+    const columnMatch=path.match(/^\\/owner\\/admin\\/columns\\/([a-f0-9-]{36})$/i);
+    if(columnMatch&&request.method==="PATCH"){
+      const b=await readJson(request);if(!b)return json(env,{error:"invalid_json"},400);
+      const old=await db.prepare("SELECT id,scope,store_id,stable_key,display_name,is_enabled FROM daga_column_definitions WHERE id=?").bind(columnMatch[1]).first();
+      if(!old)return json(env,{error:"column_not_found"},404);
+      const label=b.displayName===undefined?old.display_name:String(b.displayName).trim().slice(0,80);
+      const enabled=b.isEnabled===undefined?old.is_enabled:(b.isEnabled?1:0);
+      if(!label)return json(env,{error:"invalid_display_name"},400);
+      await db.prepare("UPDATE daga_column_definitions SET display_name=?,is_enabled=?,updated_by=?,updated_at=? WHERE id=?").bind(label,enabled,owner.id,new Date().toISOString(),old.id).run();
+      await audit(db,owner.id,"column_definition_updated","daga_column_definitions",old.id,{scope:old.scope,storeId:old.store_id,stableKey:old.stable_key});
+      return json(env,{ok:true});
+    }
+
     if(path==="/owner/admin/columns"&&request.method==="POST"){
       const b=await readJson(request);if(!b)return json(env, {error:"invalid_json"},400);
       const scope=String(b.scope||""), storeId=b.storeId?String(b.storeId):null, key=String(b.stableKey||"").trim(), label=String(b.displayName||"").trim().slice(0,80), dataType=String(b.dataType||"text");
