@@ -30,3 +30,10 @@ migrations/0001_daga_core.sql defines the proposed D1 data model for:
 ## Deployment status
 
 This branch contains a schema and implementation plan only. It does not create a D1 database, configure SMS/email providers, enable payment integrations, or deploy the Worker. No production security behavior should be assumed until server routes are implemented and tested.
+
+## Owner-auth groundwork added on the development branch
+
+- `migrations/0002_daga_owner_auth.sql` adds hashed OTP challenge records, hashed opaque-session records, and a minimal security-event log.
+- `security/OWNER_IDENTITY_BOOTSTRAP.md` defines the required one-time owner bootstrap and provider/deployment gates.
+- `tests/OWNER_AUTH_STAGING_CHECKLIST.md` lists owner verification, role isolation, session revocation, memory access, and regression checks.
+- These artifacts are not a working login flow. Worker routes, provider integrations, session issuance/validation, and automated tests still need implementation. Do not deploy or claim owner protection is active yet.
