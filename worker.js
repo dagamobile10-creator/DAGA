@@ -26,6 +26,47 @@ export default {
       }
     }
 
+    if (url.pathname === "/liveavatar/avatars" && request.method === "GET") {
+      if (!env.LIVEAVATAR_API_KEY) return json({ error: "LIVEAVATAR_API_KEY secret is not configured" }, 503);
+      try {
+        const response = await fetch("https://api.liveavatar.com/v1/avatars?page=1&page_size=100", {
+          headers: { "X-API-KEY": env.LIVEAVATAR_API_KEY, "Accept": "application/json" },
+          signal: AbortSignal.timeout(10000)
+        });
+        const data = await response.json();
+        if (!response.ok) return json({ error: "LiveAvatar avatar lookup failed", status: response.status, detail: data }, response.status);
+        return json({ ok: true, count: data?.data?.count ?? 0, avatars: (data?.data?.results || []).map(a => ({ id: a.id, name: a.name, status: a.status, preview_url: a.preview_url })) });
+      } catch (error) { return json({ error: "LiveAvatar lookup failed", detail: String(error?.message || error) }, 502); }
+    }
+
+    if (url.pathname === "/liveavatar/token" && request.method === "POST") {
+      if (!env.LIVEAVATAR_API_KEY) return json({ error: "LIVEAVATAR_API_KEY secret is not configured" }, 503);
+      try {
+        let avatarId = String(env.LIVEAVATAR_AVATAR_ID || "").trim();
+        if (!avatarId) {
+          const listResponse = await fetch("https://api.liveavatar.com/v1/avatars?page=1&page_size=100", {
+            headers: { "X-API-KEY": env.LIVEAVATAR_API_KEY, "Accept": "application/json" },
+            signal: AbortSignal.timeout(10000)
+          });
+          const listData = await listResponse.json();
+          if (!listResponse.ok) return json({ error: "LiveAvatar avatar lookup failed", status: listResponse.status, detail: listData }, listResponse.status);
+          const avatars = listData?.data?.results || [];
+          const chosen = avatars.find(a => /daga|ضجه|ضجّة/i.test(String(a.name || "")) && a.status === "ACTIVE") || (avatars.length === 1 && avatars[0].status === "ACTIVE" ? avatars[0] : null);
+          if (!chosen) return json({ error: "No active DAGA LiveAvatar found", availableAvatars: avatars.map(a => ({ id: a.id, name: a.name, status: a.status })), detail: "Create/import the DAGA photo in LiveAvatar or set LIVEAVATAR_AVATAR_ID to its LiveAvatar ID." }, 409);
+          avatarId = chosen.id;
+        }
+        const response = await fetch("https://api.liveavatar.com/v1/sessions/token", {
+          method: "POST",
+          headers: { "X-API-KEY": env.LIVEAVATAR_API_KEY, "Content-Type": "application/json", "Accept": "application/json" },
+          body: JSON.stringify({ mode: "CUSTOM", avatar_id: avatarId, is_sandbox: false }),
+          signal: AbortSignal.timeout(12000)
+        });
+        const data = await response.json();
+        if (!response.ok) return json({ error: "LiveAvatar session token failed", status: response.status, detail: data }, response.status);
+        return json({ ok: true, sessionToken: data?.data?.session_token, sessionId: data?.data?.session_id });
+      } catch (error) { return json({ error: "LiveAvatar token failed", detail: String(error?.message || error) }, 502); }
+    }
+
     if (url.pathname === "/health") {
       return json({ ok: true, voiceConfigured: Boolean(env.ELEVENLABS_API_KEY), chatConfigured: Boolean(env.OPENAI_API_KEY), freeChatConfigured: Boolean(env.GROQ_API_KEY || env.AI) });
     }
