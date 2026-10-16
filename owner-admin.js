@@ -152,7 +152,7 @@ export async function handleOwnerAdmin(request, env, url) {
       const r=await db.prepare("SELECT id,scope,store_id,stable_key,display_name,data_type,behavior_json,calculation_key,is_enabled,updated_at FROM daga_column_definitions ORDER BY scope,store_id,stable_key").all();
       return json(env, {ok:true,columns:r.results||[]});
     }
-    const columnMatch=path.match(/^\\/owner\\/admin\\/columns\\/([a-f0-9-]{36})$/i);
+    const columnMatch = path.match(/^\/owner\/admin\/plans\/([a-f0-9-]{36})$/i);
     if(columnMatch&&request.method==="PATCH"){
       const b=await readJson(request);if(!b)return json(env,{error:"invalid_json"},400);
       const old=await db.prepare("SELECT id,scope,store_id,stable_key,display_name,is_enabled FROM daga_column_definitions WHERE id=?").bind(columnMatch[1]).first();
