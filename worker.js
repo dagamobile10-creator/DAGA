@@ -61,7 +61,7 @@ export default {
             const ai = await fetch("https://api.openai.com/v1/responses", {
               signal: AbortSignal.timeout(6500), method: "POST",
               headers: { "Authorization": `Bearer ${env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
-              body: JSON.stringify({ model: "gpt-6-luna", instructions, input: conversation, max_output_tokens: 320 })
+              body: JSON.stringify({ model: "gpt-5-mini", instructions, input: conversation, max_output_tokens: 320 })
             });
             const data = await ai.json();
             if (ai.ok) {
@@ -93,7 +93,8 @@ export default {
         if (env.AI) {
           try {
             const result = await Promise.race([env.AI.run("@cf/openai/gpt-oss-20b", { messages: [{ role: "system", content: instructions }, ...conversation], max_tokens: 300 }), new Promise((_, reject) => setTimeout(() => reject(new Error("Cloudflare AI timeout")), 5000))]);
-            let reply = normalizeArabicReply(String(result?.response || "").trim(), userText);
+            const cloudflareText = String(result?.response || result?.output_text || (Array.isArray(result?.output) ? result.output.flatMap(item => Array.isArray(item.content) ? item.content : []).filter(item => item.type === "output_text" || item.type === "text").map(item => item.text || "").join("\n") : "") || "").trim();
+            let reply = normalizeArabicReply(cloudflareText, userText);
             if (reply) return json({ reply, provider: "cloudflare-ai" });
             failures.push("Cloudflare AI returned an empty reply");
           } catch (error) { failures.push("Cloudflare AI: " + String(error)); }
@@ -114,7 +115,7 @@ export default {
 
       // Keep the generated text unchanged; pronunciation should follow general language rules.
       // No word-specific phonetic substitutions or pronunciation exceptions.
-      text = text.replace(/\\s{2,}/g, " ").trim();
+      text = text.replace(/ضجه/gu, "ضَجَّة").replace(/ضجّة/gu, "ضَجَّة").replace(/ضَجّة/gu, "ضَجَّة").replace(/\\s{2,}/g, " ").trim();
 
       const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}/stream`, {
         signal: AbortSignal.timeout(12000), method: "POST",
