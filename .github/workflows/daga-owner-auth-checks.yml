@@ -18,6 +18,8 @@ jobs:
         run: node --input-type=module --check < worker.js
       - name: Check owner-auth module syntax
         run: node --input-type=module --check < owner-auth.js
+      - name: Check owner-admin module syntax
+        run: node --input-type=module --check < owner-admin.js
       - name: Apply D1 migrations to a fresh SQLite database
         run: |
           python3 - <<'PY'
