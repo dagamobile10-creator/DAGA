@@ -135,6 +135,7 @@ async function recoveryStart(request, env) {
   if (!await rateLimit(db, env, "recovery:" + ip, 3, 3600)) return json(env, { error: "rate_limited" }, 429);
   const phone = normalizePhone(env.DAGA_OWNER_PHONE), email = String(env.DAGA_OWNER_EMAIL).trim().toLowerCase();
   if (!phone || !email) return json(env, { error: "owner_contact_configuration_invalid" }, 503);
+  if (!await rateLimit(db, env, "recovery-destination:" + phone, 3, 3600)) return json(env, { error: "rate_limited" }, 429);
   const now = Math.floor(Date.now() / 1000), expires = new Date((now + OTP_TTL_SECONDS) * 1000).toISOString();
   const phoneCode = randomDigits(), emailCode = randomDigits(), phoneId = crypto.randomUUID(), emailId = crypto.randomUUID();
   const [phoneHash,emailHash,phoneDest,emailDest] = await Promise.all([
@@ -165,8 +166,8 @@ async function recoveryComplete(request, env) {
   const body = await safeJson(request);
   if (!body) return json(env,{error:"invalid_json"},400);
   const phoneCode=String(body.phoneCode||"").trim(), emailCode=String(body.emailCode||"").trim();
-  const recoveryCode=String(body.recoveryCode||""), newPassword=String(body.newPassword||"");
-  if (!/^\\d{6}$/.test(phoneCode)||!/^\\d{6}$/.test(emailCode)||recoveryCode.length<20||recoveryCode.length>128) return json(env,{error:"valid_codes_and_recovery_code_required"},400);
+  const recoveryCode=String(body.recoveryCode||""), newRecoveryCode=String(body.newRecoveryCode||""), newPassword=String(body.newPassword||"");
+  if (!/^\\d{6}$/.test(phoneCode)||!/^\\d{6}$/.test(emailCode)||recoveryCode.length<20||recoveryCode.length>128||newRecoveryCode.length<20||newRecoveryCode.length>128) return json(env,{error:"valid_codes_and_current_and_new_recovery_codes_required"},400);
   if (newPassword.length<14||newPassword.length>128||!/[a-z]/.test(newPassword)||!/[A-Z]/.test(newPassword)||!/\\d/.test(newPassword)) return json(env,{error:"password_must_be_14_to_128_chars_with_uppercase_lowercase_and_number"},400);
   const owner=await db.prepare("SELECT a.id,a.phone_e164,a.email,c.recovery_code_hash FROM daga_program_owner o JOIN daga_accounts a ON a.id=o.account_id JOIN daga_owner_credentials c ON c.account_id=a.id WHERE o.singleton_id=1 AND a.status='approved'").first();
   if (!owner) return json(env,{error:"owner_not_provisioned"},409);
@@ -180,9 +181,9 @@ async function recoveryComplete(request, env) {
     await audit(db,owner.id,"owner_recovery_complete","failure");
     return json(env,{error:"invalid_expired_or_used_recovery_credentials"},400);
   }
-  const salt=randomToken(24), hash=await derivePassword(newPassword,salt,PBKDF2_ITERATIONS), now=new Date().toISOString();
+  const salt=randomToken(24), hash=await derivePassword(newPassword,salt,PBKDF2_ITERATIONS), newRecoveryHash=await sha256(newRecoveryCode+":"+env.DAGA_OTP_PEPPER), now=new Date().toISOString();
   await db.batch([
-    db.prepare("UPDATE daga_owner_credentials SET password_hash=?,password_salt=?,password_iterations=?,updated_at=? WHERE account_id=?").bind(hash,salt,PBKDF2_ITERATIONS,now,owner.id),
+    db.prepare("UPDATE daga_owner_credentials SET password_hash=?,password_salt=?,password_iterations=?,recovery_code_hash=?,updated_at=? WHERE account_id=?").bind(hash,salt,PBKDF2_ITERATIONS,newRecoveryHash,now,owner.id),
     db.prepare("UPDATE daga_auth_sessions SET revoked_at=? WHERE account_id=? AND revoked_at IS NULL").bind(now,owner.id),
     db.prepare("UPDATE daga_auth_challenges SET consumed_at=? WHERE account_id=? AND purpose='password_reset' AND consumed_at IS NULL").bind(now,owner.id)
   ]);
@@ -316,6 +317,6 @@ async function safeJson(request) { try { return await request.json(); } catch (_
 function json(env, data, status = 200) { return new Response(JSON.stringify(data), { status, headers: cors(env, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" }) }); }
 function cors(env, extra = {}) {
   const allowed = String(env.DAGA_ALLOWED_ORIGINS || "").split(",").map(x => x.trim()).filter(Boolean);
-  const origin = allowed.length && allowed.includes("*") ? "*" : allowed.includes("null") ? "null" : allowed.length === 0 ? "*" : "";
+  const origin = allowed.includes("*") ? "*" : allowed.length === 1 ? allowed[0] : allowed.includes("null") ? "null" : allowed.length === 0 ? "*" : "";
   return { ...(origin ? { "Access-Control-Allow-Origin": origin } : {}), "Access-Control-Allow-Methods": "GET,POST,OPTIONS", "Access-Control-Allow-Headers": "Content-Type,Authorization", "Access-Control-Max-Age": "600", "Vary": "Origin", ...extra };
 }
