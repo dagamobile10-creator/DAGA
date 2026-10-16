@@ -84,7 +84,7 @@ jobs:
           versions="$(curl -fsS --max-time 20 -H "Authorization: Bearer $CF_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/workers/scripts/daga-voice/versions")"
           for version_id in $(echo "$versions" | jq -r '.result[]?.id // empty'); do
             version="$(curl -fsS --max-time 20 -H "Authorization: Bearer $CF_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/workers/scripts/daga-voice/versions/$version_id")"
-            recovered="$(echo "$version" | jq -r '.. | objects | select((.name? == "LIVEAVATAR_API_KEY" or .name? == "LIVE_AVATAR_API_KEY" or .name? == "LIVEAVATAR_KEY") and (.type? == "plain_text" or .type? == "text") ) | (.text // .value // empty)' | head -n1)"
+            recovered="$(echo "$version" | jq -r '.. | objects | select((.name? | strings | test("LIVE.?AVATAR.*(KEY|TOKEN)"; "i")) and (.type? == "plain_text" or .type? == "text")) | (.text // .value // empty)' | head -n1)"
             if [ -n "$recovered" ] && [ "$recovered" != "null" ]; then
               echo "::add-mask::$recovered"
               echo "LIVEAVATAR_RECOVERED_KEY=$recovered" >> "$GITHUB_ENV"
