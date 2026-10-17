@@ -168,8 +168,8 @@ async function recoveryComplete(request, env) {
   if (!body) return json(env,{error:"invalid_json"},400);
   const phoneCode=String(body.phoneCode||"").trim(), emailCode=String(body.emailCode||"").trim();
   const recoveryCode=String(body.recoveryCode||""), newRecoveryCode=String(body.newRecoveryCode||""), newPassword=String(body.newPassword||"");
-  if (!/^\\d{6}$/.test(phoneCode)||!/^\\d{6}$/.test(emailCode)||recoveryCode.length<20||recoveryCode.length>128||newRecoveryCode.length<20||newRecoveryCode.length>128) return json(env,{error:"valid_codes_and_current_and_new_recovery_codes_required"},400);
-  if (newPassword.length<14||newPassword.length>128||!/[a-z]/.test(newPassword)||!/[A-Z]/.test(newPassword)||!/\\d/.test(newPassword)) return json(env,{error:"password_must_be_14_to_128_chars_with_uppercase_lowercase_and_number"},400);
+  if (!/^\d{6}$/.test(phoneCode)||!/^\d{6}$/.test(emailCode)||recoveryCode.length<20||recoveryCode.length>128||newRecoveryCode.length<20||newRecoveryCode.length>128) return json(env,{error:"valid_codes_and_current_and_new_recovery_codes_required"},400);
+  if (newPassword.length<14||newPassword.length>128||!/[a-z]/.test(newPassword)||!/[A-Z]/.test(newPassword)||!/\d/.test(newPassword)) return json(env,{error:"password_must_be_14_to_128_chars_with_uppercase_lowercase_and_number"},400);
   const owner=await db.prepare("SELECT a.id,a.phone_e164,a.email,c.recovery_code_hash FROM daga_program_owner o JOIN daga_accounts a ON a.id=o.account_id JOIN daga_owner_credentials c ON c.account_id=a.id WHERE o.singleton_id=1 AND a.status='approved'").first();
   if (!owner) return json(env,{error:"owner_not_provisioned"},409);
   if (!await rateLimit(db,env,"recovery-complete:"+(request.headers.get("CF-Connecting-IP")||"unknown"),5,3600)) return json(env,{error:"rate_limited"},429);
@@ -244,7 +244,7 @@ async function ownerLoginVerify(request,env) {
   if(!db||!env.DAGA_OTP_PEPPER)return json(env,{error:"owner_auth_not_configured"},503);
   const body=await safeJson(request);if(!body)return json(env,{error:"invalid_json"},400);
   const phoneCode=String(body.phoneCode||"").trim(),emailCode=String(body.emailCode||"").trim();
-  if(!/^\\d{6}$/.test(phoneCode)||!/^\\d{6}$/.test(emailCode))return json(env,{error:"valid_phone_and_email_codes_required"},400);
+  if(!/^\d{6}$/.test(phoneCode)||!/^\d{6}$/.test(emailCode))return json(env,{error:"valid_phone_and_email_codes_required"},400);
   const ip=request.headers.get("CF-Connecting-IP")||"unknown";
   if(!await rateLimit(db,env,"login-verify:"+ip,8,900))return json(env,{error:"rate_limited"},429);
   const owner=await db.prepare("SELECT a.id,a.role,a.status,a.phone_e164,a.email FROM daga_program_owner o JOIN daga_accounts a ON a.id=o.account_id WHERE o.singleton_id=1").first();
