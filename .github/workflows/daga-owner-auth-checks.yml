@@ -89,6 +89,8 @@ jobs:
               print(("PASS" if ok else "FAIL") + ": " + name)
           assert all(checks.values()), "Invitation security regression guard failed"
           PY
+      - name: Run company invitation security tests
+        run: python3 tests/test_company_invitations.py
       - name: Apply D1 migrations to a fresh SQLite database
         run: |
           python3 - <<'PY'
