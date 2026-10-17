@@ -262,6 +262,16 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertIn('invite.inviter_account_id !== account.id', src)
 
 
+
+    def test_company_cors_does_not_wildcard_when_allowlist_is_missing(self):
+        source = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
+        start = source.index("function cors(env, extra = {})")
+        end = source.index("\n}", start) + 2
+        handler = source[start:end]
+        self.assertIn('allowed.includes("*") ? "*" :', handler)
+        self.assertIn('allowed.length === 0 ? ""', handler)
+        self.assertNotIn('allowed.length === 0 ? "*" :', handler)
+
     def test_company_and_invitation_pages_set_no_store_and_security_headers(self):
         worker = (ROOT / "worker.js").read_text(encoding="utf-8")
         for route in ('url.pathname === "/company"', 'url.pathname === "/invite"'):
