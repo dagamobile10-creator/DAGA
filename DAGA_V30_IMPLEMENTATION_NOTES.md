@@ -66,7 +66,7 @@ The current branch includes implemented owner-auth groundwork and company invita
 
 ## Current release status
 
-The development branch now has working code paths for company invitation creation, revocation, acceptance, invitation-bound registration, phone+email OTP login, company memberships, and the public/company/invitation HTML pages. CI passed the current syntax, security-regression, and fresh-SQLite-migration checks in run [38996021940](https://github.com/dagamobile10-creator/DAGA/actions/runs/38996021940). The isolated staging workflow has created/reused a separate staging D1, applied migrations 0001–0008, and is deploying/verifying a separate staging Worker in run [38996019065](https://github.com/dagamobile10-creator/DAGA/actions/runs/38996019065); its final outcome must be checked before claiming the staging smoke tests passed.
+The development branch now has working code paths for company invitation creation, revocation, acceptance, invitation-bound registration, phone+email OTP login, company memberships, and the public/company/invitation HTML pages. CI passed the current syntax, security-regression, and fresh-SQLite-migration checks in run [38996021940](https://github.com/dagamobile10-creator/DAGA/actions/runs/38996021940). The isolated staging workflow completed successfully in run [38996019065](https://github.com/dagamobile10-creator/DAGA/actions/runs/38996019065): it created/reused a separate staging D1, applied migrations 0001–0008, deployed a separate staging Worker, and passed HTTP smoke tests for `/go/`, `/company/`, `/invite/`, unauthenticated company/invitation endpoints, and registration failing closed while delivery secrets are absent. This is staging validation, not production deployment or proof of real SMS/email delivery.
 
 ## Owner admin API and console progress
 
@@ -77,7 +77,7 @@ The development branch now has working code paths for company invitation creatio
 
 ## Remaining production blockers
 
-A successful staging deployment is not a production release. Real SMS/email delivery, end-to-end two-device invitation testing, manager permission enforcement under real sessions, expired/replayed/concurrent invite behavior, session revocation, and cross-company isolation still require staging verification. The existing `/memory`, `/chat`, `/tts`, and LiveAvatar routes are not comprehensively integrated with company identity/authorization. Preserve the existing LIVE DAGA experience and do not merge PR #7 or deploy these changes to the production `daga-voice` Worker until release gates are completed.
+A successful staging deployment is not a production release. The current staging smoke tests confirm routes and fail-closed behavior, but the registration endpoint returned the expected unavailable status while delivery secrets were absent. Configure all required staging auth/delivery secrets, then test real SMS/email delivery, company-owner approval, two-device invitation registration/acceptance, manager permission enforcement, expired/replayed/concurrent invites, session revocation, and cross-company isolation. The existing `/memory`, `/chat`, `/tts`, and LiveAvatar routes are not comprehensively integrated with company identity/authorization. Preserve the existing LIVE DAGA experience and do not merge PR #7 or deploy these changes to the production `daga-voice` Worker until release gates are completed.
 
 ## Company terminology and stable identities
 
