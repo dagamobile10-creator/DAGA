@@ -205,6 +205,15 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertIn("Number(results?.[3]?.meta?.changes || 0) !== 1", handler)
         self.assertIn("Number(results?.[4]?.meta?.changes || 0) !== 1", handler)
 
+    def test_company_login_otp_verification_is_rate_limited(self):
+        source = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
+        start = source.index("async function companyLoginVerify(")
+        end = source.index("\nasync function registerStart", start)
+        handler = source[start:end]
+        self.assertIn('company-login-verify-ip:', handler)
+        self.assertIn('company-login-verify-account:', handler)
+        self.assertIn('companyRateLimit(db, env, "company-login-verify-account:" + account.id, 8, 900)', handler)
+
     def test_api_guards_role_escalation_and_authentication(self):
         src = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
         self.assertIn("authenticatedAccount(request, db)", src)
