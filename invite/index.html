@@ -59,6 +59,8 @@ button{cursor:pointer;border:0;border-radius:11px;padding:13px 15px;font:inherit
   let sessionToken = "";
   const validToken = /^[A-Za-z0-9_-]{40,64}$/.test(token);
   if (!validToken) { $("invalid").classList.remove("hidden"); $("app").classList.add("hidden"); return; }
+  // Keep the bearer invitation token only in this page's memory, not the visible URL/history.
+  history.replaceState(null, "", location.pathname);
 
   function say(message, kind) {
     const el = $("message");
