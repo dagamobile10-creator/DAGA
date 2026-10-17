@@ -457,5 +457,31 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertEqual(expired.rowcount, 0)
 
 
+    def test_session_tokens_are_unique_and_revocation_is_one_way(self):
+        self.db.execute(
+            """INSERT INTO daga_auth_sessions
+            (id,account_id,token_hash,created_at,expires_at,last_seen_at)
+            VALUES ('session-1','owner','unique-token-hash',?,?,?)""",
+            (self.now, "2026-10-18T00:00:00.000Z", self.now),
+        )
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.db.execute(
+                """INSERT INTO daga_auth_sessions
+                (id,account_id,token_hash,created_at,expires_at,last_seen_at)
+                VALUES ('session-2','owner','unique-token-hash',?,?,?)""",
+                (self.now, "2026-10-18T00:00:00.000Z", self.now),
+            )
+        first = self.db.execute(
+            "UPDATE daga_auth_sessions SET revoked_at=? WHERE token_hash=? AND revoked_at IS NULL",
+            (self.now, "unique-token-hash"),
+        )
+        replay = self.db.execute(
+            "UPDATE daga_auth_sessions SET revoked_at=? WHERE token_hash=? AND revoked_at IS NULL",
+            (self.now, "unique-token-hash"),
+        )
+        self.assertEqual(first.rowcount, 1)
+        self.assertEqual(replay.rowcount, 0)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
