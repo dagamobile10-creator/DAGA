@@ -4,9 +4,10 @@ Do not use production data, real customer accounts, or real payment records duri
 
 ## Prerequisites
 - [ ] Dedicated D1 database is created and bound as `DAGA_APP_DB`.
-- [ ] Migrations 0001–0005 are applied in order, including store identity and invitations.
+- [ ] Migrations 0001–0006 are applied in order, including store identity, invitations, and stable public IDs.
 - [ ] Worker secrets are set in Cloudflare: bootstrap token, OTP pepper, owner phone/email, Twilio credentials/sender, Resend API key, verified sender.
 - [ ] `DAGA_ALLOWED_ORIGINS` is set to the exact staging frontend origin.
+- [ ] `DAGA_APP_BASE_URL` is set to the trusted HTTPS staging frontend origin/path used to create invitation links; it is never derived from the request Host header.
 - [ ] Provider test delivery succeeds; do not expose codes in logs.
 - [ ] Bootstrap token is generated out-of-band and not committed.
 
@@ -50,6 +51,7 @@ Do not use production data, real customer accounts, or real payment records duri
 - [ ] Every store receives a stable public ID distinct from its internal database ID; changing the display name does not change either identity.
 - [ ] The store QR identifies the store only and grants no membership or session.
 - [ ] Invitation tokens are generated with cryptographic randomness; only token hashes are stored, and raw tokens are returned only once.
+- [ ] `POST /api/company/invitations` fails closed until the trusted HTTPS `DAGA_APP_BASE_URL` is configured.
 - [ ] Invitation acceptance requires an authenticated account and server-side checks of token hash, store, expiry, status, use count, intended role, and inviter permissions.
 - [ ] Invitation acceptance and membership creation are atomic; replaying or concurrently accepting the same invitation cannot create extra memberships.
 - [ ] Revoked and expired invitations fail; a manager cannot grant a role or permission beyond their own delegation limits.
