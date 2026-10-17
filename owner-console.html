@@ -16,7 +16,8 @@
 <h1>دخول مالك التطبيق</h1><p>الدخول مخصص لحساب المالك الموثق فقط. إنشاء الحساب وتأكيد التليفون والإيميل يتمان من خلال إجراءات الإعداد الآمنة على السيرفر.</p>
 <form id="loginForm"><label for="identifier">رقم التليفون أو الإيميل</label><input id="identifier" autocomplete="username" required>
 <label for="password">كلمة السر</label><input id="password" type="password" autocomplete="current-password" required>
-<button id="loginButton" type="submit" style="width:100%">دخول آمن</button></form>
+<button id="loginButton" type="submit" style="width:100%">تحقق من كلمة السر</button></form>
+<form id="loginVerifyForm" class="hidden"><p>تم إرسال كودين منفصلين إلى رقم المالك والإيميل. أدخل الكودين لإكمال تسجيل الدخول.</p><label>كود التليفون (6 أرقام)</label><input id="loginPhoneCode" inputmode="numeric" pattern="[0-9]{6}" required><label>كود الإيميل (6 أرقام)</label><input id="loginEmailCode" inputmode="numeric" pattern="[0-9]{6}" required><button type="submit">تأكيد الدخول</button></form>
 <p><small>الجلسة محفوظة في ذاكرة الصفحة فقط. إعادة تحميل الصفحة تتطلب تسجيل الدخول مرة أخرى.</small></p>
 <details style="margin-top:18px"><summary style="cursor:pointer;color:var(--gold)">استرداد حساب المالك</summary>
 <p>هنبعت كودين منفصلين على رقم المالك وإيميله المسجلين في إعدادات السيرفر. لازم كمان كود الاسترداد الحالي اللي اتعمل وقت إعداد الحساب.</p>
@@ -47,7 +48,7 @@
 <script>
 (function(){
 const API='https://daga-voice.dagamobile10.workers.dev';
-let sessionToken='';
+let sessionToken='';\nlet pendingLogin=false;
 const $=id=>document.getElementById(id);
 function message(text,type){const n=$('notice');n.textContent=text;n.className='notice '+(type||'');n.classList.remove('hidden');window.scrollTo({top:0,behavior:'smooth'});}
 function escapeHtml(v){return String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -67,7 +68,8 @@ table('stores',['المحل','الحالة','صاحب الحساب','الإجر�
 table('columns',['النطاق','المفتاح','الاسم الظاهر','النوع','مفتاح الحساب','إجراء'],(cl.columns||[]).map(c=>[escapeHtml(c.scope),escapeHtml(c.stable_key),escapeHtml(c.display_name),escapeHtml(c.data_type),escapeHtml(c.calculation_key||'—'),'<button data-column-edit=\"'+escapeHtml(c.id)+'\">تعديل الاسم</button>']));
 }
 function sum(rows){return (rows||[]).reduce((n,r)=>n+Number(r.count||0),0);}
-$('loginForm').addEventListener('submit',async e=>{e.preventDefault();$('loginButton').disabled=true;try{const r=await fetch(API+'/owner/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({identifier:$('identifier').value.trim(),password:$('password').value})});const d=await r.json();if(!r.ok)throw new Error(d.error||'فشل تسجيل الدخول');sessionToken=d.sessionToken;$('login').classList.add('hidden');$('dashboard').classList.remove('hidden');$('logout').classList.remove('hidden');$('ownerIdentity').textContent='حساب مالك موثّق: '+(d.account.emailMasked||'')+' — الجلسة تنتهي '+d.expiresAt;message('تم تسجيل الدخول.','ok');await load();}catch(err){message(err.message,'error')}finally{$('loginButton').disabled=false;}});
+$('loginForm').addEventListener('submit',async e=>{e.preventDefault();$('loginButton').disabled=true;try{const r=await fetch(API+'/owner/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({identifier:$('identifier').value.trim(),password:$('password').value})});const d=await r.json();if(!r.ok)throw new Error(d.error||'فشل تسجيل الدخول');if(!d.requiresVerification)throw new Error('استجابة تحقق غير متوقعة');pendingLogin=true;$('loginVerifyForm').classList.remove('hidden');message('تم التحقق من كلمة السر وإرسال أكواد التحقق.','ok');}catch(err){message(err.message,'error')}finally{$('loginButton').disabled=false;}});
+$('loginVerifyForm').addEventListener('submit',async e=>{e.preventDefault();if(!pendingLogin)return;try{const r=await fetch(API+'/owner/auth/login/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phoneCode:$('loginPhoneCode').value.trim(),emailCode:$('loginEmailCode').value.trim()})});const d=await r.json();if(!r.ok)throw new Error(d.error||'فشل التحقق');sessionToken=d.sessionToken;pendingLogin=false;$('login').classList.add('hidden');$('dashboard').classList.remove('hidden');$('logout').classList.remove('hidden');$('ownerIdentity').textContent='حساب مالك موثّق: '+(d.account.emailMasked||'')+' — الجلسة تنتهي '+d.expiresAt;message('تم التحقق من كلمة السر والتليفون والإيميل.','ok');await load();}catch(err){message(err.message,'error')}});
 $('logout').addEventListener('click',async()=>{try{await api('/owner/auth/logout',{method:'POST',body:'{}'})}catch(_){}sessionToken='';$('dashboard').classList.add('hidden');$('logout').classList.add('hidden');$('login').classList.remove('hidden');$('password').value='';message('تم إنهاء الجلسة من الصفحة.','ok')});
 $('refresh').addEventListener('click',async()=>{try{await load();message('تم تحديث البيانات.','ok')}catch(e){message(e.message,'error')}});
 $('planForm').addEventListener('submit',async e=>{e.preventDefault();try{const quota=$('planQuota').value;await api('/owner/admin/plans',{method:'POST',body:JSON.stringify({service:$('planService').value,name:$('planName').value,priceMinor:Math.round(Number($('planPrice').value)*100),durationDays:Number($('planDays').value),wordQuota:quota?Number(quota):null})});$('planForm').reset();$('planDays').value='30';await load();message('تم إنشاء الخطة.','ok')}catch(err){message(err.message,'error')}});
