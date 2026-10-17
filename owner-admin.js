@@ -22,6 +22,12 @@ export async function handleOwnerAdmin(request, env, url) {
       return json(env, { ok: true, stores: stores.results || [], accounts: pendingAccounts.results || [], activePlans: plans.results || [], pendingPaymentReviews: pendingPayments?.count || 0, activeEntitlements: activeEntitlements.results || [], liveWordsOutstanding: wordBalance?.remaining || 0 });
     }
 
+    if(path==="/owner/admin/audit-log"&&request.method==="GET"){
+      const limit=Math.min(200,Math.max(1,Number(url.searchParams.get("limit")||100)));
+      const rows=await db.prepare("SELECT id,actor_account_id,action,target_type,target_id,details_json,created_at FROM daga_audit_log ORDER BY created_at DESC,id DESC LIMIT ?").bind(limit).all();
+      return json(env,{ok:true,events:rows.results||[]});
+    }
+
     if (path === "/owner/admin/plans" && request.method === "GET") {
       const result = await db.prepare("SELECT id,service,name,price_minor,currency,duration_days,word_quota,features_json,is_active,version,updated_at FROM daga_plans ORDER BY service,name").all();
       return json(env, { ok: true, plans: result.results || [] });
