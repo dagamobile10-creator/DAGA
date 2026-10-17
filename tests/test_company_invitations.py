@@ -123,6 +123,9 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertIn('intendedRole === "manager" && authority.role !== "store_owner"', src)
         self.assertIn('u.protocol !== "https:"', src)
         self.assertIn("await sha256(token)", src)
+        self.assertIn('authority.role === "manager" && !authority.permissions.inviteEmployees', src)
+        self.assertIn('WHERE store_id=? AND inviter_account_id=?', src)
+        self.assertIn('invite.inviter_account_id !== account.id', src)
 
 
 if __name__ == "__main__":
