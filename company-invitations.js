@@ -48,6 +48,8 @@ async function createInvitation(request, env, db, account) {
 
   const permissions = normalizePermissions(body.permissions, intendedRole, authority);
   if (!permissions) return json(env, { error: "invalid_or_escalated_permissions" }, 400);
+  const base = trustedBaseUrl(env.DAGA_APP_BASE_URL);
+  if (!base) return json(env, { error: "trusted_app_base_url_not_configured" }, 503);
   const token = randomToken(32);
   const tokenHash = await sha256(token);
   const id = crypto.randomUUID();
@@ -56,12 +58,6 @@ async function createInvitation(request, env, db, account) {
   await db.prepare("INSERT INTO daga_store_invitations (id,store_id,inviter_account_id,token_hash,intended_role,permissions_json,status,expires_at,max_uses,use_count) VALUES (?,?,?,?,?,?,'pending',?,1,0)")
     .bind(id, store.id, account.id, tokenHash, intendedRole, JSON.stringify(permissions), expiresAt).run();
   await audit(db, account.id, "company_invitation_created", id, { storeId: store.id, role: intendedRole, expiresAt });
-  const base = trustedBaseUrl(env.DAGA_APP_BASE_URL);
-  if (!base) {
-    await db.prepare("UPDATE daga_store_invitations SET status='revoked',revoked_at=? WHERE id=? AND status='pending'")
-      .bind(new Date().toISOString(), id).run();
-    return json(env, { error: "trusted_app_base_url_not_configured" }, 503);
-  }
   const inviteUrl = base + "/invite?token=" + encodeURIComponent(token);
   return json(env, { ok: true, invitation: { id, companyPublicId: store.public_id || null, role: intendedRole, expiresAt, maxUses: 1, inviteUrl, token } }, 201);
 }
@@ -128,9 +124,10 @@ async function getAuthority(db, account, store) {
   const membership = await db.prepare("SELECT role,status,permissions_json FROM daga_store_memberships WHERE store_id=? AND account_id=? LIMIT 1")
     .bind(store.id, account.id).first();
   if (!membership || membership.status !== "active" || !["manager", "employee"].includes(membership.role)) return null;
-  let permissions = {};
-  try { permissions = JSON.parse(membership.permissions_json || "{}"); } catch (_) {}
-  if (!permissions || typeof permissions !== "object" || Array.isArray(permissions)) permissions = {};
+  let stored = {};
+  try { stored = JSON.parse(membership.permissions_json || "{}"); } catch (_) {}
+  const permissions = {};
+  for (const key of ["inviteEmployees", "manageInventory", "viewReports"]) permissions[key] = Boolean(stored && stored[key] === true);
   return { role: membership.role, permissions };
 }
 
