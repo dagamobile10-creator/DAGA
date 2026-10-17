@@ -53,5 +53,5 @@ jobs:
           }
           missing = required - names
           assert not missing, f"Missing tables: {sorted(missing)}"
-          print("All three migrations applied successfully; required tables exist.")
+          print("All four migrations applied successfully; required tables exist.")
           PY
