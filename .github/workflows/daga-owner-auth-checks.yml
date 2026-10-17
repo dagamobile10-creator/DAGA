@@ -41,7 +41,6 @@ jobs:
               "migrations/0002_daga_owner_auth.sql",
               "migrations/0003_daga_owner_credentials.sql",
               "migrations/0004_daga_offers.sql",
-              "migrations/0005_daga_promotions.sql",
           ):
               with open(path, encoding="utf-8") as f:
                   db.executescript(f.read())
@@ -49,7 +48,7 @@ jobs:
           required = {
               "daga_accounts", "daga_program_owner", "daga_auth_challenges",
               "daga_auth_sessions", "daga_security_events", "daga_offers", "daga_order_price_adjustments",
-              "daga_owner_credentials", "daga_owner_bootstrap_state", "daga_promotions",
+              "daga_owner_credentials", "daga_owner_bootstrap_state",
               "daga_auth_rate_limits",
           }
           missing = required - names
