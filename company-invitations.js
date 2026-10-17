@@ -4,7 +4,7 @@ const MAX_INVITE_TTL_HOURS = 24 * 14;
 const DEFAULT_INVITE_TTL_HOURS = 72;
 export async function handleCompanyInvitations(request, env, url) {
   const path = url.pathname.replace(/\/+$/, "") || "/";
-  const publicPaths = ["/api/company/auth/register", "/api/company/auth/register/verify"];
+  const publicPaths = ["/api/company/auth/register", "/api/company/auth/register/verify", "/api/company/auth/login", "/api/company/auth/login/verify"];
   if (!publicPaths.includes(path) && !["/api/company/invitations", "/api/company/invitations/accept"].includes(path) &&
       !/^\/api\/company\/invitations\/[0-9a-f-]{36}(?:\/revoke)?$/i.test(path)) return null;
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors(env) });
@@ -12,6 +12,8 @@ export async function handleCompanyInvitations(request, env, url) {
   if (!db) return json(env, { error: "application_database_not_configured" }, 503);
   if (path === "/api/company/auth/register" && request.method === "POST") return registerStart(request, env, db);
   if (path === "/api/company/auth/register/verify" && request.method === "POST") return registerVerify(request, env, db);
+  if (path === "/api/company/auth/login" && request.method === "POST") return companyLoginStart(request, env, db);
+  if (path === "/api/company/auth/login/verify" && request.method === "POST") return companyLoginVerify(request, env, db);
   const account = await authenticatedAccount(request, db);
   if (!account) return json(env, { error: "authenticated_account_required" }, 401);
   if (account.status !== "approved" || account.role === "program_owner") return json(env, { error: "active_company_account_required" }, 403);
@@ -31,6 +33,79 @@ export async function handleCompanyInvitations(request, env, url) {
   }
 }
 
+
+async function companyLoginStart(request, env, db) {
+  if (!env.DAGA_OTP_PEPPER || !env.TWILIO_ACCOUNT_SID || !env.TWILIO_AUTH_TOKEN || !env.TWILIO_FROM_NUMBER || !env.RESEND_API_KEY || !env.DAGA_EMAIL_FROM) return json(env, { error: "company_login_not_configured" }, 503);
+  const body = await safeJson(request);
+  if (!body) return json(env, { error: "invalid_json" }, 400);
+  const identifier = String(body.identifier || "").trim();
+  const phoneInput = normalizeCompanyPhone(identifier);
+  const emailInput = identifier.toLowerCase();
+  if (!phoneInput && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailInput)) return json(env, { error: "valid_phone_or_email_required" }, 400);
+  const ip = request.headers.get("CF-Connecting-IP") || "unknown";
+  if (!await companyRateLimit(db, env, "company-login-ip:" + ip, 8, 900)) return json(env, { error: "rate_limited" }, 429);
+  const account = await db.prepare("SELECT id,phone_e164,email FROM daga_accounts WHERE (phone_e164=? OR lower(email)=?) AND status='approved' AND role IN ('manager','employee') LIMIT 1").bind(phoneInput || "__none__", emailInput).first();
+  if (!account || !account.phone_e164 || !account.email) return json(env, { error: "invalid_credentials_or_company_account_unavailable" }, 401);
+  if (!await companyRateLimit(db, env, "company-login-account:" + account.id, 5, 900)) return json(env, { error: "rate_limited" }, 429);
+  const expires = new Date(Date.now() + 600000).toISOString(), phoneCode = companyDigits(), emailCode = companyDigits();
+  const phoneId = crypto.randomUUID(), emailId = crypto.randomUUID();
+  const [phoneHash, emailHash, phoneDest, emailDest] = await Promise.all([
+    sha256(phoneId + ":" + phoneCode + ":" + env.DAGA_OTP_PEPPER), sha256(emailId + ":" + emailCode + ":" + env.DAGA_OTP_PEPPER),
+    sha256("phone:" + account.phone_e164), sha256("email:" + String(account.email).toLowerCase())
+  ]);
+  await db.batch([
+    db.prepare("INSERT INTO daga_company_login_challenges (id,account_id,channel,destination_hash,code_hash,expires_at) VALUES (?,?,'phone',?,?,?)").bind(phoneId, account.id, phoneDest, phoneHash, expires),
+    db.prepare("INSERT INTO daga_company_login_challenges (id,account_id,channel,destination_hash,code_hash,expires_at) VALUES (?,?,'email',?,?,?)").bind(emailId, account.id, emailDest, emailHash, expires)
+  ]);
+  try {
+    await Promise.all([
+      companySendSms(env, account.phone_e164, "DAGA sign-in code: " + phoneCode + ". Expires in 10 minutes."),
+      companySendEmail(env, account.email, "DAGA sign-in verification", "<p>Your DAGA sign-in code is <strong>" + emailCode + "</strong>.</p><p>It expires in 10 minutes.</p>")
+    ]);
+  } catch (_) {
+    const at = new Date().toISOString();
+    await db.batch([
+      db.prepare("UPDATE daga_company_login_challenges SET consumed_at=? WHERE id=? AND consumed_at IS NULL").bind(at, phoneId),
+      db.prepare("UPDATE daga_company_login_challenges SET consumed_at=? WHERE id=? AND consumed_at IS NULL").bind(at, emailId)
+    ]);
+    return json(env, { error: "verification_delivery_failed" }, 502);
+  }
+  return json(env, { ok: true, requiresVerification: true, phoneMasked: maskCompanyPhone(account.phone_e164), emailMasked: maskCompanyEmail(account.email), expiresInSeconds: 600 }, 202);
+}
+
+async function companyLoginVerify(request, env, db) {
+  if (!env.DAGA_OTP_PEPPER) return json(env, { error: "company_login_not_configured" }, 503);
+  const body = await safeJson(request);
+  if (!body) return json(env, { error: "invalid_json" }, 400);
+  const identifier = String(body.identifier || "").trim(), phone = normalizeCompanyPhone(identifier), email = identifier.toLowerCase();
+  const phoneCode = String(body.phoneCode || "").trim(), emailCode = String(body.emailCode || "").trim();
+  if ((!phone && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) || !/^\d{6}$/.test(phoneCode) || !/^\d{6}$/.test(emailCode)) return json(env, { error: "valid_login_fields_required" }, 400);
+  const account = await db.prepare("SELECT id,phone_e164,email,display_name,role,status,public_id FROM daga_accounts WHERE (phone_e164=? OR lower(email)=?) AND status='approved' AND role IN ('manager','employee') LIMIT 1").bind(phone || "__none__", email).first();
+  if (!account || !account.phone_e164 || !account.email) return json(env, { error: "invalid_expired_or_used_verification_code" }, 400);
+  const now = new Date().toISOString();
+  const [p, e] = await Promise.all([
+    db.prepare("SELECT id,code_hash FROM daga_company_login_challenges WHERE account_id=? AND channel='phone' AND destination_hash=? AND consumed_at IS NULL AND attempts<5 AND expires_at>? ORDER BY created_at DESC LIMIT 1").bind(account.id, await sha256("phone:" + account.phone_e164), now).first(),
+    db.prepare("SELECT id,code_hash FROM daga_company_login_challenges WHERE account_id=? AND channel='email' AND destination_hash=? AND consumed_at IS NULL AND attempts<5 AND expires_at>? ORDER BY created_at DESC LIMIT 1").bind(account.id, await sha256("email:" + String(account.email).toLowerCase()), now).first()
+  ]);
+  if (!p || !e) return json(env, { error: "invalid_expired_or_used_verification_code" }, 400);
+  const pa = await db.prepare("UPDATE daga_company_login_challenges SET attempts=attempts+1 WHERE id=? AND consumed_at IS NULL AND attempts<5 AND expires_at>? RETURNING attempts").bind(p.id, now).first();
+  const ea = await db.prepare("UPDATE daga_company_login_challenges SET attempts=attempts+1 WHERE id=? AND consumed_at IS NULL AND attempts<5 AND expires_at>? RETURNING attempts").bind(e.id, now).first();
+  const validPhone = constantTimeEqualCompany(await sha256(p.id + ":" + phoneCode + ":" + env.DAGA_OTP_PEPPER), p.code_hash);
+  const validEmail = constantTimeEqualCompany(await sha256(e.id + ":" + emailCode + ":" + env.DAGA_OTP_PEPPER), e.code_hash);
+  if (!pa || !ea || !validPhone || !validEmail) return json(env, { error: "invalid_expired_or_used_verification_code" }, 400);
+  const sessionToken = companyRandomToken(32), sessionHash = await sha256(sessionToken), sessionId = crypto.randomUUID(), expiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString();
+  try {
+    const results = await db.batch([
+      db.prepare("UPDATE daga_company_login_challenges SET consumed_at=? WHERE id=? AND consumed_at IS NULL AND attempts<=5 AND expires_at>?").bind(now, p.id, now),
+      db.prepare("UPDATE daga_company_login_challenges SET consumed_at=? WHERE id=? AND consumed_at IS NULL AND attempts<=5 AND expires_at>?").bind(now, e.id, now),
+      db.prepare("INSERT INTO daga_auth_sessions (id,account_id,token_hash,created_at,expires_at,last_seen_at) SELECT ?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM daga_company_login_challenges WHERE id=? AND consumed_at=? AND channel='phone') AND EXISTS (SELECT 1 FROM daga_company_login_challenges WHERE id=? AND consumed_at=? AND channel='email') AND EXISTS (SELECT 1 FROM daga_accounts WHERE id=? AND status='approved')").bind(sessionId, account.id, sessionHash, now, expiresAt, now, p.id, now, e.id, now, account.id)
+    ]);
+    if (Number(results?.[2]?.meta?.changes || 0) !== 1) return json(env, { error: "login_race_or_conflict_retry" }, 409);
+  } catch (_) {
+    return json(env, { error: "company_login_failed" }, 409);
+  }
+  return json(env, { ok: true, account: { id: account.id, publicId: account.public_id || null, displayName: account.display_name, role: account.role, phoneMasked: maskCompanyPhone(account.phone_e164), emailMasked: maskCompanyEmail(account.email) }, sessionToken, expiresAt });
+}
 
 async function registerStart(request, env, db) {
   const required = ["DAGA_OTP_PEPPER", "TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER", "RESEND_API_KEY", "DAGA_EMAIL_FROM"];
