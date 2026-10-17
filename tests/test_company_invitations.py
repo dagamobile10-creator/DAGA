@@ -262,9 +262,6 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertIn('invite.inviter_account_id !== account.id', src)
 
 
-if __name__ == "__main__":
-    unittest.main(verbosity=2)
-
     def test_company_and_invitation_pages_set_no_store_and_security_headers(self):
         worker = (ROOT / "worker.js").read_text(encoding="utf-8")
         for route in ('url.pathname === "/company"', 'url.pathname === "/invite"'):
@@ -286,3 +283,5 @@ if __name__ == "__main__":
         self.assertIn('"Content-Security-Policy":', handler)
         self.assertIn("frame-ancestors 'none'", handler)
 
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
