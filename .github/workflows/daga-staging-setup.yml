@@ -1,0 +1,116 @@
+name: DAGA isolated staging setup
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  provision-staging:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Validate staging secrets and Cloudflare access
+        env:
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          DAGA_OTP_PEPPER: ${{ secrets.DAGA_OTP_PEPPER }}
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+          TWILIO_FROM_NUMBER: ${{ secrets.TWILIO_FROM_NUMBER }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          DAGA_EMAIL_FROM: ${{ secrets.DAGA_EMAIL_FROM }}
+        run: |
+          set -euo pipefail
+          for name in CF_API_TOKEN CF_ACCOUNT_ID DAGA_OTP_PEPPER TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN TWILIO_FROM_NUMBER RESEND_API_KEY DAGA_EMAIL_FROM; do
+            if [ -z "${!name:-}" ]; then echo "::error::Missing required GitHub secret: $name"; exit 1; fi
+          done
+          verify="$(curl -fsS -H "Authorization: Bearer $CF_API_TOKEN" https://api.cloudflare.com/client/v4/user/tokens/verify)"
+          echo "$verify" | jq -e '.success == true and .result.status == "active"' >/dev/null
+          account="$(curl -fsS -H "Authorization: Bearer $CF_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID")"
+          echo "$account" | jq -e '.success == true' >/dev/null
+      - name: Create or reuse isolated staging D1
+        id: db
+        env:
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          endpoint="https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/d1/database"
+          listing="$(curl -fsS -G -H "Authorization: Bearer $CF_API_TOKEN" --data-urlencode "name=daga-app-staging" "$endpoint")"
+          db_id="$(echo "$listing" | jq -r '.result[]? | select(.name=="daga-app-staging") | .uuid' | head -n1)"
+          if [ -z "$db_id" ] || [ "$db_id" = "null" ]; then
+            created="$(curl -fsS -X POST "$endpoint" -H "Authorization: Bearer $CF_API_TOKEN" -H "Content-Type: application/json" --data '{"name":"daga-app-staging"}')"
+            echo "$created" | jq -e '.success == true' >/dev/null
+            db_id="$(echo "$created" | jq -r '.result.uuid')"
+          fi
+          test -n "$db_id" && test "$db_id" != "null"
+          echo "database_id=$db_id" >> "$GITHUB_OUTPUT"
+      - name: Prepare isolated staging Worker config
+        env:
+          D1_ID: ${{ steps.db.outputs.database_id }}
+        run: |
+          set -euo pipefail
+          cat > wrangler.staging.toml <<EOF
+name = "daga-app-staging"
+main = "worker.js"
+compatibility_date = "2026-10-06"
+[ai]
+binding = "AI"
+[vars]
+DAGA_APP_BASE_URL = "https://daga-app-staging.dagamobile10.workers.dev"
+DAGA_ALLOWED_ORIGINS = "https://daga-app-staging.dagamobile10.workers.dev"
+[[d1_databases]]
+binding = "DAGA_APP_DB"
+database_name = "daga-app-staging"
+database_id = "$D1_ID"
+[[rules]]
+type = "Text"
+globs = ["invite/index.html"]
+fallthrough = false
+EOF
+      - name: Apply migrations to staging D1 only
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          for file in migrations/0001_daga_core.sql migrations/0002_daga_owner_auth.sql migrations/0003_daga_owner_credentials.sql migrations/0004_daga_offers.sql migrations/0005_daga_store_identity_invitations.sql migrations/0006_daga_public_identity_ids.sql migrations/0007_daga_company_registration_challenges.sql migrations/0008_daga_company_login_challenges.sql; do
+            clean="/tmp/$(basename "$file")"
+            grep -v '^[[:space:]]*PRAGMA foreign_keys' "$file" > "$clean"
+            npx --yes wrangler@3 d1 execute daga-app-staging --remote --config wrangler.staging.toml --file "$clean"
+          done
+      - name: Deploy isolated staging Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy --config wrangler.staging.toml
+      - name: Configure staging-only auth and delivery secrets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          DAGA_OTP_PEPPER: ${{ secrets.DAGA_OTP_PEPPER }}
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+          TWILIO_FROM_NUMBER: ${{ secrets.TWILIO_FROM_NUMBER }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          DAGA_EMAIL_FROM: ${{ secrets.DAGA_EMAIL_FROM }}
+        run: |
+          set -euo pipefail
+          for name in DAGA_OTP_PEPPER TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN TWILIO_FROM_NUMBER RESEND_API_KEY DAGA_EMAIL_FROM; do
+            printf '%s' "${!name}" | npx --yes wrangler@3 secret put "$name" --name daga-app-staging
+          done
+      - name: Verify staging health without printing secrets
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 10); do
+            if curl -fsS --max-time 15 https://daga-app-staging.dagamobile10.workers.dev/health -o /tmp/health.json; then break; fi
+            sleep 5
+          done
+          jq '{ok,voiceConfigured,chatConfigured,freeChatConfigured,liveAvatarConfigured}' /tmp/health.json
+          echo "Staging Worker only. Production Worker and main branch were not targeted."
