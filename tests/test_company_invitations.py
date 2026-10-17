@@ -128,6 +128,11 @@ class InvitationSchemaTests(unittest.TestCase):
               (id,invitation_token_hash,channel,destination_hash,code_hash,expires_at,attempts)
               VALUES ('bad','hash','phone','dest','hash','2026-10-18T00:00:00.000Z',6)""")
 
+    def test_invitation_token_is_removed_from_visible_url_immediately(self):
+        page = (ROOT / "invite" / "index.html").read_text(encoding="utf-8")
+        self.assertIn('history.replaceState(null, "", location.pathname)', page)
+        self.assertLess(page.index("history.replaceState(null, \"\", location.pathname)"), page.index("function say(message, kind)"))
+
     def test_invitation_page_does_not_persist_bearer_secrets(self):
         page = (ROOT / "invite" / "index.html").read_text(encoding="utf-8")
         self.assertIn('name="referrer" content="no-referrer"', page)
