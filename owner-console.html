@@ -58,8 +58,8 @@ async function api(path,options){options=options||{};options.headers=Object.assi
 function table(target,headers,rows){$(target).innerHTML='<table><thead><tr>'+headers.map(h=>'<th>'+escapeHtml(h)+'</th>').join('')+'</tr></thead><tbody>'+rows.map(row=>'<tr>'+row.map(c=>'<td>'+c+'</td>').join('')+'</tr>').join('')+'</tbody></table>';}
 function cash(minor,currency){return (Number(minor||0)/100).toFixed(2)+' '+escapeHtml(currency||'EGP');}
 async function load(){
-const [ov,pl,pm,pay,st,cl]=await Promise.all([
-api('/owner/admin/overview'),api('/owner/admin/plans'),api('/owner/admin/payment-methods'),api('/owner/admin/payments'),api('/owner/admin/stores'),api('/owner/admin/columns')
+const [ov,pl,pm,of,pay,st,cl]=await Promise.all([
+api('/owner/admin/overview'),api('/owner/admin/plans'),api('/owner/admin/payment-methods'),api('/owner/admin/offers'),api('/owner/admin/payments'),api('/owner/admin/stores'),api('/owner/admin/columns')
 ]);
 const stats=[['المحلات',sum(ov.stores)],['طلبات الدفع المعلقة',ov.pendingPaymentReviews],['الخطط النشطة',sum(ov.activePlans)],['رصيد الكلمات',ov.liveWordsOutstanding]];
 $('stats').innerHTML=stats.map(x=>'<div class="stat">'+escapeHtml(x[0])+'<b>'+escapeHtml(x[1])+'</b></div>').join('');
