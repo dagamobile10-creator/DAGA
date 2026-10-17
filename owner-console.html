@@ -48,7 +48,8 @@
 <script>
 (function(){
 const API='https://daga-voice.dagamobile10.workers.dev';
-let sessionToken='';\nlet pendingLogin=false;
+let sessionToken='';
+let pendingLogin=false;
 const $=id=>document.getElementById(id);
 function message(text,type){const n=$('notice');n.textContent=text;n.className='notice '+(type||'');n.classList.remove('hidden');window.scrollTo({top:0,behavior:'smooth'});}
 function escapeHtml(v){return String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
