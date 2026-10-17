@@ -70,7 +70,7 @@ async function companyLoginStart(request, env, db) {
   if (!phoneInput && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailInput)) return json(env, { error: "valid_phone_or_email_required" }, 400);
   const ip = request.headers.get("CF-Connecting-IP") || "unknown";
   if (!await companyRateLimit(db, env, "company-login-ip:" + ip, 8, 900)) return json(env, { error: "rate_limited" }, 429);
-  const account = await db.prepare("SELECT id,phone_e164,email FROM daga_accounts WHERE (phone_e164=? OR lower(email)=?) AND status='approved' AND role IN ('manager','employee') LIMIT 1").bind(phoneInput || "__none__", emailInput).first();
+  const account = await db.prepare("SELECT id,phone_e164,email FROM daga_accounts WHERE (phone_e164=? OR lower(email)=?) AND status='approved' AND role IN ('store_owner','manager','employee') LIMIT 1").bind(phoneInput || "__none__", emailInput).first();
   if (!account || !account.phone_e164 || !account.email) return json(env, { error: "invalid_credentials_or_company_account_unavailable" }, 401);
   if (!await companyRateLimit(db, env, "company-login-account:" + account.id, 5, 900)) return json(env, { error: "rate_limited" }, 429);
   const expires = new Date(Date.now() + 600000).toISOString(), phoneCode = companyDigits(), emailCode = companyDigits();
@@ -106,7 +106,7 @@ async function companyLoginVerify(request, env, db) {
   const identifier = String(body.identifier || "").trim(), phone = normalizeCompanyPhone(identifier), email = identifier.toLowerCase();
   const phoneCode = String(body.phoneCode || "").trim(), emailCode = String(body.emailCode || "").trim();
   if ((!phone && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) || !/^\d{6}$/.test(phoneCode) || !/^\d{6}$/.test(emailCode)) return json(env, { error: "valid_login_fields_required" }, 400);
-  const account = await db.prepare("SELECT id,phone_e164,email,display_name,role,status,public_id FROM daga_accounts WHERE (phone_e164=? OR lower(email)=?) AND status='approved' AND role IN ('manager','employee') LIMIT 1").bind(phone || "__none__", email).first();
+  const account = await db.prepare("SELECT id,phone_e164,email,display_name,role,status,public_id FROM daga_accounts WHERE (phone_e164=? OR lower(email)=?) AND status='approved' AND role IN ('store_owner','manager','employee') LIMIT 1").bind(phone || "__none__", email).first();
   if (!account || !account.phone_e164 || !account.email) return json(env, { error: "invalid_expired_or_used_verification_code" }, 400);
   const now = new Date().toISOString();
   const [p, e] = await Promise.all([
