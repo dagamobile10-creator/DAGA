@@ -161,6 +161,16 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertIn("DAGA-USER-", admin)
         self.assertIn("companyOwnerForm", console)
 
+    def test_company_approval_and_owner_account_status_change_together(self):
+        admin = (ROOT / "owner-admin.js").read_text(encoding="utf-8")
+        start = admin.index('const storeMatch=path.match(/^\\/owner\\/admin\\/stores\\/([a-f0-9-]{36})\\/decision$/i);')
+        end = admin.index('if(path==="/owner/admin/payments"', start)
+        handler = admin[start:end]
+        self.assertIn('db.prepare("UPDATE daga_stores SET status=?,updated_at=? WHERE id=?")', handler)
+        self.assertIn('db.prepare("UPDATE daga_accounts SET status=?,updated_at=? WHERE id=? AND role=\'store_owner\'")', handler)
+        self.assertIn("await db.batch([", handler)
+        self.assertIn('["approved","rejected","suspended"]', handler)
+
     def test_company_portal_supports_invite_creation_and_revocation(self):
         portal = (ROOT / "company" / "portal.html").read_text(encoding="utf-8")
         self.assertIn("/api/company/auth/login/verify", portal)
