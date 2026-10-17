@@ -15,6 +15,7 @@ on:
       - "invite/**"
       - "company/**"
       - "go/**"
+      - "tests/**"
 
 permissions:
   contents: read
@@ -30,7 +31,7 @@ jobs:
           test -s .github/workflows/daga-staging-setup.yml
           grep -q 'workflow_dispatch:' .github/workflows/daga-staging-setup.yml
           grep -q 'daga-app-staging' .github/workflows/daga-staging-setup.yml
-          echo "Staging workflow is present. Provisioning is manual only."
+          echo "Staging workflow is present. This push also runs the isolated staging deployment job."
 
   provision-staging:
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
