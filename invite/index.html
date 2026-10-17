@@ -53,7 +53,7 @@ button{cursor:pointer;border:0;border-radius:11px;padding:13px 15px;font:inherit
 <script>
 (() => {
   "use strict";
-  const API = "https://daga-voice.dagamobile10.workers.dev";
+  const API = location.origin;
   const token = new URLSearchParams(location.search).get("token") || "";
   const $ = id => document.getElementById(id);
   let sessionToken = "";
