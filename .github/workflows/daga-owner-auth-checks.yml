@@ -90,5 +90,12 @@ jobs:
           }
           missing = required - names
           assert not missing, f"Missing tables: {sorted(missing)}"
-          print("All four migrations applied successfully; required tables exist.")
+          for table, column in (("daga_entitlements", "order_id"), ("daga_live_word_ledger", "request_id")):
+              indexes = db.execute("PRAGMA index_list(" + table + ")").fetchall()
+              unique_columns = []
+              for idx in indexes:
+                  if idx[2]:
+                      unique_columns.append([row[2] for row in db.execute("PRAGMA index_info(" + idx[1] + ")")])
+              assert [column] in unique_columns, table + "." + column + " must be unique to prevent duplicate grants"
+          print("All four migrations applied; required tables and idempotency constraints exist.")
           PY
