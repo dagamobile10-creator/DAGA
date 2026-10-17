@@ -125,6 +125,11 @@ export async function handleOwnerAdmin(request, env, url) {
       return json(env, {ok:true});
     }
 
+    if(path==="/owner/admin/accounts"&&request.method==="GET"){
+      const r=await db.prepare("SELECT a.id,a.public_id,a.display_name,a.role,a.status,a.created_at,a.phone_e164,a.email,s.public_id AS company_public_id,s.display_name AS company_name FROM daga_accounts a LEFT JOIN daga_stores s ON s.id=a.store_id ORDER BY a.created_at DESC LIMIT 1000").all();
+      return json(env,{ok:true,accounts:r.results||[]});
+    }
+
     if(path==="/owner/admin/stores"&&request.method==="GET"){
       const r=await db.prepare("SELECT s.id,s.public_id,s.owner_account_id,s.legal_identity,s.display_name,s.status,s.created_at,a.public_id AS owner_public_id,a.phone_e164,a.email FROM daga_stores s JOIN daga_accounts a ON a.id=s.owner_account_id ORDER BY s.created_at DESC LIMIT 500").all();
       return json(env, {ok:true,stores:r.results||[]});
