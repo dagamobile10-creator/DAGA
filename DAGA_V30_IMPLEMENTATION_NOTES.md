@@ -66,22 +66,20 @@ The current branch includes implemented owner-auth groundwork and company invita
 
 ## Current release status
 
-The code is committed on the development branch, but the deployment is not yet operational: no D1 database has been provisioned/bound, no provider secrets have been configured, no real SMS/email delivery has been tested, and no staging Worker deployment or successful CI run has been verified. Existing application routes and the store/admin dashboard still require role/tenant authorization before production use.
+The development branch now has working code paths for company invitation creation, revocation, acceptance, invitation-bound registration, phone+email OTP login, company memberships, and the public/company/invitation HTML pages. CI passed the current syntax, security-regression, and fresh-SQLite-migration checks in run [38996021940](https://github.com/dagamobile10-creator/DAGA/actions/runs/38996021940). The isolated staging workflow has created/reused a separate staging D1, applied migrations 0001–0008, and is deploying/verifying a separate staging Worker in run [38996019065](https://github.com/dagamobile10-creator/DAGA/actions/runs/38996019065); its final outcome must be checked before claiming the staging smoke tests passed.
 
+## Owner admin API and console progress
 
-## Owner admin API and console progress (latest)
-
-- Added `owner-admin.js`, wired into the Worker. The endpoints require a valid, unexpired owner session and implement plan create/update, payment destination create/update, store approval/rejection/suspension, manual payment review, idempotent LIVE DAGA word credits, and column definition create/display-name update.
-- Added `owner-console.html`, an Arabic RTL owner console for login, overview, plans, payment methods, payment review, store decisions, word credits, and column labels. The bearer session is held in page memory and is not written to localStorage.
-- CI run for the current code passed Node syntax checks for the Worker, owner auth, owner admin, and owner-console inline JavaScript, plus all three migrations applied to a fresh SQLite database. The existing live-app validation passed too; the deployment job was skipped for the draft pull request.
+- `owner-admin.js` requires a valid program-owner session for admin endpoints and includes company/owner provisioning, company decisions, plan/payment configuration, payment review, idempotent LIVE DAGA word credits, and column configuration.
+- `owner-console.html` is an Arabic RTL program-owner console; its session token remains in page memory.
+- Company owner accounts and companies are provisioned as pending and must be approved before company access is granted.
+- `company/portal.html` provides account login and company invitation management; `invite/index.html` handles invitation registration or acceptance; `go/index.html` is a separate public DAGA QR landing page. QR codes are generated locally in the browser, not by sending URLs/tokens to an external QR service.
 
 ## Remaining production blockers
 
-No D1 database or provider secrets have been provisioned through this workflow, and no real SMS/email, end-to-end API, or staging Worker tests have run. The existing store/employee authentication, public store onboarding/order submission, full tenant isolation for existing `/memory`, `/chat`, `/tts`, and LiveAvatar routes, and integration of this console into the original V30 dashboard are still outstanding. The draft pull request must not be merged or described as a completed production release yet.
-
+A successful staging deployment is not a production release. Real SMS/email delivery, end-to-end two-device invitation testing, manager permission enforcement under real sessions, expired/replayed/concurrent invite behavior, session revocation, and cross-company isolation still require staging verification. The existing `/memory`, `/chat`, `/tts`, and LiveAvatar routes are not comprehensively integrated with company identity/authorization. Preserve the existing LIVE DAGA experience and do not merge PR #7 or deploy these changes to the production `daga-voice` Worker until release gates are completed.
 
 ## Company terminology and stable identities
 
-The user-facing business entity is **Company** (Arabic: الشركة), not shop/store. Existing SQL table names and API field names remain unchanged for compatibility until a separately tested API migration. Migration `0006_daga_public_identity_ids.sql` adds unique stable public IDs for accounts and companies and backfills existing records from their immutable internal IDs, never from editable display names. Public IDs identify records; they are not credentials and do not authorize access.
+The user-facing business entity is **Company** (Arabic: الشركة), not shop/store. Existing SQL table names and API field names remain unchanged for compatibility until a separately tested API migration. Migration `0006_daga_public_identity_ids.sql` adds stable public IDs for accounts and companies; these IDs identify records and are not credentials. Migration 0005 adds membership and invitation tables, and migrations 0007–0008 add registration/login OTP challenge storage.
 
-The company membership and single-use invitation schema exists, but role-aware invite creation/acceptance, QR rendering, and authenticated account/company profile flows are not yet implemented. Do not claim QR identities or invitations are operational until those routes and tests are complete.
