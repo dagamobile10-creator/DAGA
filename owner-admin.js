@@ -91,6 +91,18 @@ export async function handleOwnerAdmin(request, env, url) {
       const r=await db.prepare("SELECT s.id,s.owner_account_id,s.legal_identity,s.display_name,s.status,s.created_at,a.phone_e164,a.email FROM daga_stores s JOIN daga_accounts a ON a.id=s.owner_account_id ORDER BY s.created_at DESC LIMIT 500").all();
       return json(env, {ok:true,stores:r.results||[]});
     }
+    const storeEditMatch=path.match(/^\/owner\/admin\/stores\/([a-f0-9-]{36})$/i);
+    if(storeEditMatch&&request.method==="PATCH"){
+      const b=await readJson(request);if(!b)return json(env,{error:"invalid_json"},400);
+      const store=await db.prepare("SELECT id,display_name,legal_identity FROM daga_stores WHERE id=?").bind(storeEditMatch[1]).first();
+      if(!store)return json(env,{error:"store_not_found"},404);
+      const displayName=b.displayName===undefined?store.display_name:String(b.displayName).trim().slice(0,120);
+      if(!displayName)return json(env,{error:"display_name_required"},400);
+      await db.prepare("UPDATE daga_stores SET display_name=?,updated_at=? WHERE id=?").bind(displayName,new Date().toISOString(),store.id).run();
+      await audit(db,owner.id,"store_display_name_changed","daga_stores",store.id,{legalIdentityUnchanged:true});
+      return json(env,{ok:true,displayName,legalIdentityUnchanged:true});
+    }
+
     const storeMatch=path.match(/^\/owner\/admin\/stores\/([a-f0-9-]{36})\/decision$/i);
     if(storeMatch&&request.method==="POST"){
       const b=await readJson(request);if(!b)return json(env, {error:"invalid_json"},400);
