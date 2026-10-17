@@ -426,5 +426,36 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertIn("return null;", handler)
 
 
+    def test_login_challenge_claim_is_single_use_and_expiry_guarded(self):
+        self.db.execute(
+            """INSERT INTO daga_company_login_challenges
+            (id,account_id,channel,destination_hash,code_hash,expires_at)
+            VALUES ('login-once','owner','phone','dest-hash','code-hash','2026-10-18T00:00:00.000Z')"""
+        )
+        self.db.execute(
+            """INSERT INTO daga_company_login_challenges
+            (id,account_id,channel,destination_hash,code_hash,expires_at)
+            VALUES ('login-expired','owner','email','dest-hash-2','code-hash-2','2026-10-16T00:00:00.000Z')"""
+        )
+        first = self.db.execute(
+            """UPDATE daga_company_login_challenges SET consumed_at=?,claim_id='claim-once'
+            WHERE id='login-once' AND consumed_at IS NULL AND claim_id IS NULL AND expires_at>?""",
+            (self.now, self.now),
+        )
+        replay = self.db.execute(
+            """UPDATE daga_company_login_challenges SET consumed_at=?,claim_id='claim-replay'
+            WHERE id='login-once' AND consumed_at IS NULL AND claim_id IS NULL AND expires_at>?""",
+            (self.now, self.now),
+        )
+        expired = self.db.execute(
+            """UPDATE daga_company_login_challenges SET consumed_at=?,claim_id='claim-expired'
+            WHERE id='login-expired' AND consumed_at IS NULL AND claim_id IS NULL AND expires_at>?""",
+            (self.now, self.now),
+        )
+        self.assertEqual(first.rowcount, 1)
+        self.assertEqual(replay.rowcount, 0)
+        self.assertEqual(expired.rowcount, 0)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
