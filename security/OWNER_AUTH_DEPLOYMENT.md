@@ -9,6 +9,7 @@ Create a **new dedicated Cloudflare D1 database** for app/account data. Do not r
 1. `migrations/0001_daga_core.sql`
 2. `migrations/0002_daga_owner_auth.sql`
 3. `migrations/0003_daga_owner_credentials.sql`
+4. `migrations/0004_daga_offers.sql`
 
 Bind that database to the Worker as `DAGA_APP_DB`. Keep the existing `DAGA_MEMORY_DB` binding separate until its user identity model is migrated and tested.
 
@@ -85,3 +86,8 @@ The console currently calls these owner-session-protected endpoints:
 - `GET|POST /owner/admin/columns`; `PATCH /owner/admin/columns/:uuid` (display label can change while stable key remains fixed)
 
 The payment review route is an explicit owner action. The owner must verify that money actually arrived before choosing “confirmed”; the API cannot independently prove a manual transfer. Automatic payment verification still requires a trusted payment provider webhook. The console is an initial admin surface, not a replacement for integrating the owner role into the existing V30 dashboard.
+
+
+## Offers and discounts
+
+The owner console exposes `GET/POST /owner/admin/offers` and `PATCH /owner/admin/offers/:id` for configuring store or LIVE DAGA offers. Apply migration `0004_daga_offers.sql` before using these routes. Offer definitions are separate from an order's immutable price snapshot. The order-creation path must calculate the applicable offer and write `daga_order_price_adjustments` at purchase time; this checkout integration is not yet implemented, so offer configuration alone does not apply discounts to purchases.
