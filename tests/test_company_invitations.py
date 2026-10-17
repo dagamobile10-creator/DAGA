@@ -218,7 +218,7 @@ class InvitationSchemaTests(unittest.TestCase):
     def test_registration_validation_regexes_are_not_double_escaped(self):
         source = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
         start = source.index("async function registerVerify(")
-        end = source.index("\\nasync function companyRateLimit", start)
+        end = source.index("\nasync function companyRateLimit", start)
         handler = source[start:end]
         self.assertIn(r"/^[^\s@]+@[^\s@]+\.[^\s@]+$/", handler)
         self.assertIn(r"!/^\d{6}$/.test(phoneCode)", handler)
