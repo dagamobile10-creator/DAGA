@@ -6,13 +6,22 @@ on:
     branches: [daga-v30-implementation]
     paths:
       - ".github/workflows/daga-staging-setup.yml"
+      - "worker.js"
+      - "owner-auth.js"
+      - "owner-admin.js"
+      - "company-invitations.js"
+      - "wrangler.toml"
+      - "migrations/**"
+      - "invite/**"
+      - "company/**"
+      - "go/**"
 
 permissions:
   contents: read
 
 jobs:
   validate-workflow:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && !contains(github.event.head_commit.message, '[stage]')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,7 +33,7 @@ jobs:
           echo "Staging workflow is present. Provisioning is manual only."
 
   provision-staging:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
