@@ -193,15 +193,20 @@ async function registerVerify(request, env, db) {
   const phoneCode = String(body.phoneCode || "").trim();
   const emailCode = String(body.emailCode || "").trim();
   if (!/^[A-Za-z0-9_-]{40,64}$/.test(token) || displayName.length < 2 || !phone ||
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !/^\d{6}$/.test(phoneCode) || !/^\d{6}$/.test(emailCode)) {
+      !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) || !/^\\d{6}$/.test(phoneCode) || !/^\\d{6}$/.test(emailCode)) {
     return json(env, { error: "valid_registration_fields_required" }, 400);
   }
   const tokenHash = await sha256(token);
   const now = new Date().toISOString();
-  const invite = await db.prepare("SELECT i.id,i.store_id,i.intended_role FROM daga_store_invitations i JOIN daga_stores s ON s.id=i.store_id WHERE i.token_hash=? AND i.status='pending' AND i.use_count=0 AND i.max_uses=1 AND i.expires_at>? AND s.status='approved' LIMIT 1").bind(tokenHash, now).first();
+  const invite = await db.prepare("SELECT i.id,i.store_id,i.inviter_account_id,i.intended_role,i.permissions_json FROM daga_store_invitations i JOIN daga_stores s ON s.id=i.store_id WHERE i.token_hash=? AND i.status='pending' AND i.use_count=0 AND i.max_uses=1 AND i.expires_at>? AND s.status='approved' LIMIT 1").bind(tokenHash, now).first();
   if (!invite) return json(env, { error: "invalid_expired_or_used_invitation" }, 400);
   const existing = await db.prepare("SELECT id FROM daga_accounts WHERE phone_e164=? OR lower(email)=? LIMIT 1").bind(phone, email).first();
   if (existing) return json(env, { error: "account_exists_use_existing_account" }, 409);
+  const ip = request.headers.get("CF-Connecting-IP") || "unknown";
+  if (!await companyRateLimit(db, env, "company-register-verify-ip:" + ip, 10, 900) ||
+      !await companyRateLimit(db, env, "company-register-verify-destination:" + await sha256(phone + ":" + email), 6, 3600)) {
+    return json(env, { error: "rate_limited" }, 429);
+  }
   const [phoneChallenge, emailChallenge] = await Promise.all([
     db.prepare("SELECT id,code_hash FROM daga_company_registration_challenges WHERE invitation_token_hash=? AND channel='phone' AND destination_hash=? AND consumed_at IS NULL AND attempts<5 AND expires_at>? ORDER BY created_at DESC LIMIT 1").bind(tokenHash, await sha256("phone:" + phone), now).first(),
     db.prepare("SELECT id,code_hash FROM daga_company_registration_challenges WHERE invitation_token_hash=? AND channel='email' AND destination_hash=? AND consumed_at IS NULL AND attempts<5 AND expires_at>? ORDER BY created_at DESC LIMIT 1").bind(tokenHash, await sha256("email:" + email), now).first()
@@ -215,6 +220,9 @@ async function registerVerify(request, env, db) {
   if (!constantTimeEqualCompany(expectedPhone, phoneChallenge.code_hash) || !constantTimeEqualCompany(expectedEmail, emailChallenge.code_hash)) {
     return json(env, { error: "invalid_expired_or_used_verification_code" }, 400);
   }
+
+  // Registration and invitation acceptance are one D1 batch. Two people cannot
+  // register from the same single-use link and leave an orphaned approved account.
   const accountId = crypto.randomUUID();
   const publicId = "DAGA-USER-" + accountId.replace(/-/g, "").toUpperCase();
   const sessionToken = companyRandomToken(32);
@@ -222,25 +230,34 @@ async function registerVerify(request, env, db) {
   const sessionId = crypto.randomUUID();
   const sessionExpires = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString();
   const claimId = crypto.randomUUID();
+  const membershipId = crypto.randomUUID();
+  let results;
   try {
-    const results = await db.batch([
+    results = await db.batch([
       db.prepare("UPDATE daga_company_registration_challenges SET consumed_at=?,claim_id=? WHERE id=? AND consumed_at IS NULL AND claim_id IS NULL AND attempts<=5 AND expires_at>?").bind(now, claimId, phoneChallenge.id, now),
       db.prepare("UPDATE daga_company_registration_challenges SET consumed_at=?,claim_id=? WHERE id=? AND consumed_at IS NULL AND claim_id IS NULL AND attempts<=5 AND expires_at>?").bind(now, claimId, emailChallenge.id, now),
-      db.prepare("INSERT INTO daga_accounts (id,public_id,phone_e164,email,display_name,role,status,store_id,phone_verified_at,email_verified_at,created_at,updated_at) SELECT ?,?,?,?,?,?,'approved',?,?,?, ?,? WHERE EXISTS (SELECT 1 FROM daga_company_registration_challenges WHERE id=? AND claim_id=? AND channel='phone') AND EXISTS (SELECT 1 FROM daga_company_registration_challenges WHERE id=? AND claim_id=? AND channel='email') AND EXISTS (SELECT 1 FROM daga_store_invitations WHERE id=? AND status='pending' AND use_count=0 AND expires_at>?)")
-        .bind(accountId, publicId, phone, email, displayName, invite.intended_role, invite.store_id, now, now, now, now, phoneChallenge.id, claimId, emailChallenge.id, claimId, invite.id, now),
-      db.prepare("INSERT INTO daga_auth_sessions (id,account_id,token_hash,created_at,expires_at,last_seen_at) SELECT ?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM daga_accounts WHERE id=?)")
-        .bind(sessionId, accountId, sessionHash, now, sessionExpires, now, accountId),
-      db.prepare("INSERT INTO daga_security_events (id,account_id,event_type,outcome,details_json) SELECT ?,?,'company_account_registered','success',? WHERE EXISTS (SELECT 1 FROM daga_accounts WHERE id=?)")
-        .bind(crypto.randomUUID(), accountId, JSON.stringify({ storeId: invite.store_id, role: invite.intended_role }), accountId)
+      db.prepare("UPDATE daga_store_invitations SET status='accepted',use_count=1,accepted_by_account_id=?,accepted_at=? WHERE id=? AND token_hash=? AND status='pending' AND use_count=0 AND max_uses=1 AND expires_at>? AND EXISTS (SELECT 1 FROM daga_stores WHERE id=daga_store_invitations.store_id AND status='approved') AND EXISTS (SELECT 1 FROM daga_company_registration_challenges WHERE id=? AND claim_id=? AND channel='phone') AND EXISTS (SELECT 1 FROM daga_company_registration_challenges WHERE id=? AND claim_id=? AND channel='email') RETURNING id")
+        .bind(accountId, now, invite.id, tokenHash, now, phoneChallenge.id, claimId, emailChallenge.id, claimId),
+      db.prepare("INSERT INTO daga_accounts (id,public_id,phone_e164,email,display_name,role,status,store_id,phone_verified_at,email_verified_at,created_at,updated_at) SELECT ?,?,?,?,?,?,'approved',?,?,?, ?,? WHERE EXISTS (SELECT 1 FROM daga_store_invitations WHERE id=? AND status='accepted' AND accepted_by_account_id=? AND use_count=1)")
+        .bind(accountId, publicId, phone, email, displayName, invite.intended_role, invite.store_id, now, now, now, now, invite.id, accountId),
+      db.prepare("INSERT INTO daga_store_memberships (id,store_id,account_id,role,status,permissions_json,invited_by_account_id,created_at,updated_at) SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM daga_accounts WHERE id=?) AND EXISTS (SELECT 1 FROM daga_store_invitations WHERE id=? AND status='accepted' AND accepted_by_account_id=? AND use_count=1)")
+        .bind(membershipId, invite.store_id, accountId, invite.intended_role, "active", invite.permissions_json || "{}", invite.inviter_account_id, now, now, accountId, invite.id, accountId),
+      db.prepare("INSERT INTO daga_auth_sessions (id,account_id,token_hash,created_at,expires_at,last_seen_at) SELECT ?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM daga_store_memberships WHERE id=? AND account_id=?)")
+        .bind(sessionId, accountId, sessionHash, now, sessionExpires, now, membershipId, accountId),
+      db.prepare("INSERT INTO daga_security_events (id,account_id,event_type,outcome,details_json) SELECT ?,?,'company_invitation_accepted','success',? WHERE EXISTS (SELECT 1 FROM daga_store_memberships WHERE id=? AND account_id=?)")
+        .bind(crypto.randomUUID(), accountId, JSON.stringify({ storeId: invite.store_id, role: invite.intended_role }), membershipId, accountId)
     ]);
-    if (Number(results?.[2]?.meta?.changes || 0) !== 1 || Number(results?.[3]?.meta?.changes || 0) !== 1) {
-      return json(env, { error: "registration_race_or_conflict_retry" }, 409);
-    }
   } catch (_) {
     return json(env, { error: "account_registration_conflict_or_failed" }, 409);
   }
-  await audit(db, accountId, "company_account_registered", accountId, { storeId: invite.store_id, role: invite.intended_role });
-  return json(env, { ok: true, account: { id: accountId, publicId, displayName, role: invite.intended_role, phoneMasked: maskCompanyPhone(phone), emailMasked: maskCompanyEmail(email) }, sessionToken, expiresAt: sessionExpires, nextStep: "accept_invitation" }, 201);
+  if (Number(results?.[2]?.meta?.changes || 0) !== 1 ||
+      Number(results?.[3]?.meta?.changes || 0) !== 1 ||
+      Number(results?.[4]?.meta?.changes || 0) !== 1 ||
+      Number(results?.[5]?.meta?.changes || 0) !== 1) {
+    return json(env, { error: "registration_race_or_conflict_retry" }, 409);
+  }
+  await audit(db, accountId, "company_invitation_accepted", invite.id, { storeId: invite.store_id, role: invite.intended_role });
+  return json(env, { ok: true, account: { id: accountId, publicId, displayName, role: invite.intended_role, phoneMasked: maskCompanyPhone(phone), emailMasked: maskCompanyEmail(email) }, membership: { id: membershipId, companyPublicId: null, role: invite.intended_role, status: "active" }, sessionToken, expiresAt: sessionExpires, nextStep: "complete" }, 201);
 }
 
 async function companyRateLimit(db, env, key, limit, windowSeconds) {
