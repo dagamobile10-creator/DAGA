@@ -264,3 +264,25 @@ class InvitationSchemaTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+    def test_company_and_invitation_pages_set_no_store_and_security_headers(self):
+        worker = (ROOT / "worker.js").read_text(encoding="utf-8")
+        for route in ('url.pathname === "/company"', 'url.pathname === "/invite"'):
+            start = worker.index(route)
+            end = worker.index("\n    }", start)
+            handler = worker[start:end]
+            self.assertIn('"Cache-Control": "no-store"', handler)
+            self.assertIn('"Referrer-Policy": "no-referrer"', handler)
+            self.assertIn('"X-Content-Type-Options": "nosniff"', handler)
+            self.assertIn('"Content-Security-Policy":', handler)
+            self.assertIn("frame-ancestors 'none'", handler)
+
+    def test_official_landing_disallows_framing_and_sniffing(self):
+        worker = (ROOT / "worker.js").read_text(encoding="utf-8")
+        start = worker.index('url.pathname === "/go"')
+        end = worker.index("\n    }", start)
+        handler = worker[start:end]
+        self.assertIn('"X-Content-Type-Options": "nosniff"', handler)
+        self.assertIn('"Content-Security-Policy":', handler)
+        self.assertIn("frame-ancestors 'none'", handler)
+
