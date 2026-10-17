@@ -64,8 +64,13 @@ async function listInvitations(url, db, account) {
   const storeId = String(url.searchParams.get("storeId") || "").trim();
   if (!storeId) return json(null, { error: "storeId_required" }, 400);
   const store = await db.prepare("SELECT id,owner_account_id,status FROM daga_stores WHERE id=?").bind(storeId).first();
-  if (!store || store.status !== "approved" || !await getAuthority(db, account, store)) return json(null, { error: "company_not_found_or_access_denied" }, 404);
-  const rows = await db.prepare("SELECT id,intended_role,status,expires_at,max_uses,use_count,created_at,accepted_at,revoked_at FROM daga_store_invitations WHERE store_id=? ORDER BY created_at DESC LIMIT 100").bind(storeId).all();
+  const authority = store && store.status === "approved" ? await getAuthority(db, account, store) : null;
+  if (!authority) return json(null, { error: "company_not_found_or_access_denied" }, 404);
+  if (authority.role === "manager" && !authority.permissions.inviteEmployees) return json(null, { error: "manager_invitation_permission_disabled" }, 403);
+  const query = authority.role === "manager"
+    ? db.prepare("SELECT id,intended_role,status,expires_at,max_uses,use_count,created_at,accepted_at,revoked_at FROM daga_store_invitations WHERE store_id=? AND inviter_account_id=? ORDER BY created_at DESC LIMIT 100").bind(storeId, account.id)
+    : db.prepare("SELECT id,intended_role,status,expires_at,max_uses,use_count,created_at,accepted_at,revoked_at FROM daga_store_invitations WHERE store_id=? ORDER BY created_at DESC LIMIT 100").bind(storeId);
+  const rows = await query.all();
   return json(null, { ok: true, invitations: rows.results || [] });
 }
 
@@ -103,7 +108,7 @@ async function revokeInvitation(db, account, invitationId) {
   if (!invite) return json(null, { error: "invitation_not_found" }, 404);
   const store = await db.prepare("SELECT id,owner_account_id,status FROM daga_stores WHERE id=?").bind(invite.store_id).first();
   const authority = store && await getAuthority(db, account, store);
-  if (!authority || (authority.role === "manager" && (invite.intended_role !== "employee" || invite.inviter_account_id !== account.id))) {
+  if (!authority || (authority.role === "manager" && (!authority.permissions.inviteEmployees || invite.intended_role !== "employee" || invite.inviter_account_id !== account.id))) {
     return json(null, { error: "company_invitation_permission_denied" }, 403);
   }
   if (invite.status !== "pending") return json(null, { error: "invitation_not_pending" }, 409);
