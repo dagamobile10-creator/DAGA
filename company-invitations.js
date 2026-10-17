@@ -315,6 +315,11 @@ async function createInvitation(request, env, db, account) {
 
   const permissions = normalizePermissions(body.permissions, intendedRole, authority);
   if (!permissions) return json(env, { error: "invalid_or_escalated_permissions" }, 400);
+  const ip = request.headers.get("CF-Connecting-IP") || "unknown";
+  if (!await companyRateLimit(db, env, "company-invite-create-account:" + account.id, 30, 3600) ||
+      !await companyRateLimit(db, env, "company-invite-create-ip:" + ip, 60, 3600)) {
+    return json(env, { error: "invitation_rate_limited" }, 429);
+  }
   const base = trustedBaseUrl(env.DAGA_APP_BASE_URL);
   if (!base) return json(env, { error: "trusted_app_base_url_not_configured" }, 503);
   const token = randomToken(32);
