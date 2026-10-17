@@ -5,7 +5,8 @@ const DEFAULT_INVITE_TTL_HOURS = 72;
 export async function handleCompanyInvitations(request, env, url) {
   const path = url.pathname.replace(/\/+$/, "") || "/";
   const publicPaths = ["/api/company/auth/register", "/api/company/auth/register/verify", "/api/company/auth/login", "/api/company/auth/login/verify"];
-  if (!publicPaths.includes(path) && !["/api/company/invitations", "/api/company/invitations/accept"].includes(path) &&
+  const accountPaths = ["/api/company/auth/me", "/api/company/auth/logout"];
+  if (!publicPaths.includes(path) && !accountPaths.includes(path) && !["/api/company/invitations", "/api/company/invitations/accept"].includes(path) &&
       !/^\/api\/company\/invitations\/[0-9a-f-]{36}(?:\/revoke)?$/i.test(path)) return null;
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors(env) });
   const db = env.DAGA_APP_DB;
@@ -17,6 +18,8 @@ export async function handleCompanyInvitations(request, env, url) {
   const account = await authenticatedAccount(request, db);
   if (!account) return json(env, { error: "authenticated_account_required" }, 401);
   if (account.status !== "approved" || account.role === "program_owner") return json(env, { error: "active_company_account_required" }, 403);
+  if (path === "/api/company/auth/me" && request.method === "GET") return companyAccountMe(env, db, account);
+  if (path === "/api/company/auth/logout" && request.method === "POST") return companyAccountLogout(request, env, db);
 
   try {
     if (path === "/api/company/invitations" && request.method === "POST") return createInvitation(request, env, db, account);
@@ -33,6 +36,29 @@ export async function handleCompanyInvitations(request, env, url) {
   }
 }
 
+
+async function companyAccountMe(env, db, account) {
+  const owned = await db.prepare("SELECT id,public_id,display_name,status,'store_owner' AS role FROM daga_stores WHERE owner_account_id=? AND status='approved' ORDER BY created_at DESC").bind(account.id).all();
+  const memberships = await db.prepare("SELECT s.id,s.public_id,s.display_name,s.status,m.role,m.permissions_json,m.status AS membership_status FROM daga_store_memberships m JOIN daga_stores s ON s.id=m.store_id WHERE m.account_id=? AND m.status='active' AND s.status='approved' ORDER BY s.display_name").bind(account.id).all();
+  const companies = [...(owned.results || []), ...(memberships.results || []).map(row => {
+    let permissions = {};
+    try { permissions = JSON.parse(row.permissions_json || "{}"); } catch (_) {}
+    const safe = {};
+    for (const key of ["inviteEmployees","manageInventory","viewReports"]) safe[key] = permissions[key] === true;
+    return { id: row.id, publicId: row.public_id || null, displayName: row.display_name, status: row.status, role: row.role, permissions: safe };
+  })];
+  return json(env, { ok: true, account: { id: account.id, publicId: account.public_id || null, displayName: account.display_name, role: account.role, status: account.status, phoneMasked: maskCompanyPhone(account.phone_e164), emailMasked: maskCompanyEmail(account.email) }, companies });
+}
+async function companyAccountLogout(request, env, db) {
+  const header = request.headers.get("Authorization") || "";
+  const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
+  if (!token) return json(env, { error: "authenticated_account_required" }, 401);
+  const hash = await sha256(token);
+  const now = new Date().toISOString();
+  const result = await db.prepare("UPDATE daga_auth_sessions SET revoked_at=? WHERE token_hash=? AND revoked_at IS NULL").bind(now, hash).run();
+  if (Number(result?.meta?.changes || 0) !== 1) return json(env, { error: "session_already_revoked" }, 401);
+  return json(env, { ok: true });
+}
 
 async function companyLoginStart(request, env, db) {
   if (!env.DAGA_OTP_PEPPER || !env.TWILIO_ACCOUNT_SID || !env.TWILIO_AUTH_TOKEN || !env.TWILIO_FROM_NUMBER || !env.RESEND_API_KEY || !env.DAGA_EMAIL_FROM) return json(env, { error: "company_login_not_configured" }, 503);
