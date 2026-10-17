@@ -78,6 +78,7 @@ jobs:
               "migrations/0002_daga_owner_auth.sql",
               "migrations/0003_daga_owner_credentials.sql",
               "migrations/0004_daga_offers.sql",
+              "migrations/0005_daga_store_identity_invitations.sql",
           ):
               with open(path, encoding="utf-8") as f:
                   db.executescript(f.read())
@@ -90,12 +91,21 @@ jobs:
           }
           missing = required - names
           assert not missing, f"Missing tables: {sorted(missing)}"
-          for table, column in (("daga_entitlements", "order_id"), ("daga_live_word_ledger", "request_id")):
+          for table, column in (("daga_entitlements", "order_id"), ("daga_live_word_ledger", "request_id"), ("daga_stores", "public_id"), ("daga_store_invitations", "token_hash")):
               indexes = db.execute("PRAGMA index_list(" + table + ")").fetchall()
               unique_columns = []
               for idx in indexes:
                   if idx[2]:
                       unique_columns.append([row[2] for row in db.execute("PRAGMA index_info(" + idx[1] + ")")])
               assert [column] in unique_columns, table + "." + column + " must be unique to prevent duplicate grants"
-          print("All four migrations applied; required tables and idempotency constraints exist.")
+          required_store_tables = {"daga_store_memberships", "daga_store_invitations"}
+          assert required_store_tables <= names, f"Missing store identity/invitation tables: {sorted(required_store_tables - names)}"
+          membership_columns = {row[1] for row in db.execute("PRAGMA table_info(daga_store_memberships)")}
+          assert {"store_id", "account_id", "role", "status", "permissions_json"} <= membership_columns
+          invitation_columns = {row[1] for row in db.execute("PRAGMA table_info(daga_store_invitations)")}
+          assert {"store_id", "inviter_account_id", "token_hash", "intended_role", "expires_at", "max_uses", "use_count", "status"} <= invitation_columns
+          # Invitations are single-use; revocation and expiry are explicit states.
+          invite_sql = db.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='daga_store_invitations'").fetchone()[0]
+          assert "max_uses = 1" in invite_sql and "use_count BETWEEN 0 AND max_uses" in invite_sql
+          print("All five migrations applied; store identity, invitation, and uniqueness constraints exist.")
           PY
