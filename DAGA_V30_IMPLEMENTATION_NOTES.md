@@ -14,7 +14,7 @@ migrations/0001_daga_core.sql defines the proposed D1 data model for:
 - stable column keys separate from editable display names,
 - audit events.
 
-## Security requirements before enabling production traffic
+## Store identity and invitations (schema foundation only)\n\n- `migrations/0005_daga_store_identity_invitations.sql` adds an optional stable `public_id` to each store, explicit store memberships, and single-use invitations scoped to a store and intended role.\n- Store QR identity and invitation QR/link are intentionally different concepts: a public store ID identifies a store but does not authorize access; an invitation carries a random secret whose hash is stored in D1.\n- This migration is not yet an invitation API or complete membership/authentication flow. Token creation, hashing, inviter permission checks, atomic acceptance/replay prevention, role-scoped data routes, QR rendering, and safe backfill of existing stores must be implemented and tested before use.\n\n## Security requirements before enabling production traffic
 
 1. Do not trust a role, store ID, price, word balance, approval state, or payment confirmation sent by the browser.
 2. Bootstrap the sole program-owner account through a one-time server-side process using verified contact channels. Never make the first public registrant the owner.
