@@ -28,7 +28,7 @@ migrations/0001_daga_core.sql defines the proposed D1 data model for:
 
 1. Run the manual **DAGA isolated staging setup** workflow in GitHub Actions after confirming the repository secrets listed in `security/OWNER_AUTH_DEPLOYMENT.md` exist. This connector can edit files and inspect workflow runs, but it cannot dispatch the manual workflow or inspect repository secret values.
 2. Complete end-to-end staging tests for company-owner provisioning/approval, phone+email OTP, manager permission restrictions, invite create/revoke/accept, expired/replayed/concurrent invitations, session logout, and cross-company isolation.
-3. The company portal currently shares invitation links; a locally generated QR graphic and a separate public Android/iOS download landing page are not yet implemented. Do not send invitation tokens to third-party QR services.
+3. The company portal now generates invitation QR graphics locally in the browser, without sending invitation tokens to a third-party QR service. The separate `/go/` landing page generates the official public DAGA QR and links to the current web app. Android/iOS store links are intentionally marked unavailable until real official download URLs exist.
 4. Existing `/memory`, `/chat`, `/tts`, and LiveAvatar routes are still separate from company authorization. Preserve the existing LIVE DAGA voice experience while planning and testing those protections independently.
 5. Production D1 bindings, secrets, migrations, and Worker deployment must be reviewed and configured deliberately. Do not merge PR #7 or deploy this branch to the production `daga-voice` Worker until the staging gates pass.
 
