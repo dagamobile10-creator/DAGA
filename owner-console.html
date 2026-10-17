@@ -18,6 +18,17 @@
 <label for="password">كلمة السر</label><input id="password" type="password" autocomplete="current-password" required>
 <button id="loginButton" type="submit" style="width:100%">دخول آمن</button></form>
 <p><small>الجلسة محفوظة في ذاكرة الصفحة فقط. إعادة تحميل الصفحة تتطلب تسجيل الدخول مرة أخرى.</small></p>
+<details style="margin-top:18px"><summary style="cursor:pointer;color:var(--gold)">استرداد حساب المالك</summary>
+<p>هنبعت كودين منفصلين على رقم المالك وإيميله المسجلين في إعدادات السيرفر. لازم كمان كود الاسترداد الحالي اللي اتعمل وقت إعداد الحساب.</p>
+<form id="recoveryStart"><button type="submit" class="secondary">إرسال أكواد الاسترداد</button></form>
+<form id="recoveryForm" class="hidden">
+<label>كود التليفون (6 أرقام)</label><input id="recoveryPhoneCode" inputmode="numeric" pattern="[0-9]{6}" required>
+<label>كود الإيميل (6 أرقام)</label><input id="recoveryEmailCode" inputmode="numeric" pattern="[0-9]{6}" required>
+<label>كود الاسترداد الحالي</label><input id="recoveryOldCode" type="password" autocomplete="off" minlength="20" required>
+<label>كلمة سر جديدة (14 حرفًا على الأقل، حروف كبيرة وصغيرة ورقم)</label><input id="recoveryNewPassword" type="password" autocomplete="new-password" minlength="14" required>
+<label>كود استرداد جديد (20 حرفًا على الأقل، خزّنه خارج الجهاز)</label><input id="recoveryNewCode" type="password" autocomplete="off" minlength="20" required>
+<button type="submit">تغيير كلمة السر وإلغاء الجلسات القديمة</button>
+</form></details>
 </section>
 <section id="dashboard" class="hidden">
 <div class="card"><div class="row"><div><h1>إدارة ضجة</h1><div id="ownerIdentity" class="muted"></div></div><button id="refresh" class="secondary">تحديث البيانات</button></div><div id="stats" class="stats"></div></div>
