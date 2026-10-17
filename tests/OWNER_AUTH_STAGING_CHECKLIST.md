@@ -4,7 +4,7 @@ Do not use production data, real customer accounts, or real payment records duri
 
 ## Prerequisites
 - [ ] Dedicated D1 database is created and bound as `DAGA_APP_DB`.
-- [ ] Migrations 0001, 0002, and 0003 are applied in order.
+- [ ] Migrations 0001, 0002, 0003, and 0004 (offers) are applied in order.
 - [ ] Worker secrets are set in Cloudflare: bootstrap token, OTP pepper, owner phone/email, Twilio credentials/sender, Resend API key, verified sender.
 - [ ] `DAGA_ALLOWED_ORIGINS` is set to the exact staging frontend origin.
 - [ ] Provider test delivery succeeds; do not expose codes in logs.
@@ -36,6 +36,8 @@ Do not use production data, real customer accounts, or real payment records duri
 - [ ] Store-owner, manager, and employee sessions are rejected by owner routes.
 - [ ] Owner can create/update/disable plans; existing orders retain agreed price snapshots.
 - [ ] Owner can update payment destinations and active status.
+- [ ] Owner can create, schedule, activate, and disable offers; expired/inactive offers are rejected by the eventual order-creation service.
+- [ ] Existing orders retain their agreed price snapshot when plan/offer settings change.
 - [ ] Store approval/rejection updates both store and store-owner account status.
 - [ ] Payment submission alone does not activate entitlement; owner confirmation is required.
 - [ ] Duplicate payment review cannot create duplicate entitlement/word credits.
