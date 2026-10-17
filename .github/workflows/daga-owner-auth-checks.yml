@@ -53,6 +53,20 @@ jobs:
           open("/tmp/daga-official-qr.js", "w", encoding="utf-8").write("\n".join(scripts))
           PY
           node --check /tmp/daga-official-qr.js
+      - name: Guard bounded memory persistence payloads
+        run: |
+          python3 - <<'PY'
+          worker = open("worker.js", encoding="utf-8").read()
+          start = worker.index('if (url.pathname === "/memory"')
+          end = worker.index('if (url.pathname === "/liveavatar/avatars"', start)
+          memory = worker[start:end]
+          assert "readBoundedJson(request, 160000)" in memory, "Memory POST must have a bounded JSON body"
+          assert "profileJson.length > 10000" in memory, "Memory profile size limit missing"
+          assert "JSON.stringify(history).length > 120000" in memory, "Memory history aggregate limit missing"
+          assert '["user", "assistant"].includes(x.role)' in memory, "Memory history role allowlist missing"
+          assert 'url.searchParams.get("userId")' in memory, "Legacy userId compatibility path unexpectedly changed"
+          print("Memory payload and history validation guards are present.")
+          PY
       - name: Guard chat and TTS request size limits
         run: |
           python3 - <<'PY'
