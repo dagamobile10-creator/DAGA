@@ -25,7 +25,7 @@ async function bootstrapStart(request, env) {
   if (!db) return json(env, { error: "owner_auth_database_not_configured" }, 503);
   const required = ["DAGA_OWNER_BOOTSTRAP_TOKEN", "DAGA_OWNER_PHONE", "DAGA_OWNER_EMAIL",
     "TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER", "RESEND_API_KEY", "DAGA_EMAIL_FROM", "DAGA_OTP_PEPPER"];
-  if (required.some(key => !env[key])) return json(env, { error: "owner_auth_not_configured", requiredSecrets: required.filter(key => !env[key]).map(key => key.replace(/TOKEN|AUTH_TOKEN|API_KEY|PEPPER/, "SECRET")) }, 503);
+  if (required.some(key => !env[key])) return json(env, { error: "owner_auth_not_configured" }, 503);
   const auth = request.headers.get("Authorization") || "";
   if (!constantTimeEqual(auth, "Bearer " + env.DAGA_OWNER_BOOTSTRAP_TOKEN)) {
     await audit(db, null, "owner_bootstrap_start", "failure");
