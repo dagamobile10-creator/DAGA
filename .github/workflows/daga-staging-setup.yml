@@ -154,7 +154,15 @@ jobs:
           if grep -qi '^access-control-allow-origin: \*' /tmp/cors-hostile.headers; then
             echo "::error::Staging API returned wildcard CORS for an untrusted origin"; exit 1
           fi
-          echo "Staging CORS smoke test passed: no wildcard origin was returned."
+          # Owner bootstrap API must follow the same fail-closed CORS policy.
+          curl -sS -D /tmp/owner-cors-hostile.headers -o /dev/null -X OPTIONS \
+            -H 'Origin: https://untrusted.example' \
+            -H 'Access-Control-Request-Method: POST' \
+            https://daga-app-staging.dagamobile10.workers.dev/owner/bootstrap/start
+          if grep -qi '^access-control-allow-origin: \*' /tmp/owner-cors-hostile.headers; then
+            echo "::error::Owner API returned wildcard CORS for an untrusted origin"; exit 1
+          fi
+          echo "Staging company and owner API CORS checks passed: no wildcard origin was returned."
           for path in /go/ /company/ /invite/; do
             code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "https://daga-app-staging.dagamobile10.workers.dev$path")"
             if [ "$code" != "200" ]; then echo "::error::Staging page $path returned HTTP $code"; exit 1; fi
