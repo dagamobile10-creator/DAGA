@@ -297,6 +297,28 @@ class InvitationSchemaTests(unittest.TestCase):
 
 
 
+
+    def test_company_login_verification_requires_both_channels_and_single_use_claim(self):
+        source = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
+        start = source.index("async function companyLoginVerify(")
+        end = source.index("\n}", start) + 2
+        handler = source[start:end]
+        self.assertIn("channel='phone'", handler)
+        self.assertIn("channel='email'", handler)
+        self.assertIn("claim_id IS NULL", handler)
+        self.assertIn("WHERE EXISTS (SELECT 1 FROM daga_company_login_challenges WHERE id=? AND claim_id=? AND channel='phone')", handler)
+        self.assertIn("WHERE EXISTS (SELECT 1 FROM daga_company_login_challenges WHERE id=? AND claim_id=? AND channel='email')", handler)
+
+    def test_company_logout_revokes_exact_session_once(self):
+        source = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
+        start = source.index("async function companyAccountLogout(")
+        end = source.index("\n}", start) + 2
+        handler = source[start:end]
+        self.assertIn("WHERE token_hash=? AND revoked_at IS NULL", handler)
+        self.assertIn('Number(result?.meta?.changes || 0) !== 1', handler)
+        self.assertIn('error: "session_already_revoked"', handler)
+
+
     def test_invitation_listing_is_scoped_to_company_and_manager(self):
         source = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
         start = source.index("async function listInvitations(")
