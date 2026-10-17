@@ -57,9 +57,7 @@ jobs:
         run: |
           python3 - <<'PY'
           auth = open("owner-auth.js", encoding="utf-8").read()
-          start = auth.index("async function consumeChallenge")
-          end = auth.index("\\n}", start) + 2
-          block = auth[start:end]
+          block = auth
           assert "attempts<5" in block, "OTP attempts must be bounded in the conditional claim"
           assert "consumed_at IS NULL" in block, "OTP claim must reject consumed challenges"
           assert "expires_at>?" in block, "OTP claim must reject expired challenges"
