@@ -60,3 +60,10 @@ The code is committed on the development branch, but the deployment is not yet o
 ## Remaining production blockers
 
 No D1 database or provider secrets have been provisioned through this workflow, and no real SMS/email, end-to-end API, or staging Worker tests have run. The existing store/employee authentication, public store onboarding/order submission, full tenant isolation for existing `/memory`, `/chat`, `/tts`, and LiveAvatar routes, and integration of this console into the original V30 dashboard are still outstanding. The draft pull request must not be merged or described as a completed production release yet.
+
+
+## Company terminology and stable identities
+
+The user-facing business entity is **Company** (Arabic: الشركة), not shop/store. Existing SQL table names and API field names remain unchanged for compatibility until a separately tested API migration. Migration `0006_daga_public_identity_ids.sql` adds unique stable public IDs for accounts and companies and backfills existing records from their immutable internal IDs, never from editable display names. Public IDs identify records; they are not credentials and do not authorize access.
+
+The company membership and single-use invitation schema exists, but role-aware invite creation/acceptance, QR rendering, and authenticated account/company profile flows are not yet implemented. Do not claim QR identities or invitations are operational until those routes and tests are complete.
