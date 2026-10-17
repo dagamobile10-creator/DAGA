@@ -519,5 +519,33 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertIsNone(row)
 
 
+    def test_registration_challenge_attempt_limit_and_replay_claim(self):
+        self.db.execute(
+            """INSERT INTO daga_company_registration_challenges
+            (id,invitation_token_hash,channel,destination_hash,code_hash,expires_at,attempts)
+            VALUES ('reg-limited','invite-hash','phone','phone-hash','otp-hash','2026-10-18T00:00:00.000Z',4)"""
+        )
+        fifth = self.db.execute(
+            "UPDATE daga_company_registration_challenges SET attempts=attempts+1 WHERE id='reg-limited' AND attempts<5 RETURNING attempts"
+        ).fetchone()
+        sixth = self.db.execute(
+            "UPDATE daga_company_registration_challenges SET attempts=attempts+1 WHERE id='reg-limited' AND attempts<5 RETURNING attempts"
+        ).fetchone()
+        self.assertEqual(fifth["attempts"], 5)
+        self.assertIsNone(sixth)
+        claim = self.db.execute(
+            """UPDATE daga_company_registration_challenges SET consumed_at=?,claim_id='claim-first'
+            WHERE id='reg-limited' AND consumed_at IS NULL AND claim_id IS NULL AND attempts<=5 AND expires_at>?""",
+            (self.now, self.now),
+        )
+        replay = self.db.execute(
+            """UPDATE daga_company_registration_challenges SET consumed_at=?,claim_id='claim-second'
+            WHERE id='reg-limited' AND consumed_at IS NULL AND claim_id IS NULL AND attempts<=5 AND expires_at>?""",
+            (self.now, self.now),
+        )
+        self.assertEqual(claim.rowcount, 1)
+        self.assertEqual(replay.rowcount, 0)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
