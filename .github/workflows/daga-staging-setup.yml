@@ -141,6 +141,20 @@ jobs:
             sleep 5
           done
           jq '{ok,voiceConfigured,chatConfigured,freeChatConfigured,liveAvatarConfigured}' /tmp/health.json
+          # Runtime CORS smoke test: only the configured staging origin may be authorized.
+          curl -fsS -D /tmp/cors-allowed.headers -o /dev/null -X OPTIONS \
+            -H 'Origin: https://daga-app-staging.dagamobile10.workers.dev' \
+            -H 'Access-Control-Request-Method: POST' \
+            https://daga-app-staging.dagamobile10.workers.dev/api/company/auth/register
+          grep -qi '^access-control-allow-origin: https://daga-app-staging.dagamobile10.workers.dev' /tmp/cors-allowed.headers
+          curl -sS -D /tmp/cors-hostile.headers -o /dev/null -X OPTIONS \
+            -H 'Origin: https://untrusted.example' \
+            -H 'Access-Control-Request-Method: POST' \
+            https://daga-app-staging.dagamobile10.workers.dev/api/company/auth/register
+          if grep -qi '^access-control-allow-origin: \*' /tmp/cors-hostile.headers; then
+            echo "::error::Staging API returned wildcard CORS for an untrusted origin"; exit 1
+          fi
+          echo "Staging CORS smoke test passed: no wildcard origin was returned."
           for path in /go/ /company/ /invite/; do
             code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "https://daga-app-staging.dagamobile10.workers.dev$path")"
             if [ "$code" != "200" ]; then echo "::error::Staging page $path returned HTTP $code"; exit 1; fi
