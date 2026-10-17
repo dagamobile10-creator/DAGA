@@ -295,6 +295,27 @@ class InvitationSchemaTests(unittest.TestCase):
 
 
 
+
+    def test_invitation_claim_requires_pending_unexpired_single_use_and_approved_company(self):
+        source = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
+        start = source.index("async function acceptInvitation(")
+        end = source.index("\n}", start) + 2
+        handler = source[start:end]
+        self.assertIn("i.status='pending' AND i.use_count=0 AND i.max_uses=1 AND i.expires_at>?", handler)
+        self.assertIn("s.status='approved'", handler)
+        self.assertIn("NOT EXISTS (SELECT 1 FROM daga_store_memberships", handler)
+        self.assertIn("RETURNING id,store_id,intended_role,permissions_json", handler)
+
+    def test_invitation_revoke_is_conditional_and_only_pending_unused(self):
+        source = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
+        start = source.index("async function revokeInvitation(")
+        end = source.index("\n}", start) + 2
+        handler = source[start:end]
+        self.assertIn('invite.status !== "pending"', handler)
+        self.assertIn("WHERE id=? AND status='pending' AND use_count=0", handler)
+        self.assertIn('Number(result?.meta?.changes || 0) !== 1', handler)
+
+
     def test_company_manager_cannot_escalate_invitation_role_or_permissions(self):
         source = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
         start = source.index("function normalizePermissions(")
