@@ -2,11 +2,25 @@ import { handleOwnerAuth } from "./owner-auth.js";
 import { handleOwnerAdmin } from "./owner-admin.js";
 import { handleCompanyInvitations } from "./company-invitations.js";
 import inviteHtml from "./invite/index.html";
+import companyPortalHtml from "./company/portal.html";
 const VOICE_ID = "NG9zqiTuEbX3Nw0gjYcc"; // Previous voice ID backup: PF3gVGPrCr6Dw1WaSSiy
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+
+    if ((url.pathname === "/company" || url.pathname === "/company/") && request.method === "GET") {
+      return new Response(companyPortalHtml, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/html; charset=utf-8",
+          "Cache-Control": "no-store",
+          "Referrer-Policy": "no-referrer",
+          "X-Content-Type-Options": "nosniff",
+          "Content-Security-Policy": "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"
+        }
+      });
+    }
 
     if ((url.pathname === "/invite" || url.pathname === "/invite/") && request.method === "GET") {
       return new Response(inviteHtml, {
