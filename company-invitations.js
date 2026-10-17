@@ -2,8 +2,6 @@ import { authenticatedAccount } from "./owner-auth.js";
 
 const MAX_INVITE_TTL_HOURS = 24 * 14;
 const DEFAULT_INVITE_TTL_HOURS = 72;
-const MANAGER_PERMISSION = "inviteEmployees";
-
 export async function handleCompanyInvitations(request, env, url) {
   const path = url.pathname.replace(/\/+$/, "") || "/";
   if (!["/api/company/invitations", "/api/company/invitations/accept"].includes(path) &&
@@ -90,7 +88,7 @@ async function acceptInvitation(request, env, db, account) {
   const membershipId = crypto.randomUUID();
   const claim = db.prepare("UPDATE daga_store_invitations SET status='accepted',use_count=1,accepted_by_account_id=?,accepted_at=? WHERE id=? AND token_hash=? AND status='pending' AND use_count=0 AND max_uses=1 AND expires_at>? AND EXISTS (SELECT 1 FROM daga_stores s WHERE s.id=daga_store_invitations.store_id AND s.status='approved') RETURNING id,store_id,intended_role,permissions_json")
     .bind(account.id, now, invite.id, tokenHash, now);
-  const insert = db.prepare("INSERT INTO daga_store_memberships (id,store_id,account_id,role,status,permissions_json,invited_by_account_id,created_at,updated_at) SELECT ?,i.store_id,?,i.intended_role,'active',i.permissions_json,i.inviter_account_id,?,?,? FROM daga_store_invitations i WHERE i.id=? AND i.status='accepted' AND i.accepted_by_account_id=? AND i.use_count=1 AND NOT EXISTS (SELECT 1 FROM daga_store_memberships m WHERE m.store_id=i.store_id AND m.account_id=? AND m.status!='removed')")
+  const insert = db.prepare("INSERT INTO daga_store_memberships (id,store_id,account_id,role,status,permissions_json,invited_by_account_id,created_at,updated_at) SELECT ?,i.store_id,?,i.intended_role,'active',i.permissions_json,i.inviter_account_id,?,? FROM daga_store_invitations i WHERE i.id=? AND i.status='accepted' AND i.accepted_by_account_id=? AND i.use_count=1 AND NOT EXISTS (SELECT 1 FROM daga_store_memberships m WHERE m.store_id=i.store_id AND m.account_id=?)")
     .bind(membershipId, account.id, now, now, invite.id, account.id, account.id);
   const results = await db.batch([claim, insert]);
   const claimed = Number(results?.[0]?.meta?.changes || 0);
