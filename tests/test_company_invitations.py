@@ -182,6 +182,15 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertIn('url.pathname === "/invite"', worker)
         self.assertIn('url.pathname === "/company"', worker)
 
+    def test_existing_membership_does_not_consume_another_invitation(self):
+        source = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
+        start = source.index("async function acceptInvitation(")
+        end = source.index("\nasync function revokeInvitation", start)
+        handler = source[start:end]
+        self.assertIn("AND NOT EXISTS (SELECT 1 FROM daga_store_memberships m WHERE m.store_id=daga_store_invitations.store_id AND m.account_id=?)", handler)
+        self.assertIn(".bind(account.id, now, invite.id, tokenHash, now, account.id)", handler)
+        self.assertIn("const inserted = Number(results?.[1]?.meta?.changes || 0)", handler)
+
     def test_invitation_registration_is_atomic_with_membership_and_token_claim(self):
         source = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
         start = source.index("async function registerVerify(")
