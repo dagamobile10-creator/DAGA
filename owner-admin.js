@@ -58,6 +58,38 @@ export async function handleOwnerAdmin(request, env, url) {
       return json(env, {ok:true,version:existing.version+1});
     }
 
+    if(path==="/owner/admin/offers"&&request.method==="GET"){
+      const r=await db.prepare("SELECT id,name,service,discount_type,discount_value,starts_at,ends_at,max_redemptions,redemption_count,is_active,created_at,updated_at FROM daga_offers ORDER BY created_at DESC").all();
+      return json(env,{ok:true,offers:r.results||[]});
+    }
+    if(path==="/owner/admin/offers"&&request.method==="POST"){
+      const b=await readJson(request);if(!b)return json(env,{error:"invalid_json"},400);
+      const name=String(b.name||"").trim().slice(0,100),service=String(b.service||""),type=String(b.discountType||""),value=Number(b.discountValue);
+      const max=b.maxRedemptions==null?null:Number(b.maxRedemptions);
+      let starts=null,ends=null;
+      try{starts=b.startsAt?new Date(b.startsAt).toISOString():null;ends=b.endsAt?new Date(b.endsAt).toISOString():null;}catch(_){return json(env,{error:"invalid_offer_dates"},400);}
+      if(!name||!["store","live_daga"].includes(service)||!["fixed_minor","percent"].includes(type)||!Number.isSafeInteger(value)||value<1||(type==="percent"&&value>100)||(max!==null&&(!Number.isInteger(max)||max<1))||(starts&&ends&&Date.parse(ends)<=Date.parse(starts)))return json(env,{error:"invalid_offer_fields"},400);
+      const id=crypto.randomUUID(),now=new Date().toISOString();
+      await db.prepare("INSERT INTO daga_offers (id,name,service,discount_type,discount_value,starts_at,ends_at,max_redemptions,created_by,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)").bind(id,name,service,type,value,starts,ends,max,owner.id,now,now).run();
+      await audit(db,owner.id,"offer_created","daga_offers",id,{name,service,discountType:type,discountValue:value});
+      return json(env,{ok:true,id},201);
+    }
+    const offerMatch=path.match(/^\/owner\/admin\/offers\/([a-f0-9-]{36})$/i);
+    if(offerMatch&&request.method==="PATCH"){
+      const b=await readJson(request);if(!b)return json(env,{error:"invalid_json"},400);
+      const old=await db.prepare("SELECT * FROM daga_offers WHERE id=?").bind(offerMatch[1]).first();
+      if(!old)return json(env,{error:"offer_not_found"},404);
+      const name=b.name===undefined?old.name:String(b.name).trim().slice(0,100);
+      const value=b.discountValue===undefined?old.discount_value:Number(b.discountValue);
+      const active=b.isActive===undefined?old.is_active:(b.isActive?1:0);
+      let starts=old.starts_at,ends=old.ends_at;
+      try{if(b.startsAt!==undefined)starts=b.startsAt?new Date(b.startsAt).toISOString():null;if(b.endsAt!==undefined)ends=b.endsAt?new Date(b.endsAt).toISOString():null;}catch(_){return json(env,{error:"invalid_offer_dates"},400);}
+      if(!name||!Number.isSafeInteger(value)||value<1||(old.discount_type==="percent"&&value>100)||(starts&&ends&&Date.parse(ends)<=Date.parse(starts)))return json(env,{error:"invalid_offer_fields"},400);
+      await db.prepare("UPDATE daga_offers SET name=?,discount_value=?,starts_at=?,ends_at=?,is_active=?,updated_at=? WHERE id=?").bind(name,value,starts,ends,active,new Date().toISOString(),old.id).run();
+      await audit(db,owner.id,"offer_updated","daga_offers",old.id,{isActive:active});
+      return json(env,{ok:true});
+    }
+
     if (path === "/owner/admin/payment-methods" && request.method === "GET") {
       const r = await db.prepare("SELECT id,provider,display_label,destination_value,instructions,is_active,updated_at FROM daga_payment_methods ORDER BY provider").all();
       return json(env, {ok:true,methods:r.results||[]});
@@ -164,7 +196,7 @@ export async function handleOwnerAdmin(request, env, url) {
       const r=await db.prepare("SELECT id,scope,store_id,stable_key,display_name,data_type,behavior_json,calculation_key,is_enabled,updated_at FROM daga_column_definitions ORDER BY scope,store_id,stable_key").all();
       return json(env, {ok:true,columns:r.results||[]});
     }
-    const columnMatch = path.match(/^\/owner\/admin\/plans\/([a-f0-9-]{36})$/i);
+    const columnMatch = path.match(/^\/owner\/admin\/columns\/([a-f0-9-]{36})$/i);
     if(columnMatch&&request.method==="PATCH"){
       const b=await readJson(request);if(!b)return json(env,{error:"invalid_json"},400);
       const old=await db.prepare("SELECT id,scope,store_id,stable_key,display_name,is_enabled FROM daga_column_definitions WHERE id=?").bind(columnMatch[1]).first();
