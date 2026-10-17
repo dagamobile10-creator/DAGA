@@ -7,5 +7,5 @@ binding = "AI"
 
 [[rules]]
 type = "Text"
-globs = ["invite/index.html"]
+globs = ["invite/index.html", "company/portal.html"]
 fallthrough = false
