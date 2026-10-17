@@ -501,5 +501,23 @@ class InvitationSchemaTests(unittest.TestCase):
             self.db.execute("UPDATE daga_company_login_challenges SET attempts=6 WHERE id='login-limited'")
 
 
+    def test_suspended_account_cannot_use_an_existing_session(self):
+        self.db.execute(
+            """INSERT INTO daga_auth_sessions
+            (id,account_id,token_hash,created_at,expires_at,last_seen_at)
+            VALUES ('session-suspended','employee','suspended-session-hash',?,?,?)""",
+            (self.now, "2026-10-18T00:00:00.000Z", self.now),
+        )
+        self.db.execute("UPDATE daga_accounts SET status='suspended' WHERE id='employee'")
+        row = self.db.execute(
+            """SELECT a.id FROM daga_auth_sessions s
+            JOIN daga_accounts a ON a.id=s.account_id
+            WHERE s.token_hash=? AND s.revoked_at IS NULL AND s.expires_at>?
+            AND a.status='approved' LIMIT 1""",
+            ("suspended-session-hash", self.now),
+        ).fetchone()
+        self.assertIsNone(row)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
