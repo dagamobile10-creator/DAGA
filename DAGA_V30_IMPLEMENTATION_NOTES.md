@@ -83,3 +83,11 @@ A successful staging deployment is not a production release. The current staging
 
 The user-facing business entity is **Company** (Arabic: الشركة), not shop/store. Existing SQL table names and API field names remain unchanged for compatibility until a separately tested API migration. Migration `0006_daga_public_identity_ids.sql` adds stable public IDs for accounts and companies; these IDs identify records and are not credentials. Migration 0005 adds membership and invitation tables, and migrations 0007–0008 add registration/login OTP challenge storage.
 
+## Follow-up verification — 2026-10-17
+
+- Added a staging smoke check that requires unauthenticated requests to `/owner/auth/me` and `/owner/admin/overview` to return HTTP 401, alongside existing company/invitation checks. The staging worker remains separate from production.
+- Added CI regression guards for singleton program-owner identity, bootstrap bearer-token protection, refusal to provision a second program owner, and the rule that password verification alone cannot issue a session before both phone and email OTPs pass.
+- Latest owner-auth CI run: [39059823015](https://github.com/dagamobile10-creator/DAGA/actions/runs/39059823015) — passed at commit `c1c8eaaa20be4167553c7b8659f490e21d389222`. Validation includes JavaScript syntax, security regression guards, company invitation tests, and all eight migrations against fresh SQLite.
+- Latest Pages workflow validation at the same commit: [39059825512](https://github.com/dagamobile10-creator/DAGA/actions/runs/39059825512) — passed. On a pull-request event this workflow validates the source; it does not publish GitHub Pages.
+- Owner phone/email and SMS/email delivery secrets intentionally remain the final setup step, as requested. Without those secrets, staging cannot complete real owner bootstrap/login/recovery or prove real OTP delivery.
+- Still release-blocking: end-to-end testing with configured staging delivery, manager/employee permission and cross-company isolation tests, and authenticated identity integration for the legacy `/memory`, `/chat`, `/tts`, and LiveAvatar routes. These are explicitly not marked complete. PR #7 remains open; no merge or production Worker deployment was performed.
