@@ -269,7 +269,7 @@ class InvitationSchemaTests(unittest.TestCase):
         end = source.index("\n}", start) + 2
         handler = source[start:end]
         self.assertIn('allowed.includes("*") ? "*" :', handler)
-        self.assertIn('allowed.length === 0 ? ""', handler)
+        self.assertTrue(handler.rstrip().endswith(' : "";\n  return { ...(origin ? { "Access-Control-Allow-Origin": origin } : {}), "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS", "Access-Control-Allow-Headers": "Content-Type,Authorization", "Access-Control-Max-Age": "600", Vary: "Origin", ...extra };\n}'))
         self.assertNotIn('allowed.length === 0 ? "*" :', handler)
 
     def test_company_and_invitation_pages_set_no_store_and_security_headers(self):
