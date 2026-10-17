@@ -140,9 +140,12 @@ export default {
 
     if (url.pathname === "/chat" && request.method === "POST") {
       try {
-        const body = await request.json();
+        const parsed = await readBoundedJson(request, 32768);
+        if (!parsed.ok) return json({ error: parsed.error }, parsed.status);
+        const body = parsed.value;
         const userText = String(body?.text || "").trim();
         if (!userText) return json({ error: "text is required" }, 400);
+        if (userText.length > 2000) return json({ error: "text_too_long", maxLength: 2000 }, 413);
         if (/(اسمك\s*(?:إيه|ايه|ما|ماذا)|مين\s*إنت|من\s*أنت|عرفني\s*بنفسك)/u.test(userText)) return json({ reply: "أنا اسمي ضَجَّة، مساعدك الذكي.", provider: "built-in" });
         const history = Array.isArray(body?.history) ? body.history.slice(-8).filter(item => item && ["user", "assistant"].includes(item.role) && typeof item.content === "string" && item.content.trim()).map(item => ({ role: item.role, content: item.content.trim().slice(0, 1200) })) : [];
         const conversation = [...history, { role: "user", content: userText }];
@@ -236,9 +239,12 @@ export default {
 
     try {
       if (!env.ELEVENLABS_API_KEY) return json({ error: "DAGA voice is not configured" }, 503);
-      const body = await request.json();
+      const parsed = await readBoundedJson(request, 16384);
+      if (!parsed.ok) return json({ error: parsed.error }, parsed.status);
+      const body = parsed.value;
       let text = String(body?.text || "").trim();
       if (!text) return json({ error: "text is required" }, 400);
+      if (text.length > 2500) return json({ error: "text_too_long", maxLength: 2500 }, 413);
 
       // Keep the generated text unchanged; pronunciation should follow general language rules.
       // No word-specific phonetic substitutions or pronunciation exceptions.
@@ -256,6 +262,23 @@ export default {
     } catch (error) { return json({ error: "Worker failure", detail: String(error) }, 500); }
   }
 };
+
+
+async function readBoundedJson(request, maxBytes) {
+  const contentType = String(request.headers.get("Content-Type") || "").split(";")[0].trim().toLowerCase();
+  if (contentType !== "application/json") return { ok: false, status: 415, error: "application_json_required" };
+  const length = Number(request.headers.get("Content-Length") || 0);
+  if (Number.isFinite(length) && length > maxBytes) return { ok: false, status: 413, error: "request_body_too_large" };
+  try {
+    const raw = await request.text();
+    if (new TextEncoder().encode(raw).byteLength > maxBytes) return { ok: false, status: 413, error: "request_body_too_large" };
+    const value = JSON.parse(raw);
+    if (!value || typeof value !== "object" || Array.isArray(value)) return { ok: false, status: 400, error: "json_object_required" };
+    return { ok: true, value };
+  } catch (_) {
+    return { ok: false, status: 400, error: "invalid_json" };
+  }
+}
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: cors({ "Content-Type": "application/json; charset=utf-8" }) });
