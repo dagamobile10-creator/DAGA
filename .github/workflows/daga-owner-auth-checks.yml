@@ -18,6 +18,8 @@ jobs:
         run: node --input-type=module --check < worker.js
       - name: Check owner-auth module syntax
         run: node --input-type=module --check < owner-auth.js
+      - name: Check company invitation module syntax
+        run: node --input-type=module --check < company-invitations.js
       - name: Check owner-admin module syntax
         run: node --input-type=module --check < owner-admin.js
       - name: Check owner console inline JavaScript syntax
@@ -66,6 +68,26 @@ jobs:
           assert "RETURNING attempts" in block, "OTP attempt increment must return the conditional claim"
           assert "UPDATE daga_auth_challenges SET consumed_at=?" in block, "Successful OTP must be consumed conditionally"
           print("OTP consumption has bounded conditional attempt claims.")
+          PY
+      - name: Invitation authorization and single-use regression guards
+        run: |
+          python3 - <<'PY'
+          import re
+          src = open("company-invitations.js", encoding="utf-8").read()
+          auth = open("owner-auth.js", encoding="utf-8").read()
+          worker = open("worker.js", encoding="utf-8").read()
+          checks = {
+              "company API uses authenticated account sessions": "authenticatedAccount(request, db)" in src and "export async function authenticatedAccount" in auth,
+              "invite token hash is stored, not token": "token_hash" in src and "await sha256(token)" in src,
+              "manager cannot invite managers": 'authority.role === "manager" && intendedRole !== "employee"' in src,
+              "invitation acceptance is conditional and single use": "status='pending' AND use_count=0 AND max_uses=1 AND expires_at>?" in src,
+              "invite acceptance requires explicit token body": 'String(body.token || "").trim()' in src,
+              "trusted HTTPS base URL required": 'u.protocol !== "https:"' in src and "DAGA_APP_BASE_URL" in src,
+              "worker routes invitation module": 'handleCompanyInvitations' in worker and 'company-invitations.js' in worker,
+          }
+          for name, ok in checks.items():
+              print(("PASS" if ok else "FAIL") + ": " + name)
+          assert all(checks.values()), "Invitation security regression guard failed"
           PY
       - name: Apply D1 migrations to a fresh SQLite database
         run: |
