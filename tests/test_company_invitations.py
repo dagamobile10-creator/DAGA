@@ -414,5 +414,17 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertIn('...(origin ? { "Access-Control-Allow-Origin": origin } : {})', handler)
 
 
+    def test_company_session_rejects_expired_revoked_or_unapproved_account(self):
+        source = (ROOT / "owner-auth.js").read_text(encoding="utf-8")
+        start = source.index("export async function authenticatedAccount(")
+        end = source.index("\n}", start) + 2
+        handler = source[start:end]
+        self.assertIn("s.revoked_at IS NULL", handler)
+        self.assertIn("s.expires_at>?", handler)
+        self.assertIn("a.status='approved'", handler)
+        self.assertIn("WHERE token_hash=? AND revoked_at IS NULL", handler)
+        self.assertIn("return null;", handler)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
