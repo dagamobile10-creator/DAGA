@@ -39,6 +39,20 @@ jobs:
           assert r'/^\\d{6}$/.test(phoneCode)' not in auth, "Found over-escaped OTP regex"
           print("OTP and password digit validation patterns are correctly escaped.")
           PY
+      - name: Guard payment-review idempotency predicates
+        run: |
+          python3 - <<'PY'
+          admin = open("owner-admin.js", encoding="utf-8").read()
+          start = admin.index('const statements=[', admin.index('const reviewMatch='))
+          end = admin.index('await db.batch(statements);', start)
+          block = admin[start:end]
+          assert "status='pending_review'" in block, "Review update must claim only pending submissions"
+          assert "ps.status='confirmed'" in block, "Entitlement and word credits must require confirmed payment"
+          assert "ps.reviewed_by=?" in block and "ps.reviewed_at=?" in block, "Side effects must match the exact review claim"
+          assert "o.status='paid_approved'" in block, "Side effects must require approved order"
+          assert "AND undefined" not in block, "Incomplete payment review SQL predicate"
+          print("Payment review conditional guards are present.")
+          PY
       - name: Apply D1 migrations to a fresh SQLite database
         run: |
           python3 - <<'PY'
