@@ -64,3 +64,10 @@ Do not use production data, real customer accounts, or real payment records duri
 - [ ] Existing user-facing endpoints have role and tenant authorization; protecting owner routes alone is insufficient.
 - [ ] Production deployment is intentionally approved, then the actual Worker version and endpoint responses are verified.
 - [ ] Do not call the owner console production-secure until these checks pass.
+
+
+## Stable account/company public IDs
+- [ ] Migration 0006 applied to a dedicated staging D1 database; every existing account and company has a unique, non-empty public ID.
+- [ ] Editing a company display name does not change its public ID.
+- [ ] Public ID / identity QR alone never authenticates or grants access.
+- [ ] Company terminology is used in user-facing copy; internal legacy SQL names are not renamed without a separate compatibility migration.
