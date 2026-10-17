@@ -226,6 +226,16 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertNotIn(r"\\s", handler)
         self.assertNotIn(r"\\d", handler)
 
+    def test_invitation_creation_is_rate_limited_by_account_and_ip(self):
+        source = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
+        start = source.index("async function createInvitation(")
+        end = source.index("\nasync function listInvitations", start)
+        handler = source[start:end]
+        self.assertIn('company-invite-create-account:', handler)
+        self.assertIn('company-invite-create-ip:', handler)
+        self.assertIn('companyRateLimit(db, env, "company-invite-create-account:" + account.id, 30, 3600)', handler)
+        self.assertIn('companyRateLimit(db, env, "company-invite-create-ip:" + ip, 60, 3600)', handler)
+
     def test_company_login_otp_verification_is_rate_limited(self):
         source = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
         start = source.index("async function companyLoginVerify(")
