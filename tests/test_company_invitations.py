@@ -11,6 +11,7 @@ MIGRATIONS = [
     "0005_daga_store_identity_invitations.sql",
     "0006_daga_public_identity_ids.sql",
     "0007_daga_company_registration_challenges.sql",
+    "0008_daga_company_login_challenges.sql",
 ]
 
 
@@ -132,6 +133,9 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertIn('intendedRole === "manager" && authority.role !== "store_owner"', src)
         self.assertIn('u.protocol !== "https:"', src)
         self.assertIn("await sha256(token)", src)
+        self.assertIn('"/api/company/auth/register/verify"', src)
+        self.assertIn('"/api/company/auth/login/verify"', src)
+        self.assertIn("export async function authenticatedAccount", (ROOT / "owner-auth.js").read_text(encoding="utf-8"))
         self.assertIn('authority.role === "manager" && !authority.permissions.inviteEmployees', src)
         self.assertIn('WHERE store_id=? AND inviter_account_id=?', src)
         self.assertIn('invite.inviter_account_id !== account.id', src)
