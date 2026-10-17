@@ -157,6 +157,17 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertNotIn("localStorage", portal)
         self.assertNotIn("sessionStorage", portal)
 
+    def test_official_qr_page_is_separate_from_invitation_qr(self):
+        page = (ROOT / "go" / "index.html").read_text(encoding="utf-8")
+        worker = (ROOT / "worker.js").read_text(encoding="utf-8")
+        self.assertIn("DAGA", page)
+        self.assertIn('location.origin+"/go/"', page)
+        self.assertIn("new QRCode", page)
+        self.assertNotIn("api.qrserver.com", page)
+        self.assertIn('url.pathname === "/go"', worker)
+        self.assertIn('url.pathname === "/invite"', worker)
+        self.assertIn('url.pathname === "/company"', worker)
+
     def test_api_guards_role_escalation_and_authentication(self):
         src = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
         self.assertIn("authenticatedAccount(request, db)", src)
