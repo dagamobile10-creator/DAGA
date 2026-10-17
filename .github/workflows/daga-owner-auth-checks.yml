@@ -53,6 +53,18 @@ jobs:
           open("/tmp/daga-official-qr.js", "w", encoding="utf-8").write("\n".join(scripts))
           PY
           node --check /tmp/daga-official-qr.js
+      - name: Guard provider error redaction
+        run: |
+          python3 - <<'PY'
+          worker = open("worker.js", encoding="utf-8").read()
+          assert 'error: "liveavatar_avatar_lookup_failed"' in worker
+          assert 'error: "liveavatar_session_token_failed"' in worker
+          assert 'error: "liveavatar_lookup_failed"' in worker
+          assert 'error: "liveavatar_token_failed"' in worker
+          assert 'error: "memory_storage_failed"' in worker
+          assert 'detail: data' not in worker, "Raw provider response must not be returned to clients"
+          print("Provider and storage error responses avoid raw upstream details.")
+          PY
       - name: Guard bounded memory persistence payloads
         run: |
           python3 - <<'PY'
