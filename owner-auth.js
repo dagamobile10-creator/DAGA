@@ -312,14 +312,9 @@ async function consumeChallenge(db, env, purpose, destinationHash, code) {
 async function rateLimit(db, env, key, limit, windowSeconds) {
   const hashed = await sha256(key + ":" + (env.DAGA_OTP_PEPPER || env.DAGA_OWNER_BOOTSTRAP_TOKEN || "daga-rate-limit"));
   const now = Math.floor(Date.now() / 1000);
-  const row = await db.prepare("SELECT window_started_at,attempts FROM daga_auth_rate_limits WHERE bucket_key=?").bind(hashed).first();
-  if (!row || now - row.window_started_at >= windowSeconds) {
-    await db.prepare("INSERT INTO daga_auth_rate_limits (bucket_key,window_started_at,attempts) VALUES (?,?,1) ON CONFLICT(bucket_key) DO UPDATE SET window_started_at=excluded.window_started_at,attempts=1").bind(hashed, now).run();
-    return true;
-  }
-  if (row.attempts >= limit) return false;
-  await db.prepare("UPDATE daga_auth_rate_limits SET attempts=attempts+1 WHERE bucket_key=?").bind(hashed).run();
-  return true;
+  const row = await db.prepare("INSERT INTO daga_auth_rate_limits (bucket_key,window_started_at,attempts) VALUES (?,?,1) ON CONFLICT(bucket_key) DO UPDATE SET window_started_at=CASE WHEN ? - daga_auth_rate_limits.window_started_at >= ? THEN ? ELSE daga_auth_rate_limits.window_started_at END, attempts=CASE WHEN ? - daga_auth_rate_limits.window_started_at >= ? THEN 1 ELSE daga_auth_rate_limits.attempts+1 END WHERE ? - daga_auth_rate_limits.window_started_at >= ? OR daga_auth_rate_limits.attempts < ? RETURNING attempts,window_started_at")
+    .bind(hashed,now,now,windowSeconds,now,now,windowSeconds,now,windowSeconds,limit).first();
+  return Boolean(row);
 }
 
 async function sendSms(env, phone, message) {
