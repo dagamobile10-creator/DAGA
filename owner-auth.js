@@ -6,10 +6,11 @@ const PBKDF2_ITERATIONS = 310000;
 export async function handleOwnerAuth(request, env, url) {
   const routes = new Set([
     "/owner/bootstrap/start", "/owner/bootstrap/verify",
-    "/owner/auth/login", "/owner/auth/me", "/owner/auth/logout", "/owner/recovery/start", "/owner/recovery/complete"
+    "/owner/auth/login", "/owner/auth/login/verify", "/owner/auth/me", "/owner/auth/logout", "/owner/recovery/start", "/owner/recovery/complete"
   ]);
   if (!routes.has(url.pathname)) return null;
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors(env) });
+  if (url.pathname === "/owner/auth/login/verify" && request.method === "POST") return ownerLoginVerify(request, env);
   if (url.pathname.endsWith("/me") && request.method === "GET") return ownerMe(request, env);
   if (url.pathname.endsWith("/logout") && request.method === "POST") return ownerLogout(request, env);
   if (url.pathname === "/owner/recovery/start" && request.method === "POST") return recoveryStart(request, env);
@@ -211,9 +212,51 @@ async function ownerLogin(request, env) {
     await audit(db, account.id, "owner_login", "failure");
     return json(env, { error: "invalid_credentials" }, 401);
   }
-  const session = await createSession(db, account.id);
-  await audit(db, account.id, "owner_login", "success");
-  return json(env, { ok: true, account: { id: account.id, role: account.role, phoneMasked: maskPhone(account.phone_e164), emailMasked: maskEmail(account.email) }, sessionToken: session.token, expiresAt: session.expiresAt });
+  const phone = normalizePhone(env.DAGA_OWNER_PHONE || account.phone_e164);
+  const email = String(env.DAGA_OWNER_EMAIL || account.email).trim().toLowerCase();
+  if (!phone || !email || phone !== account.phone_e164 || email !== String(account.email).toLowerCase()) return json(env,{error:"owner_contact_configuration_mismatch"},503);
+  const now=Math.floor(Date.now()/1000), expires=new Date((now+OTP_TTL_SECONDS)*1000).toISOString();
+  const phoneCode=randomDigits(), emailCode=randomDigits(), phoneId=crypto.randomUUID(), emailId=crypto.randomUUID();
+  const [phoneHash,emailHash,phoneDest,emailDest]=await Promise.all([
+    sha256(phoneId+":"+phoneCode+":"+env.DAGA_OTP_PEPPER),sha256(emailId+":"+emailCode+":"+env.DAGA_OTP_PEPPER),
+    sha256("phone:"+phone),sha256("email:"+email)
+  ]);
+  await db.batch([
+    db.prepare("INSERT INTO daga_auth_challenges (id,account_id,purpose,destination_hash,code_hash,expires_at) VALUES (?,?,'login_phone',?,?,?)").bind(phoneId,account.id,phoneDest,phoneHash,expires),
+    db.prepare("INSERT INTO daga_auth_challenges (id,account_id,purpose,destination_hash,code_hash,expires_at) VALUES (?,?,'login_email',?,?,?)").bind(emailId,account.id,emailDest,emailHash,expires)
+  ]);
+  try {
+    await Promise.all([sendSms(env,phone,"DAGA login verification code: "+phoneCode+". Expires in 10 minutes."),
+      sendEmail(env,email,"DAGA login verification","<p>Your DAGA sign-in code is <strong>"+emailCode+"</strong>.</p><p>It expires in 10 minutes. If you did not request this, ignore this email.</p>")]);
+  } catch (_) {
+    await db.batch([
+      db.prepare("UPDATE daga_auth_challenges SET consumed_at=? WHERE id=?").bind(new Date().toISOString(),phoneId),
+      db.prepare("UPDATE daga_auth_challenges SET consumed_at=? WHERE id=?").bind(new Date().toISOString(),emailId)
+    ]);
+    return json(env,{error:"verification_delivery_failed"},502);
+  }
+  await audit(db,account.id,"owner_login_otp_sent","success");
+  return json(env,{ok:true,requiresVerification:true,phoneMasked:maskPhone(phone),emailMasked:maskEmail(email),expiresInSeconds:OTP_TTL_SECONDS});
+}
+
+async function ownerLoginVerify(request,env) {
+  const db=env.DAGA_APP_DB;
+  if(!db||!env.DAGA_OTP_PEPPER)return json(env,{error:"owner_auth_not_configured"},503);
+  const body=await safeJson(request);if(!body)return json(env,{error:"invalid_json"},400);
+  const phoneCode=String(body.phoneCode||"").trim(),emailCode=String(body.emailCode||"").trim();
+  if(!/^\\d{6}$/.test(phoneCode)||!/^\\d{6}$/.test(emailCode))return json(env,{error:"valid_phone_and_email_codes_required"},400);
+  const ip=request.headers.get("CF-Connecting-IP")||"unknown";
+  if(!await rateLimit(db,env,"login-verify:"+ip,8,900))return json(env,{error:"rate_limited"},429);
+  const owner=await db.prepare("SELECT a.id,a.role,a.status,a.phone_e164,a.email FROM daga_program_owner o JOIN daga_accounts a ON a.id=o.account_id WHERE o.singleton_id=1").first();
+  if(!owner||owner.role!==OWNER_ROLE||owner.status!=="approved")return json(env,{error:"invalid_expired_or_used_verification_code"},400);
+  const [p,e]=await Promise.all([
+    consumeChallenge(db,env,"login_phone",await sha256("phone:"+owner.phone_e164),phoneCode),
+    consumeChallenge(db,env,"login_email",await sha256("email:"+String(owner.email).toLowerCase()),emailCode)
+  ]);
+  if(!p||!e){await audit(db,owner.id,"owner_login_otp_verify","failure");return json(env,{error:"invalid_expired_or_used_verification_code"},400);}
+  const session=await createSession(db,owner.id);
+  await audit(db,owner.id,"owner_login","success");
+  return json(env,{ok:true,account:{id:owner.id,role:owner.role,phoneMasked:maskPhone(owner.phone_e164),emailMasked:maskEmail(owner.email)},sessionToken:session.token,expiresAt:session.expiresAt});
 }
 
 async function ownerMe(request, env) {
