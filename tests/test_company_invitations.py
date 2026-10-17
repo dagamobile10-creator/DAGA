@@ -293,5 +293,16 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertIn('"Content-Security-Policy":', handler)
         self.assertIn("frame-ancestors 'none'", handler)
 
+
+    def test_owner_api_cors_does_not_wildcard_when_allowlist_is_missing(self):
+        source = (ROOT / "owner-auth.js").read_text(encoding="utf-8")
+        start = source.index("function cors(env, extra = {})")
+        end = source.index("\n}", start) + 2
+        handler = source[start:end]
+        self.assertIn('allowed.includes("*") ? "*" :', handler)
+        self.assertNotIn('allowed.length === 0 ? "*" :', handler)
+        self.assertIn('...(origin ? { "Access-Control-Allow-Origin": origin } : {})', handler)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
