@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS daga_company_login_challenges (
   expires_at TEXT NOT NULL,
   attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts BETWEEN 0 AND 5),
   consumed_at TEXT,
+  claim_id TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS daga_company_login_lookup
