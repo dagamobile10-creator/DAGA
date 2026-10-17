@@ -40,6 +40,7 @@ jobs:
               "migrations/0001_daga_core.sql",
               "migrations/0002_daga_owner_auth.sql",
               "migrations/0003_daga_owner_credentials.sql",
+              "migrations/0004_daga_offers.sql",
               "migrations/0004_daga_promotions.sql",
           ):
               with open(path, encoding="utf-8") as f:
@@ -47,7 +48,7 @@ jobs:
           names = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
           required = {
               "daga_accounts", "daga_program_owner", "daga_auth_challenges",
-              "daga_auth_sessions", "daga_security_events",
+              "daga_auth_sessions", "daga_security_events", "daga_offers", "daga_order_price_adjustments",
               "daga_owner_credentials", "daga_owner_bootstrap_state", "daga_promotions",
               "daga_auth_rate_limits",
           }
