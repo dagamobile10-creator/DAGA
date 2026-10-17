@@ -32,6 +32,16 @@ jobs:
           open("/tmp/owner-console.js", "w", encoding="utf-8").write(scripts[0])
           PY
           node --check /tmp/owner-console.js
+      - name: Check company portal inline JavaScript syntax
+        run: |
+          python3 - <<'PY'
+          import re
+          html = open("company/portal.html", encoding="utf-8").read()
+          scripts = re.findall(r"<script>(.*?)</script>", html, re.S)
+          assert len(scripts) == 1, f"Expected one company portal script, found {len(scripts)}"
+          open("/tmp/company-portal.js", "w", encoding="utf-8").write(scripts[0])
+          PY
+          node --check /tmp/company-portal.js
       - name: Guard OTP and password digit validation patterns
         run: |
           python3 - <<'PY'
