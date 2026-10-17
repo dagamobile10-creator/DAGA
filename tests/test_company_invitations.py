@@ -138,6 +138,25 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertIn("/api/company/auth/register/verify", page)
         self.assertIn("/api/company/auth/login/verify", page)
 
+    def test_company_owner_provisioning_is_program_owner_only(self):
+        admin = (ROOT / "owner-admin.js").read_text(encoding="utf-8")
+        console = (ROOT / "owner-console.html").read_text(encoding="utf-8")
+        self.assertIn('if(path==="/owner/admin/stores"&&request.method==="POST")', admin)
+        self.assertIn("authenticatedOwner(request, db)", admin)
+        self.assertIn("DAGA-COMPANY-", admin)
+        self.assertIn("DAGA-USER-", admin)
+        self.assertIn("companyOwnerForm", console)
+
+    def test_company_portal_supports_invite_creation_and_revocation(self):
+        portal = (ROOT / "company" / "portal.html").read_text(encoding="utf-8")
+        self.assertIn("/api/company/auth/login/verify", portal)
+        self.assertIn("/api/company/auth/me", portal)
+        self.assertIn("/api/company/invitations", portal)
+        self.assertIn("/revoke", portal)
+        self.assertIn("navigator.share", portal)
+        self.assertNotIn("localStorage", portal)
+        self.assertNotIn("sessionStorage", portal)
+
     def test_api_guards_role_escalation_and_authentication(self):
         src = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
         self.assertIn("authenticatedAccount(request, db)", src)
