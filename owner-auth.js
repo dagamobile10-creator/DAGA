@@ -296,12 +296,16 @@ async function createSession(db, accountId) {
 }
 
 async function consumeChallenge(db, env, purpose, destinationHash, code) {
-  const row = await db.prepare("SELECT id,code_hash,expires_at,attempts,consumed_at FROM daga_auth_challenges WHERE purpose=? AND destination_hash=? ORDER BY rowid DESC LIMIT 1").bind(purpose, destinationHash).first();
-  if (!row || row.consumed_at || row.attempts >= 5 || new Date(row.expires_at).getTime() <= Date.now()) return false;
-  await db.prepare("UPDATE daga_auth_challenges SET attempts=attempts+1 WHERE id=? AND consumed_at IS NULL").bind(row.id).run();
+  const row = await db.prepare("SELECT id,code_hash FROM daga_auth_challenges WHERE purpose=? AND destination_hash=? AND consumed_at IS NULL AND attempts<5 AND expires_at>? ORDER BY rowid DESC LIMIT 1")
+    .bind(purpose, destinationHash, new Date().toISOString()).first();
+  if (!row) return false;
+  const claimed = await db.prepare("UPDATE daga_auth_challenges SET attempts=attempts+1 WHERE id=? AND consumed_at IS NULL AND attempts<5 AND expires_at>? RETURNING attempts")
+    .bind(row.id, new Date().toISOString()).first();
+  if (!claimed) return false;
   const expected = await sha256(row.id + ":" + code + ":" + env.DAGA_OTP_PEPPER);
   if (!constantTimeEqual(expected, row.code_hash)) return false;
-  const updated = await db.prepare("UPDATE daga_auth_challenges SET consumed_at=? WHERE id=? AND consumed_at IS NULL AND attempts<=5").bind(new Date().toISOString(), row.id).run();
+  const updated = await db.prepare("UPDATE daga_auth_challenges SET consumed_at=? WHERE id=? AND consumed_at IS NULL AND attempts<=5 AND expires_at>?")
+    .bind(new Date().toISOString(), row.id, new Date().toISOString()).run();
   return (updated?.meta?.changes || 0) === 1;
 }
 
