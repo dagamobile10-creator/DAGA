@@ -314,6 +314,13 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertNotIn('allowed.length === 0 ? "*" :', handler)
         self.assertIn('...(origin ? { "Access-Control-Allow-Origin": origin } : {})', handler)
 
+
+    def test_owner_admin_cors_fails_closed_without_allowlist(self):
+        source = (ROOT / "owner-admin.js").read_text(encoding="utf-8")
+        self.assertIn('allowed.includes("*")?"*":allowed.length===1?allowed[0]:""', source)
+        self.assertNotIn('allowed.length===0?"*"', source)
+
+
     def test_company_api_cors_fails_closed_without_allowlist(self):
         source = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
         start = source.index("function cors(env, extra = {})")
