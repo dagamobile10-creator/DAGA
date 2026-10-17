@@ -14,7 +14,25 @@ migrations/0001_daga_core.sql defines the proposed D1 data model for:
 - stable column keys separate from editable display names,
 - audit events.
 
-## Store identity and invitations (schema foundation only)\n\n- `migrations/0005_daga_store_identity_invitations.sql` adds an optional stable `public_id` to each store, explicit store memberships, and single-use invitations scoped to a store and intended role.\n- Store QR identity and invitation QR/link are intentionally different concepts: a public store ID identifies a store but does not authorize access; an invitation carries a random secret whose hash is stored in D1.\n- This migration is not yet an invitation API or complete membership/authentication flow. Token creation, hashing, inviter permission checks, atomic acceptance/replay prevention, role-scoped data routes, QR rendering, and safe backfill of existing stores must be implemented and tested before use.\n\n## Security requirements before enabling production traffic
+## Company identity, authentication, and invitations
+
+- Migrations 0005–0008 add stable public company/account IDs, explicit per-company memberships, single-use invitations, and bounded registration/login OTP challenge tables. These IDs identify records and are not credentials.
+- `company-invitations.js` implements invitation creation/list/revoke/accept, role and permission checks, invitation-bound registration, dual-channel OTP login, session inspection, and logout. Invitation and OTP secrets are stored as hashes; invite acceptance requires an authenticated session and explicit acceptance.
+- `owner-admin.js` and `owner-console.html` now allow the authenticated program owner to provision a pending company and its owner account, review/approve or reject companies, and inspect stable public IDs.
+- `company/portal.html` provides the company login and invitation-management portal. `invite/index.html` provides the invitation acceptance flow. The Worker serves both from its own origin so invite links do not depend on GitHub Pages copying nested files.
+- Manager invitations are limited to employees; a manager must have the invite-employees permission and can only revoke their own employee invitations. Owner-only actions remain behind the program-owner session.
+- `.github/workflows/daga-staging-setup.yml` is a manual-only workflow that provisions/reuses a separate `daga-app-staging` D1 database, applies tracked migrations, deploys a separate `daga-app-staging` Worker, and installs staging secrets. Pushes only validate the workflow; they do not provision or deploy staging resources.
+- CI syntax and SQLite schema/security regression checks pass on the current development branch. This does not prove real SMS/email delivery, Cloudflare D1 runtime behavior, invitation acceptance across two devices, or deployment configuration.
+
+## Known release gates
+
+1. Run the manual **DAGA isolated staging setup** workflow in GitHub Actions after confirming the repository secrets listed in `security/OWNER_AUTH_DEPLOYMENT.md` exist. This connector can edit files and inspect workflow runs, but it cannot dispatch the manual workflow or inspect repository secret values.
+2. Complete end-to-end staging tests for company-owner provisioning/approval, phone+email OTP, manager permission restrictions, invite create/revoke/accept, expired/replayed/concurrent invitations, session logout, and cross-company isolation.
+3. The company portal currently shares invitation links; a locally generated QR graphic and a separate public Android/iOS download landing page are not yet implemented. Do not send invitation tokens to third-party QR services.
+4. Existing `/memory`, `/chat`, `/tts`, and LiveAvatar routes are still separate from company authorization. Preserve the existing LIVE DAGA voice experience while planning and testing those protections independently.
+5. Production D1 bindings, secrets, migrations, and Worker deployment must be reviewed and configured deliberately. Do not merge PR #7 or deploy this branch to the production `daga-voice` Worker until the staging gates pass.
+
+## Security requirements before enabling production traffic
 
 1. Do not trust a role, store ID, price, word balance, approval state, or payment confirmation sent by the browser.
 2. Bootstrap the sole program-owner account through a one-time server-side process using verified contact channels. Never make the first public registrant the owner.
@@ -29,7 +47,7 @@ migrations/0001_daga_core.sql defines the proposed D1 data model for:
 
 ## Deployment status
 
-This branch contains a schema and implementation plan only. It does not create a D1 database, configure SMS/email providers, enable payment integrations, or deploy the Worker. No production security behavior should be assumed until server routes are implemented and tested.
+The current branch includes implemented owner-auth groundwork and company invitation/account flows with CI checks. A manual staging workflow has been added but has not been dispatched from this connector. No production D1 migration or production Worker deployment has been performed as part of this work.
 
 ## Owner-auth groundwork added on the development branch
 
