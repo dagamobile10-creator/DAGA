@@ -10,6 +10,10 @@ Create a **new dedicated Cloudflare D1 database** for app/account data. Do not r
 2. `migrations/0002_daga_owner_auth.sql`
 3. `migrations/0003_daga_owner_credentials.sql`
 4. `migrations/0004_daga_offers.sql`
+5. `migrations/0005_daga_store_identity_invitations.sql`
+6. `migrations/0006_daga_public_identity_ids.sql`
+7. `migrations/0007_daga_company_registration_challenges.sql`
+8. `migrations/0008_daga_company_login_challenges.sql`
 
 Bind that database to the Worker as `DAGA_APP_DB`. Keep the existing `DAGA_MEMORY_DB` binding separate until its user identity model is migrated and tested.
 
@@ -21,6 +25,7 @@ Set these server-side in Cloudflare Worker settings (never in GitHub files or br
 - `DAGA_OWNER_PHONE`: the owner's verified phone in international format, e.g. `+201xxxxxxxxx`.
 - `DAGA_OWNER_EMAIL`: the owner's verified email address.
 - `DAGA_OTP_PEPPER`: a separate high-entropy random secret used to hash verification codes and recovery codes.
+- `DAGA_APP_BASE_URL`: trusted HTTPS origin of the Worker serving `/go/`, `/company/`, and `/invite/`; do not derive it from the incoming Host header.
 - `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`: valid Twilio SMS configuration.
 - `RESEND_API_KEY`, `DAGA_EMAIL_FROM`: valid Resend email configuration; sender must be verified.
 
@@ -61,6 +66,12 @@ The recovery code must be a new, unique secret of at least 20 characters. The re
 - `POST /owner/recovery/complete`: requires both OTPs, the current recovery code, a new password, and a new recovery code; revokes all sessions and rotates the recovery code.
 
 All routes fail closed when required configuration is absent. Sessions expire after eight hours. Passwords use PBKDF2-HMAC-SHA256 with 310,000 iterations and a per-password random salt; OTPs and session tokens are stored as hashes.
+
+## Company onboarding and staging
+
+The branch also contains `company-invitations.js`, the company portal at `/company/`, invitation acceptance at `/invite/`, and the public DAGA QR landing page at `/go/`. The company portal creates role-limited invitations and locally renders their QR codes; the public QR is separate from invitation QR codes. The program owner provisions a pending company and owner account in the owner console; the owner can sign in after the company is approved.
+
+The manual/automatic-on-development staging workflow is `.github/workflows/daga-staging-setup.yml`. It uses a separate `daga-app-staging` D1 and `daga-app-staging` Worker; it never targets the production `daga-voice` Worker. It requires GitHub Actions secrets named `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `DAGA_OTP_PEPPER`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`, `RESEND_API_KEY`, and `DAGA_EMAIL_FROM`. The latest staging attempt stopped before creating resources because `DAGA_OTP_PEPPER` and the Twilio/Resend secrets were absent. Add valid values through GitHub repository Actions secrets; do not put their values in chat or source control.
 
 ## Not yet release-ready
 
