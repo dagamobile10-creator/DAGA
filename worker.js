@@ -81,7 +81,7 @@ export default {
         await env.DAGA_MEMORY_DB.prepare("INSERT INTO daga_user_memory (user_id, profile_json, history_json, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET profile_json=excluded.profile_json, history_json=excluded.history_json, updated_at=excluded.updated_at").bind(userId, profileJson, JSON.stringify(history), now).run();
         return json({ ok: true, persistent: true, updatedAt: now });
       } catch (error) {
-        return json({ error: "memory_storage_failed", detail: String(error?.message || error) }, 500);
+        return json({ error: "memory_storage_failed" }, 500);
       }
     }
 
@@ -93,7 +93,7 @@ export default {
           signal: AbortSignal.timeout(10000)
         });
         const data = await response.json();
-        if (!response.ok) return json({ error: "LiveAvatar avatar lookup failed", status: response.status, detail: data }, response.status);
+        if (!response.ok) return json({ error: "liveavatar_avatar_lookup_failed", status: response.status }, response.status);
         const avatars = data?.data?.results || [];
         const active = avatars.filter(a => a.status === "ACTIVE");
         let publicActiveCount = 0;
@@ -108,7 +108,7 @@ export default {
           }
         } catch (_) {}
         return json({ ok: true, count: data?.data?.count ?? avatars.length, activeCount: active.length, hasActiveDaga: active.some(a => /daga|ضجه|ضجّة/i.test(String(a.name || ""))), publicActiveCount });
-      } catch (error) { return json({ error: "LiveAvatar lookup failed", detail: String(error?.message || error) }, 502); }
+      } catch (_) { return json({ error: "liveavatar_lookup_failed" }, 502); }
     }
 
     if (url.pathname === "/liveavatar/token" && request.method === "POST") {
@@ -137,9 +137,9 @@ export default {
           signal: AbortSignal.timeout(12000)
         });
         const data = await response.json();
-        if (!response.ok) return json({ error: "LiveAvatar session token failed", status: response.status, detail: data }, response.status);
+        if (!response.ok) return json({ error: "liveavatar_session_token_failed", status: response.status }, response.status);
         return json({ ok: true, sessionToken: data?.data?.session_token, sessionId: data?.data?.session_id });
-      } catch (error) { return json({ error: "LiveAvatar token failed", detail: String(error?.message || error) }, 502); }
+      } catch (_) { return json({ error: "liveavatar_token_failed" }, 502); }
     }
 
     if (url.pathname === "/health") {
