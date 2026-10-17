@@ -294,6 +294,26 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertIn("frame-ancestors 'none'", handler)
 
 
+
+    def test_company_manager_cannot_escalate_invitation_role_or_permissions(self):
+        source = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
+        start = source.index("function normalizePermissions(")
+        end = source.index("\n}", start) + 2
+        handler = source[start:end]
+        self.assertIn('if (intendedRole === "manager" && authority.role !== "store_owner") return null;', handler)
+        self.assertIn('if (out[key] && !authority.permissions[key]) return null;', handler)
+        self.assertIn('if (intendedRole === "employee" && out.inviteEmployees) return null;', handler)
+
+    def test_company_authority_is_scoped_to_active_membership(self):
+        source = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
+        start = source.index("async function getAuthority(")
+        end = source.index("\n}", start) + 2
+        handler = source[start:end]
+        self.assertIn('WHERE store_id=? AND account_id=? LIMIT 1', handler)
+        self.assertIn('membership.status !== "active"', handler)
+        self.assertIn('!["manager", "employee"].includes(membership.role)', handler)
+
+
     def test_owner_api_cors_does_not_wildcard_when_allowlist_is_missing(self):
         source = (ROOT / "owner-auth.js").read_text(encoding="utf-8")
         start = source.index("function cors(env, extra = {})")
