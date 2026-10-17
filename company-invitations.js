@@ -94,11 +94,12 @@ async function companyLoginVerify(request, env, db) {
   const validEmail = constantTimeEqualCompany(await sha256(e.id + ":" + emailCode + ":" + env.DAGA_OTP_PEPPER), e.code_hash);
   if (!pa || !ea || !validPhone || !validEmail) return json(env, { error: "invalid_expired_or_used_verification_code" }, 400);
   const sessionToken = companyRandomToken(32), sessionHash = await sha256(sessionToken), sessionId = crypto.randomUUID(), expiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString();
+  const claimId = crypto.randomUUID();
   try {
     const results = await db.batch([
-      db.prepare("UPDATE daga_company_login_challenges SET consumed_at=? WHERE id=? AND consumed_at IS NULL AND attempts<=5 AND expires_at>?").bind(now, p.id, now),
-      db.prepare("UPDATE daga_company_login_challenges SET consumed_at=? WHERE id=? AND consumed_at IS NULL AND attempts<=5 AND expires_at>?").bind(now, e.id, now),
-      db.prepare("INSERT INTO daga_auth_sessions (id,account_id,token_hash,created_at,expires_at,last_seen_at) SELECT ?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM daga_company_login_challenges WHERE id=? AND consumed_at=? AND channel='phone') AND EXISTS (SELECT 1 FROM daga_company_login_challenges WHERE id=? AND consumed_at=? AND channel='email') AND EXISTS (SELECT 1 FROM daga_accounts WHERE id=? AND status='approved')").bind(sessionId, account.id, sessionHash, now, expiresAt, now, p.id, now, e.id, now, account.id)
+      db.prepare("UPDATE daga_company_login_challenges SET consumed_at=?,claim_id=? WHERE id=? AND consumed_at IS NULL AND claim_id IS NULL AND attempts<=5 AND expires_at>?").bind(now, claimId, p.id, now),
+      db.prepare("UPDATE daga_company_login_challenges SET consumed_at=?,claim_id=? WHERE id=? AND consumed_at IS NULL AND claim_id IS NULL AND attempts<=5 AND expires_at>?").bind(now, claimId, e.id, now),
+      db.prepare("INSERT INTO daga_auth_sessions (id,account_id,token_hash,created_at,expires_at,last_seen_at) SELECT ?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM daga_company_login_challenges WHERE id=? AND claim_id=? AND channel='phone') AND EXISTS (SELECT 1 FROM daga_company_login_challenges WHERE id=? AND claim_id=? AND channel='email') AND EXISTS (SELECT 1 FROM daga_accounts WHERE id=? AND status='approved')").bind(sessionId, account.id, sessionHash, now, expiresAt, now, p.id, claimId, e.id, claimId, account.id)
     ]);
     if (Number(results?.[2]?.meta?.changes || 0) !== 1) return json(env, { error: "login_race_or_conflict_retry" }, 409);
   } catch (_) {
@@ -194,12 +195,13 @@ async function registerVerify(request, env, db) {
   const sessionHash = await sha256(sessionToken);
   const sessionId = crypto.randomUUID();
   const sessionExpires = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString();
+  const claimId = crypto.randomUUID();
   try {
     const results = await db.batch([
-      db.prepare("UPDATE daga_company_registration_challenges SET consumed_at=? WHERE id=? AND consumed_at IS NULL AND attempts<=5 AND expires_at>?").bind(now, phoneChallenge.id, now),
-      db.prepare("UPDATE daga_company_registration_challenges SET consumed_at=? WHERE id=? AND consumed_at IS NULL AND attempts<=5 AND expires_at>?").bind(now, emailChallenge.id, now),
-      db.prepare("INSERT INTO daga_accounts (id,public_id,phone_e164,email,display_name,role,status,store_id,phone_verified_at,email_verified_at,created_at,updated_at) SELECT ?,?,?,?,?,?,'approved',?,?,?, ?,? WHERE EXISTS (SELECT 1 FROM daga_company_registration_challenges WHERE id=? AND consumed_at=? AND channel='phone') AND EXISTS (SELECT 1 FROM daga_company_registration_challenges WHERE id=? AND consumed_at=? AND channel='email') AND EXISTS (SELECT 1 FROM daga_store_invitations WHERE id=? AND status='pending' AND use_count=0 AND expires_at>?)")
-        .bind(accountId, publicId, phone, email, displayName, invite.intended_role, invite.store_id, now, now, now, now, phoneChallenge.id, now, emailChallenge.id, now, invite.id, now),
+      db.prepare("UPDATE daga_company_registration_challenges SET consumed_at=?,claim_id=? WHERE id=? AND consumed_at IS NULL AND claim_id IS NULL AND attempts<=5 AND expires_at>?").bind(now, claimId, phoneChallenge.id, now),
+      db.prepare("UPDATE daga_company_registration_challenges SET consumed_at=?,claim_id=? WHERE id=? AND consumed_at IS NULL AND claim_id IS NULL AND attempts<=5 AND expires_at>?").bind(now, claimId, emailChallenge.id, now),
+      db.prepare("INSERT INTO daga_accounts (id,public_id,phone_e164,email,display_name,role,status,store_id,phone_verified_at,email_verified_at,created_at,updated_at) SELECT ?,?,?,?,?,?,'approved',?,?,?, ?,? WHERE EXISTS (SELECT 1 FROM daga_company_registration_challenges WHERE id=? AND claim_id=? AND channel='phone') AND EXISTS (SELECT 1 FROM daga_company_registration_challenges WHERE id=? AND claim_id=? AND channel='email') AND EXISTS (SELECT 1 FROM daga_store_invitations WHERE id=? AND status='pending' AND use_count=0 AND expires_at>?)")
+        .bind(accountId, publicId, phone, email, displayName, invite.intended_role, invite.store_id, now, now, now, now, phoneChallenge.id, claimId, emailChallenge.id, claimId, invite.id, now),
       db.prepare("INSERT INTO daga_auth_sessions (id,account_id,token_hash,created_at,expires_at,last_seen_at) SELECT ?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM daga_accounts WHERE id=?)")
         .bind(sessionId, accountId, sessionHash, now, sessionExpires, now, accountId),
       db.prepare("INSERT INTO daga_security_events (id,account_id,event_type,outcome,details_json) SELECT ?,?,'company_account_registered','success',? WHERE EXISTS (SELECT 1 FROM daga_accounts WHERE id=?)")
