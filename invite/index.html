@@ -122,7 +122,10 @@ button{cursor:pointer;border:0;border-radius:11px;padding:13px 15px;font:inherit
   $("verifyRegister").addEventListener("click", () => busy($("verifyRegister"), async () => {
     const data = await call("/api/company/auth/register/verify", {token,displayName:$("name").value.trim(),phone:$("phone").value.trim(),email:$("email").value.trim(),phoneCode:$("phoneCode").value.trim(),emailCode:$("emailCode").value.trim()});
     sessionToken = data.sessionToken;
-    await acceptInvite();
+    $("app").classList.add("hidden");
+    $("message").classList.remove("hidden");
+    say("تم إنشاء الحساب وقبول الدعوة بنجاح. دورك: " + (data.membership?.role === "manager" ? "مدير" : "موظف") + ". تقدر دلوقتي تفتح DAGA وتسجّل الدخول.", "ok");
+    history.replaceState(null, "", location.pathname);
   }));
   $("sendLogin").addEventListener("click", () => busy($("sendLogin"), async () => {
     await call("/api/company/auth/login", {identifier:$("identifier").value.trim()});
