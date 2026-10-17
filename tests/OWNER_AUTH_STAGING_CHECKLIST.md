@@ -4,10 +4,14 @@ Do not use production data, real customer accounts, or real payment records duri
 
 ## Prerequisites
 - [ ] Dedicated D1 database is created and bound as `DAGA_APP_DB`.
-- [ ] Migrations 0001–0006 are applied in order, including store identity, invitations, and stable public IDs.
+- [ ] Migrations 0001–0008 are applied in order, including stable identities, invitations, registration OTPs, and company-login OTPs.
 - [ ] Worker secrets are set in Cloudflare: bootstrap token, OTP pepper, owner phone/email, Twilio credentials/sender, Resend API key, verified sender.
 - [ ] `DAGA_ALLOWED_ORIGINS` is set to the exact staging frontend origin.
 - [ ] `DAGA_APP_BASE_URL` is set to the trusted HTTPS staging frontend origin/path used to create invitation links; it is never derived from the request Host header.
+- [ ] Invitation page at `/invite/?token=...` is served over HTTPS and calls the staging Worker URL, not the production voice Worker until the application D1 binding is verified.
+- [ ] `POST /api/company/auth/register` and `/register/verify` send and verify SMS/email OTPs; OTP challenges are hashed, expire, have bounded attempts, and use unique atomic claim IDs.
+- [ ] `POST /api/company/auth/login` and `/login/verify` renew company sessions with both verified channels; verify replay/race tests.
+- [ ] `GET /api/company/auth/me` returns only approved companies and active memberships; `POST /api/company/auth/logout` revokes the current bearer session.
 - [ ] Provider test delivery succeeds; do not expose codes in logs.
 - [ ] Bootstrap token is generated out-of-band and not committed.
 
