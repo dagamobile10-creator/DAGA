@@ -85,6 +85,7 @@ jobs:
           binding = "DAGA_APP_DB"
           database_name = "daga-app-staging"
           database_id = "$D1_ID"
+          migrations_dir = "staging-migrations"
           [[rules]]
           type = "Text"
           globs = ["invite/index.html", "company/portal.html"]
@@ -92,15 +93,16 @@ jobs:
           EOF
       - name: Apply migrations to staging D1 only
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: \${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: \${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
+          mkdir -p staging-migrations
           for file in migrations/0001_daga_core.sql migrations/0002_daga_owner_auth.sql migrations/0003_daga_owner_credentials.sql migrations/0004_daga_offers.sql migrations/0005_daga_store_identity_invitations.sql migrations/0006_daga_public_identity_ids.sql migrations/0007_daga_company_registration_challenges.sql migrations/0008_daga_company_login_challenges.sql; do
-            clean="/tmp/$(basename "$file")"
+            clean="staging-migrations/$(basename "$file")"
             grep -v '^[[:space:]]*PRAGMA foreign_keys' "$file" > "$clean"
-            npx --yes wrangler@3 d1 execute daga-app-staging --remote --config wrangler.staging.toml --file "$clean"
           done
+          npx --yes wrangler@3 d1 migrations apply daga-app-staging --remote --config wrangler.staging.toml
       - name: Deploy isolated staging Worker
         uses: cloudflare/wrangler-action@v3
         with:
