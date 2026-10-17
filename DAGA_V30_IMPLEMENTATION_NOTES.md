@@ -91,3 +91,14 @@ The user-facing business entity is **Company** (Arabic: الشركة), not shop/
 - Latest Pages workflow validation at the same commit: [39059825512](https://github.com/dagamobile10-creator/DAGA/actions/runs/39059825512) — passed. On a pull-request event this workflow validates the source; it does not publish GitHub Pages.
 - Owner phone/email and SMS/email delivery secrets intentionally remain the final setup step, as requested. Without those secrets, staging cannot complete real owner bootstrap/login/recovery or prove real OTP delivery.
 - Still release-blocking: end-to-end testing with configured staging delivery, manager/employee permission and cross-company isolation tests, and authenticated identity integration for the legacy `/memory`, `/chat`, `/tts`, and LiveAvatar routes. These are explicitly not marked complete. PR #7 remains open; no merge or production Worker deployment was performed.
+
+## Follow-up verification — 2026-10-18 (stage-six security pass)
+
+- Added `.github/workflows/daga-session-security-checks.yml` to keep session-expiry/revocation and owner-admin authorization invariants visible in CI.
+- Latest owner-auth checks passed at commit `a749b7ec847ccd56f62a446b54e39808c03ed28d`: [run 39069572560](https://github.com/dagamobile10-creator/DAGA/actions/runs/39069572560).
+- Latest session-security regression checks passed at the same commit: [run 39069572631](https://github.com/dagamobile10-creator/DAGA/actions/runs/39069572631).
+- Pages/PR source validation passed; the publish/deploy job was skipped as expected for a pull-request event: [run 39069572459](https://github.com/dagamobile10-creator/DAGA/actions/runs/39069572459).
+- PR #7 is still a draft and unmerged. No production Worker, production D1, or `main` branch was changed.
+- **Stage-six is in progress, not complete.** The passing checks are code/schema/regression checks; they do not prove real authentication delivery or complete runtime authorization.
+- Confirmed release blockers still include the unauthenticated legacy `/memory` route accepting a caller-selected `userId`, unauthenticated `/chat` and `/tts`, and LiveAvatar token issuance without a company/role identity check. These routes must be integrated with authenticated identity without breaking the existing LIVE DAGA UI/voice flow. Until then, this branch is not safe to merge into production.
+- The staging environment still needs the intentionally deferred owner contact and SMS/email provider secrets before real OTP bootstrap/login/recovery can be verified. After those are supplied through repository/Cloudflare secret settings, run the full staging checklist in `tests/OWNER_AUTH_STAGING_CHECKLIST.md`, then resolve any failures before considering a production release.
