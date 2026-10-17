@@ -4,3 +4,8 @@ compatibility_date = "2026-10-06"
 
 [ai]
 binding = "AI"
+
+[[rules]]
+type = "Text"
+globs = ["invite/index.html"]
+fallthrough = false
