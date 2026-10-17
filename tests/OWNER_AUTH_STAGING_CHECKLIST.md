@@ -4,7 +4,7 @@ Do not use production data, real customer accounts, or real payment records duri
 
 ## Prerequisites
 - [ ] Dedicated D1 database is created and bound as `DAGA_APP_DB`.
-- [ ] Migrations 0001, 0002, 0003, and 0004 (offers) are applied in order.
+- [ ] Migrations 0001–0005 are applied in order, including store identity and invitations.
 - [ ] Worker secrets are set in Cloudflare: bootstrap token, OTP pepper, owner phone/email, Twilio credentials/sender, Resend API key, verified sender.
 - [ ] `DAGA_ALLOWED_ORIGINS` is set to the exact staging frontend origin.
 - [ ] Provider test delivery succeeds; do not expose codes in logs.
@@ -45,6 +45,17 @@ Do not use production data, real customer accounts, or real payment records duri
 - [ ] Column label changes preserve stable keys; regular users cannot edit calculation keys.
 - [ ] Privileged changes create audit events.
 - [ ] Tenant isolation is tested before enabling store/manager/employee data routes.
+
+## Store identity and invitation gates
+- [ ] Every store receives a stable public ID distinct from its internal database ID; changing the display name does not change either identity.
+- [ ] The store QR identifies the store only and grants no membership or session.
+- [ ] Invitation tokens are generated with cryptographic randomness; only token hashes are stored, and raw tokens are returned only once.
+- [ ] Invitation acceptance requires an authenticated account and server-side checks of token hash, store, expiry, status, use count, intended role, and inviter permissions.
+- [ ] Invitation acceptance and membership creation are atomic; replaying or concurrently accepting the same invitation cannot create extra memberships.
+- [ ] Revoked and expired invitations fail; a manager cannot grant a role or permission beyond their own delegation limits.
+- [ ] A membership from store A cannot read or modify store B data, even when the client changes IDs in requests.
+- [ ] Existing memberships are not silently broken by the introduction of new membership tables; migration/backfill behavior is tested.
+- [ ] Shop QR and invitation QR/link are separate; revoking an invitation does not rotate the store identity.
 
 ## Release gates
 - [ ] CI syntax/schema workflow passes on the exact intended commit.
