@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#111111">
+<title>دعوة DAGA | ضجّة</title>
+<style>
+:root{color-scheme:dark;--bg:#101010;--panel:#191919;--line:#333;--gold:#c7a45b;--text:#f5f2eb;--muted:#aaa}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at top,#28231a 0,transparent 45%),var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Tahoma,Arial,sans-serif;min-height:100vh;display:grid;place-items:center;padding:20px}
+main{width:min(100%,480px);background:var(--panel);border:1px solid var(--line);border-radius:22px;padding:26px;box-shadow:0 20px 70px #0008}
+.brand{font-size:14px;letter-spacing:3px;color:var(--gold);font-weight:800}.mark{font-size:27px;font-weight:850;margin:8px 0 2px}.sub{color:var(--muted);line-height:1.8;margin:0 0 22px}
+.tabs{display:flex;gap:8px;margin-bottom:18px}.tabs button{flex:1;background:#242424;color:var(--text);border:1px solid var(--line)}.tabs button.active{border-color:var(--gold);color:var(--gold)}
+label{display:block;font-size:13px;color:#ddd;margin:13px 0 6px}input{width:100%;background:#101010;color:var(--text);border:1px solid #454545;border-radius:11px;padding:13px;font:inherit;outline:none}input:focus{border-color:var(--gold)}
+button{cursor:pointer;border:0;border-radius:11px;padding:13px 15px;font:inherit;font-weight:750;background:var(--gold);color:#17130b;width:100%;margin-top:15px}button:disabled{opacity:.55;cursor:wait}.secondary{background:#242424;color:var(--text);border:1px solid var(--line)}.hidden{display:none!important}
+.notice{margin-top:16px;padding:12px;border:1px solid var(--line);border-radius:11px;line-height:1.7;white-space:pre-wrap}.notice.error{border-color:#9b4b4b;color:#ffd0d0}.notice.ok{border-color:#557d5c;color:#d5f6d7}.tiny{font-size:12px;color:var(--muted);line-height:1.8;margin-top:16px}
+</style>
+</head>
+<body>
+<main>
+  <div class="brand">DAGA</div>
+  <div class="mark">ضجّة</div>
+  <p class="sub">أهلاً بيك. سجّل حسابك أو ادخل لحسابك الحالي علشان تقبل دعوة الانضمام للشركة.</p>
+  <div id="invalid" class="notice error hidden">رابط الدعوة ناقص أو غير صالح. اطلب رابط جديد من مالك الشركة أو المدير.</div>
+  <div id="app">
+    <div class="tabs"><button id="newTab" class="active" type="button">حساب جديد</button><button id="oldTab" class="secondary" type="button">عندي حساب</button></div>
+    <section id="register">
+      <label for="name">الاسم</label><input id="name" autocomplete="name" maxlength="100" placeholder="اسمك بالكامل">
+      <label for="phone">رقم الموبايل</label><input id="phone" inputmode="tel" autocomplete="tel" placeholder="01xxxxxxxxx">
+      <label for="email">البريد الإلكتروني</label><input id="email" inputmode="email" autocomplete="email" placeholder="name@example.com">
+      <button id="sendRegister" type="button">ابعت أكواد التحقق</button>
+      <div id="registerCodes" class="hidden">
+        <label for="phoneCode">كود التحقق اللي وصلك SMS</label><input id="phoneCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="٦ أرقام">
+        <label for="emailCode">كود التحقق اللي وصلك على الإيميل</label><input id="emailCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="٦ أرقام">
+        <button id="verifyRegister" type="button">تأكيد وإنشاء الحساب وقبول الدعوة</button>
+      </div>
+    </section>
+    <section id="login" class="hidden">
+      <label for="identifier">رقم الموبايل أو البريد الإلكتروني</label><input id="identifier" autocomplete="username" placeholder="رقم الموبايل أو الإيميل">
+      <button id="sendLogin" type="button">ابعت أكواد تسجيل الدخول</button>
+      <div id="loginCodes" class="hidden">
+        <label for="loginPhoneCode">كود SMS</label><input id="loginPhoneCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6">
+        <label for="loginEmailCode">كود الإيميل</label><input id="loginEmailCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6">
+        <button id="verifyLogin" type="button">دخول وقبول الدعوة</button>
+      </div>
+    </section>
+    <div id="message" class="notice hidden" role="status" aria-live="polite"></div>
+  </div>
+  <p class="tiny">كود الدعوة للاستخدام مرة واحدة، وصلاحيته محدودة. ما تشاركش رابط الدعوة أو أكواد التحقق مع أي حد. الاتصال بيتم عبر اتصال آمن.</p>
+</main>
+<script>
+(() => {
+  "use strict";
+  const API = "https://daga-voice.dagamobile10.workers.dev";
+  const token = new URLSearchParams(location.search).get("token") || "";
+  const $ = id => document.getElementById(id);
+  let sessionToken = "";
+  const validToken = /^[A-Za-z0-9_-]{40,64}$/.test(token);
+  if (!validToken) { $("invalid").classList.remove("hidden"); $("app").classList.add("hidden"); return; }
+
+  function say(message, kind) {
+    const el = $("message");
+    el.textContent = message;
+    el.className = "notice" + (kind ? " " + kind : "");
+    el.classList.remove("hidden");
+  }
+  async function call(path, body, auth) {
+    const headers = {"Content-Type":"application/json"};
+    if (auth) headers.Authorization = "Bearer " + auth;
+    const response = await fetch(API + path, {method:"POST",headers,body:JSON.stringify(body),cache:"no-store",credentials:"omit",referrerPolicy:"no-referrer"});
+    let data = {};
+    try { data = await response.json(); } catch (_) {}
+    if (!response.ok) throw new Error(data.error || "حصلت مشكلة في الاتصال. جرّب تاني.");
+    return data;
+  }
+  async function busy(button, fn) {
+    button.disabled = true;
+    try { await fn(); } catch (e) { say(readable(e.message), "error"); }
+    finally { button.disabled = false; }
+  }
+  function readable(code) {
+    const messages = {
+      invalid_expired_or_used_invitation:"الدعوة منتهية أو اتستخدمت أو اتلغت. اطلب دعوة جديدة.",
+      verification_delivery_failed:"إرسال كود التحقق فشل. راجع رقم الموبايل والإيميل وحاول تاني.",
+      rate_limited:"محاولات كتير في وقت قصير. استنى شوية وحاول تاني.",
+      account_exists_use_existing_account:"الحساب موجود بالفعل. اختار «عندي حساب» وسجّل الدخول.",
+      invalid_expired_or_used_verification_code:"كود التحقق غلط أو منتهي أو اتستخدم. راجع الأكواد وحاول تاني.",
+      company_registration_not_configured:"تسجيل الحسابات مش متجهز بالكامل على الخادم لسه.",
+      company_login_not_configured:"تسجيل الدخول مش متجهز بالكامل على الخادم لسه.",
+      authenticated_account_required:"انتهت الجلسة. سجّل الدخول مرة تانية.",
+      already_a_company_member:"الحساب عضو بالفعل في الشركة.",
+      invalid_expired_used_or_concurrently_claimed_invitation:"الدعوة اتقبلت بالفعل أو انتهت. حدّث الصفحة وتأكد من عضويتك."
+    };
+    return messages[code] || ("تعذّر إكمال العملية: " + code);
+  }
+  async function acceptInvite() {
+    const result = await call("/api/company/invitations/accept", {token}, sessionToken);
+    $("app").classList.add("hidden");
+    $("message").classList.remove("hidden");
+    say("تم قبول الدعوة بنجاح. دورك: " + (result.membership?.role === "manager" ? "مدير" : "موظف") + ". تقدر دلوقتي تفتح DAGA وتسجّل الدخول.", "ok");
+    history.replaceState(null, "", location.pathname);
+  }
+  $("newTab").addEventListener("click", () => {
+    $("register").classList.remove("hidden"); $("login").classList.add("hidden");
+    $("newTab").classList.add("active"); $("oldTab").classList.remove("active"); $("oldTab").classList.add("secondary");
+    $("message").classList.add("hidden");
+  });
+  $("oldTab").addEventListener("click", () => {
+    $("register").classList.add("hidden"); $("login").classList.remove("hidden");
+    $("oldTab").classList.add("active"); $("oldTab").classList.remove("secondary"); $("newTab").classList.remove("active");
+    $("message").classList.add("hidden");
+  });
+  $("sendRegister").addEventListener("click", () => busy($("sendRegister"), async () => {
+    const data = await call("/api/company/auth/register", {token,displayName:$("name").value.trim(),phone:$("phone").value.trim(),email:$("email").value.trim()});
+    $("registerCodes").classList.remove("hidden");
+    say("اتبعثت أكواد التحقق. راجع SMS والإيميل؛ الأكواد صالحة لمدة 10 دقايق.", "ok");
+  }));
+  $("verifyRegister").addEventListener("click", () => busy($("verifyRegister"), async () => {
+    const data = await call("/api/company/auth/register/verify", {token,displayName:$("name").value.trim(),phone:$("phone").value.trim(),email:$("email").value.trim(),phoneCode:$("phoneCode").value.trim(),emailCode:$("emailCode").value.trim()});
+    sessionToken = data.sessionToken;
+    await acceptInvite();
+  }));
+  $("sendLogin").addEventListener("click", () => busy($("sendLogin"), async () => {
+    await call("/api/company/auth/login", {identifier:$("identifier").value.trim()});
+    $("loginCodes").classList.remove("hidden");
+    say("اتبعثت أكواد الدخول على الموبايل والإيميل المسجلين في الحساب.", "ok");
+  }));
+  $("verifyLogin").addEventListener("click", () => busy($("verifyLogin"), async () => {
+    const data = await call("/api/company/auth/login/verify", {identifier:$("identifier").value.trim(),phoneCode:$("loginPhoneCode").value.trim(),emailCode:$("loginEmailCode").value.trim()});
+    sessionToken = data.sessionToken;
+    await acceptInvite();
+  }));
+})();
+</script>
+</body>
+</html>
