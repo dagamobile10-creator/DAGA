@@ -106,8 +106,11 @@ async function companyLoginVerify(request, env, db) {
   const identifier = String(body.identifier || "").trim(), phone = normalizeCompanyPhone(identifier), email = identifier.toLowerCase();
   const phoneCode = String(body.phoneCode || "").trim(), emailCode = String(body.emailCode || "").trim();
   if ((!phone && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) || !/^\d{6}$/.test(phoneCode) || !/^\d{6}$/.test(emailCode)) return json(env, { error: "valid_login_fields_required" }, 400);
+  const ip = request.headers.get("CF-Connecting-IP") || "unknown";
+  if (!await companyRateLimit(db, env, "company-login-verify-ip:" + ip, 10, 900)) return json(env, { error: "rate_limited" }, 429);
   const account = await db.prepare("SELECT id,phone_e164,email,display_name,role,status,public_id FROM daga_accounts WHERE (phone_e164=? OR lower(email)=?) AND status='approved' AND role IN ('store_owner','manager','employee') LIMIT 1").bind(phone || "__none__", email).first();
   if (!account || !account.phone_e164 || !account.email) return json(env, { error: "invalid_expired_or_used_verification_code" }, 400);
+  if (!await companyRateLimit(db, env, "company-login-verify-account:" + account.id, 8, 900)) return json(env, { error: "rate_limited" }, 429);
   const now = new Date().toISOString();
   const [p, e] = await Promise.all([
     db.prepare("SELECT id,code_hash FROM daga_company_login_challenges WHERE account_id=? AND channel='phone' AND destination_hash=? AND consumed_at IS NULL AND attempts<5 AND expires_at>? ORDER BY created_at DESC LIMIT 1").bind(account.id, await sha256("phone:" + account.phone_e164), now).first(),
