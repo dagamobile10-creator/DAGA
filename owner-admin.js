@@ -58,6 +58,39 @@ export async function handleOwnerAdmin(request, env, url) {
       return json(env, {ok:true,version:existing.version+1});
     }
 
+    if(path==="/owner/admin/promotions"&&request.method==="GET"){
+      const r=await db.prepare("SELECT id,code,name,service,discount_type,discount_value,starts_at,ends_at,max_redemptions,redemption_count,is_active,created_at,updated_at FROM daga_promotions ORDER BY created_at DESC").all();
+      return json(env,{ok:true,promotions:r.results||[]});
+    }
+    if(path==="/owner/admin/promotions"&&request.method==="POST"){
+      const b=await readJson(request);if(!b)return json(env,{error:"invalid_json"},400);
+      const code=String(b.code||"").trim().toUpperCase(),name=String(b.name||"").trim().slice(0,100),service=String(b.service||"both"),type=String(b.discountType||"percent"),value=Number(b.discountValue);
+      let starts=null,ends=null;
+      try{starts=b.startsAt?new Date(b.startsAt).toISOString():null;ends=b.endsAt?new Date(b.endsAt).toISOString():null;}catch(_){return json(env,{error:"invalid_promotion_dates"},400);}
+      const max=b.maxRedemptions==null?null:Number(b.maxRedemptions);
+      if(!/^[A-Z0-9][A-Z0-9_-]{2,39}$/.test(code)||!name||!["store","live_daga","both"].includes(service)||!["percent","fixed"].includes(type)||!Number.isSafeInteger(value)||value<1||(type==="percent"&&value>100)||(max!==null&&(!Number.isSafeInteger(max)||max<1))||(starts&&ends&&starts>=ends))return json(env,{error:"invalid_promotion_fields"},400);
+      const id=crypto.randomUUID(),now=new Date().toISOString();
+      try{await db.prepare("INSERT INTO daga_promotions (id,code,name,service,discount_type,discount_value,starts_at,ends_at,max_redemptions,created_by,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)").bind(id,code,name,service,type,value,starts,ends,max,owner.id,now,now).run();}
+      catch(_){return json(env,{error:"promotion_code_already_exists"},409);}
+      await audit(db,owner.id,"promotion_created","daga_promotions",id,{code,service,type,value});
+      return json(env,{ok:true,id},201);
+    }
+    const promoMatch=path.match(/^\/owner\/admin\/promotions\/([a-f0-9-]{36})$/i);
+    if(promoMatch&&request.method==="PATCH"){
+      const b=await readJson(request);if(!b)return json(env,{error:"invalid_json"},400);
+      const old=await db.prepare("SELECT * FROM daga_promotions WHERE id=?").bind(promoMatch[1]).first();
+      if(!old)return json(env,{error:"promotion_not_found"},404);
+      const name=b.name===undefined?old.name:String(b.name).trim().slice(0,100);
+      const active=b.isActive===undefined?old.is_active:(b.isActive?1:0);
+      let starts=old.starts_at,ends=old.ends_at;
+      try{if(b.startsAt!==undefined)starts=b.startsAt?new Date(b.startsAt).toISOString():null;if(b.endsAt!==undefined)ends=b.endsAt?new Date(b.endsAt).toISOString():null;}catch(_){return json(env,{error:"invalid_promotion_dates"},400);}
+      const max=b.maxRedemptions===undefined?old.max_redemptions:(b.maxRedemptions===null?null:Number(b.maxRedemptions));
+      if(!name||(max!==null&&(!Number.isSafeInteger(max)||max<1))||(starts&&ends&&starts>=ends))return json(env,{error:"invalid_promotion_fields"},400);
+      await db.prepare("UPDATE daga_promotions SET name=?,is_active=?,starts_at=?,ends_at=?,max_redemptions=?,updated_at=? WHERE id=?").bind(name,active,starts,ends,max,new Date().toISOString(),old.id).run();
+      await audit(db,owner.id,"promotion_updated","daga_promotions",old.id,{isActive:active});
+      return json(env,{ok:true});
+    }
+
     if (path === "/owner/admin/payment-methods" && request.method === "GET") {
       const r = await db.prepare("SELECT id,provider,display_label,destination_value,instructions,is_active,updated_at FROM daga_payment_methods ORDER BY provider").all();
       return json(env, {ok:true,methods:r.results||[]});
