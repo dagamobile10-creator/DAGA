@@ -2,12 +2,29 @@ name: DAGA isolated staging setup
 
 on:
   workflow_dispatch:
+  push:
+    branches: [daga-v30-implementation]
+    paths:
+      - ".github/workflows/daga-staging-setup.yml"
 
 permissions:
   contents: read
 
 jobs:
+  validate-workflow:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate staging workflow file
+        run: |
+          test -s .github/workflows/daga-staging-setup.yml
+          grep -q 'workflow_dispatch:' .github/workflows/daga-staging-setup.yml
+          grep -q 'daga-app-staging' .github/workflows/daga-staging-setup.yml
+          echo "Staging workflow is present. Provisioning is manual only."
+
   provision-staging:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
