@@ -547,5 +547,18 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertEqual(replay.rowcount, 0)
 
 
+    def test_owner_password_reset_revokes_all_sessions_and_consumes_reset_challenges(self):
+        source = (ROOT / "owner-auth.js").read_text(encoding="utf-8")
+        start = source.index("async function recoveryComplete(")
+        end = source.index("\\n}", start) + 2
+        handler = source[start:end]
+        self.assertIn("UPDATE daga_auth_sessions SET revoked_at=? WHERE account_id=? AND revoked_at IS NULL", handler)
+        self.assertIn("UPDATE daga_auth_challenges SET consumed_at=? WHERE account_id=? AND purpose='password_reset' AND consumed_at IS NULL", handler)
+        self.assertIn("await db.batch([", handler)
+        self.assertIn("Password reset. Log in again with the new password.", handler)
+        self.assertIn("consumed_at IS NULL", handler)
+        self.assertIn("revoked_at IS NULL", handler)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
