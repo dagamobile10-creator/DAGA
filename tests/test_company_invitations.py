@@ -296,6 +296,26 @@ class InvitationSchemaTests(unittest.TestCase):
 
 
 
+
+    def test_invitation_listing_is_scoped_to_company_and_manager(self):
+        source = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
+        start = source.index("async function listInvitations(")
+        end = source.index("\n}", start) + 2
+        handler = source[start:end]
+        self.assertIn('WHERE store_id=? AND inviter_account_id=?', handler)
+        self.assertIn('WHERE store_id=? ORDER BY created_at DESC LIMIT 100', handler)
+        self.assertIn('if (!authority) return json(null, { error: "company_not_found_or_access_denied" }, 404);', handler)
+
+    def test_manager_can_revoke_only_own_employee_invitations(self):
+        source = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
+        start = source.index("async function revokeInvitation(")
+        end = source.index("\n}", start) + 2
+        handler = source[start:end]
+        self.assertIn('authority.role === "manager"', handler)
+        self.assertIn('invite.intended_role !== "employee"', handler)
+        self.assertIn('invite.inviter_account_id !== account.id', handler)
+
+
     def test_invitation_claim_requires_pending_unexpired_single_use_and_approved_company(self):
         source = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
         start = source.index("async function acceptInvitation(")
