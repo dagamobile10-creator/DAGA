@@ -1,33 +1,53 @@
-# DAGA V30 owner-auth staging test checklist
+# Owner authentication staging checklist
 
-Do not run destructive tests against production data. Run only after migration 0001 and 0002 have been applied to a dedicated staging D1 database and real SMS/email providers are configured.
+Do not use production data, real customer accounts, or real payment records during this checklist. Use a dedicated staging D1 database and staging Worker.
 
-## Owner provisioning and identity
-- [ ] Public signup cannot request or obtain the `program_owner` role.
-- [ ] No account is granted owner status merely because it is the first account.
-- [ ] Owner bootstrap fails closed when any required server secret, database binding, or verification provider is missing.
-- [ ] A bootstrap token is one-time, high entropy, stored only as a Worker secret, rate-limited, and invalid after successful use.
-- [ ] Phone OTP is sent only to the configured owner phone and email verification only to the configured owner email.
-- [ ] Wrong, expired, replayed, and over-attempt OTPs are rejected.
-- [ ] Phone and email must both be verified before owner activation.
-- [ ] Owner login never returns or logs OTPs, passwords, raw bearer tokens, or recovery secrets.
-- [ ] Owner credentials and session token hashes are not stored in source control or browser-delivered code.
-- [ ] The exposed credentials shared in chat are not used as production credentials.
+## Prerequisites
+- [ ] Dedicated D1 database is created and bound as `DAGA_APP_DB`.
+- [ ] Migrations 0001, 0002, and 0003 are applied in order.
+- [ ] Worker secrets are set in Cloudflare: bootstrap token, OTP pepper, owner phone/email, Twilio credentials/sender, Resend API key, verified sender.
+- [ ] `DAGA_ALLOWED_ORIGINS` is set to the exact staging frontend origin.
+- [ ] Provider test delivery succeeds; do not expose codes in logs.
+- [ ] Bootstrap token is generated out-of-band and not committed.
 
-## Authorization and sessions
-- [ ] Unauthenticated requests cannot access owner endpoints.
-- [ ] Store owner, manager, and employee accounts receive 403 from every program-owner endpoint.
-- [ ] Revoked and expired sessions are rejected.
-- [ ] Changing a role or suspending an account takes effect server-side.
-- [ ] Cross-store reads/writes are rejected even if a caller changes a store ID in the request.
-- [ ] Sensitive changes write an audit event without secrets or full payment details.
+## Bootstrap and owner protection
+- [ ] Bootstrap start without bearer token returns 401.
+- [ ] Wrong bootstrap token returns 401.
+- [ ] Valid bootstrap start sends separate SMS and email codes.
+- [ ] Wrong, expired, consumed, and five-times-attempted OTPs fail.
+- [ ] Password below policy is rejected.
+- [ ] Successful verification creates exactly one `program_owner` and one owner singleton.
+- [ ] A second bootstrap attempt returns 409.
+- [ ] Bootstrap token is rotated/deleted after owner creation.
+- [ ] Password is never stored/returned in plaintext; only session-token hashes are stored.
 
-## Existing DAGA functionality
-- [ ] `/health` remains available and reveals no secrets.
-- [ ] Existing /chat and /tts behavior remains functional after changes.
-- [ ] LIVE DAGA token issuance has appropriate abuse controls and is not accidentally made owner-only if end users need it.
-- [ ] Memory endpoints enforce authenticated user ownership before accessing per-user records.
-- [ ] CORS is restricted to intended production/staging origins before production rollout.
+## Login, sessions, recovery
+- [ ] Wrong password and unknown identifier return the same generic 401.
+- [ ] Repeated login attempts hit rate limits.
+- [ ] Valid login returns a session; `/owner/auth/me` succeeds only with it.
+- [ ] Logout revokes the session; replaying it fails.
+- [ ] Recovery sends codes only to configured owner contacts.
+- [ ] Recovery fails if either OTP, current recovery code, or password policy is wrong.
+- [ ] Successful recovery rotates the recovery code and revokes all prior sessions.
+- [ ] Recovery is rate-limited; OTPs/recovery codes never appear in logs.
 
-## Release gate
-No production deployment until all required checks pass. Database tables alone do not implement authentication; owner endpoints and provider integration must be implemented and tested separately.
+## Owner admin and data integrity
+- [ ] Every `/owner/admin/*` route returns 401 without a valid owner session.
+- [ ] Store-owner, manager, and employee sessions are rejected by owner routes.
+- [ ] Owner can create/update/disable plans; existing orders retain agreed price snapshots.
+- [ ] Owner can update payment destinations and active status.
+- [ ] Store approval/rejection updates both store and store-owner account status.
+- [ ] Payment submission alone does not activate entitlement; owner confirmation is required.
+- [ ] Duplicate payment review cannot create duplicate entitlement/word credits.
+- [ ] LIVE DAGA word adjustments use unique request IDs; retries cannot double-credit.
+- [ ] Column label changes preserve stable keys; regular users cannot edit calculation keys.
+- [ ] Privileged changes create audit events.
+- [ ] Tenant isolation is tested before enabling store/manager/employee data routes.
+
+## Release gates
+- [ ] CI syntax/schema workflow passes on the exact intended commit.
+- [ ] SMS/email delivery and end-to-end staging tests are verified by a human.
+- [ ] Existing chat/TTS/LiveAvatar routes are tested after Worker changes.
+- [ ] Existing user-facing endpoints have role and tenant authorization; protecting owner routes alone is insufficient.
+- [ ] Production deployment is intentionally approved, then the actual Worker version and endpoint responses are verified.
+- [ ] Do not call the owner console production-secure until these checks pass.
