@@ -89,10 +89,6 @@ jobs:
           database_name = "daga-app-staging"
           database_id = "$D1_ID"
           migrations_dir = "staging-migrations"
-          [[rules]]
-          type = "Text"
-          globs = ["invite/index.html", "company/portal.html", "go/index.html"]
-          fallthrough = false
           EOF
       - name: Apply migrations to staging D1 only
         env:
