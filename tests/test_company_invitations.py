@@ -185,7 +185,7 @@ class InvitationSchemaTests(unittest.TestCase):
     def test_invitation_registration_is_atomic_with_membership_and_token_claim(self):
         source = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
         start = source.index("async function registerVerify(")
-        end = source.index("\\nasync function companyRateLimit", start)
+        end = source.index("\nasync function companyRateLimit", start)
         handler = source[start:end]
         self.assertIn("UPDATE daga_store_invitations SET status='accepted',use_count=1", handler)
         self.assertIn("AND status='pending' AND use_count=0 AND max_uses=1", handler)
