@@ -106,7 +106,7 @@ export async function handleOwnerAdmin(request, env, url) {
       await audit(db,owner.id,"offer_created","daga_offers",id,{name,service,discountType:type,discountValue:value});
       return json(env,{ok:true,id},201);
     }
-    const offerMatch=path.match(/^\\/owner\\/admin\\/offers\\/([a-f0-9-]{36})$/i);
+    const offerMatch=path.match(/^\/owner\/admin\/offers\/([a-f0-9-]{36})$/i);
     if(offerMatch&&request.method==="PATCH"){
       const b=await readJson(request);if(!b)return json(env,{error:"invalid_json"},400);
       const old=await db.prepare("SELECT * FROM daga_offers WHERE id=?").bind(offerMatch[1]).first();
