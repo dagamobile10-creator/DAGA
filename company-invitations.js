@@ -196,7 +196,7 @@ async function registerVerify(request, env, db) {
   const phoneCode = String(body.phoneCode || "").trim();
   const emailCode = String(body.emailCode || "").trim();
   if (!/^[A-Za-z0-9_-]{40,64}$/.test(token) || displayName.length < 2 || !phone ||
-      !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) || !/^\\d{6}$/.test(phoneCode) || !/^\\d{6}$/.test(emailCode)) {
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !/^\d{6}$/.test(phoneCode) || !/^\d{6}$/.test(emailCode)) {
     return json(env, { error: "valid_registration_fields_required" }, 400);
   }
   const tokenHash = await sha256(token);
