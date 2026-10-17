@@ -126,6 +126,9 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           DAGA_OTP_PEPPER: ${{ secrets.DAGA_OTP_PEPPER }}
+          DAGA_OWNER_BOOTSTRAP_TOKEN: ${{ secrets.DAGA_OWNER_BOOTSTRAP_TOKEN }}
+          DAGA_OWNER_PHONE: ${{ secrets.DAGA_OWNER_PHONE }}
+          DAGA_OWNER_EMAIL: ${{ secrets.DAGA_OWNER_EMAIL }}
           TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
           TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
           TWILIO_FROM_NUMBER: ${{ secrets.TWILIO_FROM_NUMBER }}
@@ -133,7 +136,7 @@ jobs:
           DAGA_EMAIL_FROM: ${{ secrets.DAGA_EMAIL_FROM }}
         run: |
           set -euo pipefail
-          for name in DAGA_OTP_PEPPER TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN TWILIO_FROM_NUMBER RESEND_API_KEY DAGA_EMAIL_FROM; do
+          for name in DAGA_OTP_PEPPER DAGA_OWNER_BOOTSTRAP_TOKEN DAGA_OWNER_PHONE DAGA_OWNER_EMAIL TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN TWILIO_FROM_NUMBER RESEND_API_KEY DAGA_EMAIL_FROM; do
             printf '%s' "${!name}" | npx --yes wrangler@3 secret put "$name" --name daga-app-staging
           done
       - name: Verify staging health without printing secrets
