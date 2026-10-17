@@ -53,6 +53,18 @@ jobs:
           open("/tmp/daga-official-qr.js", "w", encoding="utf-8").write("\n".join(scripts))
           PY
           node --check /tmp/daga-official-qr.js
+      - name: Guard chat and TTS request size limits
+        run: |
+          python3 - <<'PY'
+          worker = open("worker.js", encoding="utf-8").read()
+          assert "readBoundedJson(request, 32768)" in worker, "Chat must enforce a 32 KiB JSON body limit"
+          assert "readBoundedJson(request, 16384)" in worker, "TTS must enforce a 16 KiB JSON body limit"
+          assert 'userText.length > 2000' in worker, "Chat text limit missing"
+          assert 'text.length > 2500' in worker, "TTS text limit missing"
+          assert 'contentType !== "application/json"' in worker, "JSON content-type validation missing"
+          assert 'error: "invalid_json"' in worker, "Malformed JSON must fail with a bounded client error"
+          print("Chat/TTS request-size and JSON validation guards are present.")
+          PY
       - name: Guard OTP and password digit validation patterns
         run: |
           python3 - <<'PY'
