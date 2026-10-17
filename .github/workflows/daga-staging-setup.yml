@@ -56,23 +56,23 @@ jobs:
         run: |
           set -euo pipefail
           cat > wrangler.staging.toml <<EOF
-name = "daga-app-staging"
-main = "worker.js"
-compatibility_date = "2026-10-06"
-[ai]
-binding = "AI"
-[vars]
-DAGA_APP_BASE_URL = "https://daga-app-staging.dagamobile10.workers.dev"
-DAGA_ALLOWED_ORIGINS = "https://daga-app-staging.dagamobile10.workers.dev"
-[[d1_databases]]
-binding = "DAGA_APP_DB"
-database_name = "daga-app-staging"
-database_id = "$D1_ID"
-[[rules]]
-type = "Text"
-globs = ["invite/index.html", "company/portal.html"]
-fallthrough = false
-EOF
+          name = "daga-app-staging"
+          main = "worker.js"
+          compatibility_date = "2026-10-06"
+          [ai]
+          binding = "AI"
+          [vars]
+          DAGA_APP_BASE_URL = "https://daga-app-staging.dagamobile10.workers.dev"
+          DAGA_ALLOWED_ORIGINS = "https://daga-app-staging.dagamobile10.workers.dev"
+          [[d1_databases]]
+          binding = "DAGA_APP_DB"
+          database_name = "daga-app-staging"
+          database_id = "$D1_ID"
+          [[rules]]
+          type = "Text"
+          globs = ["invite/index.html", "company/portal.html"]
+          fallthrough = false
+          EOF
       - name: Apply migrations to staging D1 only
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
