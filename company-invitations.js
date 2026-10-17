@@ -87,7 +87,7 @@ async function acceptInvitation(request, env, db, account) {
     .bind(tokenHash, now).first();
   if (!invite || invite.store_status !== "approved") return json(env, { error: "invalid_expired_or_used_invitation" }, 400);
   const existing = await db.prepare("SELECT id,status FROM daga_store_memberships WHERE store_id=? AND account_id=?").bind(invite.store_id, account.id).first();
-  if (existing && existing.status !== "removed") return json(env, { error: "already_a_company_member" }, 409);
+  if (existing) return json(env, { error: "already_a_company_member" }, 409);
   let permissions;
   try { permissions = JSON.parse(invite.permissions_json || "{}"); } catch (_) { permissions = {}; }
   permissions = safeStoredPermissions(permissions, invite.intended_role);
@@ -100,10 +100,6 @@ async function acceptInvitation(request, env, db, account) {
   const claimed = Number(results?.[0]?.meta?.changes || 0);
   const inserted = Number(results?.[1]?.meta?.changes || 0);
   if (claimed !== 1 || inserted !== 1) return json(env, { error: "invalid_expired_used_or_concurrently_claimed_invitation" }, 409);
-  if (existing?.status === "removed") {
-    await db.prepare("UPDATE daga_store_memberships SET status='removed',updated_at=? WHERE store_id=? AND account_id=? AND id<>?")
-      .bind(now, invite.store_id, account.id, membershipId).run();
-  }
   await audit(db, account.id, "company_invitation_accepted", invite.id, { storeId: invite.store_id, role: invite.intended_role });
   return json(env, { ok: true, membership: { id: membershipId, storeId: invite.store_id, role: invite.intended_role, permissions } }, 201);
 }
@@ -166,7 +162,7 @@ function trustedBaseUrl(value) {
   try {
     const u = new URL(String(value || ""));
     if (u.protocol !== "https:" || u.username || u.password || u.search || u.hash) return "";
-    return u.origin + u.pathname.replace(/\\/+$/, "");
+    return u.origin + u.pathname.replace(/\/+$/, "");
   } catch (_) { return ""; }
 }
 async function audit(db, accountId, action, targetId, details) {
@@ -181,7 +177,7 @@ async function sha256(value) {
 }
 function randomToken(size) {
   const bytes = crypto.getRandomValues(new Uint8Array(size));
-  return btoa(String.fromCharCode(...bytes)).replace(/\\+/g, "-").replace(/\\//g, "_").replace(/=+$/g, "");
+  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 async function safeJson(request) { try { return await request.json(); } catch (_) { return null; } }
 function json(env, data, status = 200) {
