@@ -30,6 +30,15 @@ jobs:
           open("/tmp/owner-console.js", "w", encoding="utf-8").write(scripts[0])
           PY
           node --check /tmp/owner-console.js
+      - name: Guard OTP and password digit validation patterns
+        run: |
+          python3 - <<'PY'
+          auth = open("owner-auth.js", encoding="utf-8").read()
+          assert r'/^\d{6}$/.test(phoneCode)' in auth, "OTP validation regex missing or over-escaped"
+          assert r'/\d/.test(newPassword)' in auth, "Password digit validation regex missing or over-escaped"
+          assert r'/^\\d{6}$/.test(phoneCode)' not in auth, "Found over-escaped OTP regex"
+          print("OTP and password digit validation patterns are correctly escaped.")
+          PY
       - name: Apply D1 migrations to a fresh SQLite database
         run: |
           python3 - <<'PY'
