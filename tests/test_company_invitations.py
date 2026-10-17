@@ -120,7 +120,9 @@ class InvitationSchemaTests(unittest.TestCase):
 
     def test_registration_challenges_store_only_hashes_and_limit_attempts(self):
         columns = {row["name"] for row in self.db.execute("PRAGMA table_info(daga_company_registration_challenges)")}
-        self.assertTrue({"invitation_token_hash", "channel", "destination_hash", "code_hash", "expires_at", "attempts", "consumed_at"} <= columns)
+        self.assertTrue({"invitation_token_hash", "channel", "destination_hash", "code_hash", "expires_at", "attempts", "consumed_at", "claim_id"} <= columns)
+        login_columns = {row["name"] for row in self.db.execute("PRAGMA table_info(daga_company_login_challenges)")}
+        self.assertTrue({"account_id", "channel", "destination_hash", "code_hash", "expires_at", "attempts", "consumed_at", "claim_id"} <= login_columns)
         with self.assertRaises(sqlite3.IntegrityError):
             self.db.execute("""INSERT INTO daga_company_registration_challenges
               (id,invitation_token_hash,channel,destination_hash,code_hash,expires_at,attempts)
@@ -135,6 +137,8 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertIn("await sha256(token)", src)
         self.assertIn('"/api/company/auth/register/verify"', src)
         self.assertIn('"/api/company/auth/login/verify"', src)
+        self.assertIn("claim_id=?", src)
+        self.assertIn("SET consumed_at=?,claim_id=?", src)
         self.assertIn("export async function authenticatedAccount", (ROOT / "owner-auth.js").read_text(encoding="utf-8"))
         self.assertIn('authority.role === "manager" && !authority.permissions.inviteEmployees', src)
         self.assertIn('WHERE store_id=? AND inviter_account_id=?', src)
