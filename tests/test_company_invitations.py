@@ -128,6 +128,16 @@ class InvitationSchemaTests(unittest.TestCase):
               (id,invitation_token_hash,channel,destination_hash,code_hash,expires_at,attempts)
               VALUES ('bad','hash','phone','dest','hash','2026-10-18T00:00:00.000Z',6)""")
 
+    def test_invitation_page_does_not_persist_bearer_secrets(self):
+        page = (ROOT / "invite" / "index.html").read_text(encoding="utf-8")
+        self.assertIn('name="referrer" content="no-referrer"', page)
+        self.assertIn('credentials:"omit"', page)
+        self.assertNotIn("localStorage", page)
+        self.assertNotIn("sessionStorage", page)
+        self.assertIn("/api/company/invitations/accept", page)
+        self.assertIn("/api/company/auth/register/verify", page)
+        self.assertIn("/api/company/auth/login/verify", page)
+
     def test_api_guards_role_escalation_and_authentication(self):
         src = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
         self.assertIn("authenticatedAccount(request, db)", src)
