@@ -128,6 +128,15 @@ class InvitationSchemaTests(unittest.TestCase):
               (id,invitation_token_hash,channel,destination_hash,code_hash,expires_at,attempts)
               VALUES ('bad','hash','phone','dest','hash','2026-10-18T00:00:00.000Z',6)""")
 
+    def test_registration_page_does_not_accept_single_use_invitation_twice(self):
+        page = (ROOT / "invite" / "index.html").read_text(encoding="utf-8")
+        start = page.index('$("verifyRegister").addEventListener')
+        end = page.index('$("sendLogin")', start)
+        handler = page[start:end]
+        self.assertIn("data.membership?.role", handler)
+        self.assertNotIn("await acceptInvite()", handler)
+        self.assertIn("تم إنشاء الحساب وقبول الدعوة بنجاح", handler)
+
     def test_invitation_token_is_removed_from_visible_url_immediately(self):
         page = (ROOT / "invite" / "index.html").read_text(encoding="utf-8")
         self.assertIn('history.replaceState(null, "", location.pathname)', page)
