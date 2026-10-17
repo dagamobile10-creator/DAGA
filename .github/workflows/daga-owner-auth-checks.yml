@@ -38,10 +38,21 @@ jobs:
           import re
           html = open("company/portal.html", encoding="utf-8").read()
           scripts = re.findall(r"<script>(.*?)</script>", html, re.S)
-          assert len(scripts) == 1, f"Expected one company portal script, found {len(scripts)}"
-          open("/tmp/company-portal.js", "w", encoding="utf-8").write(scripts[0])
+          assert len(scripts) >= 2, f"Expected bundled QR library and company portal script, found {len(scripts)}"
+          open("/tmp/company-portal.js", "w", encoding="utf-8").write("\n".join(scripts))
           PY
           node --check /tmp/company-portal.js
+      - name: Check official DAGA QR page JavaScript syntax
+        run: |
+          python3 - <<'PY'
+          import re
+          html = open("go/index.html", encoding="utf-8").read()
+          scripts = re.findall(r"<script>(.*?)</script>", html, re.S)
+          assert len(scripts) >= 2, f"Expected bundled QR library and official QR script, found {len(scripts)}"
+          assert "api.qrserver.com" not in html and "quickchart.io" not in html, "QR tokens/URLs must not be sent to third-party QR services"
+          open("/tmp/daga-official-qr.js", "w", encoding="utf-8").write("\n".join(scripts))
+          PY
+          node --check /tmp/daga-official-qr.js
       - name: Guard OTP and password digit validation patterns
         run: |
           python3 - <<'PY'
