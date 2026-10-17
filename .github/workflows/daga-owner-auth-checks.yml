@@ -41,7 +41,7 @@ jobs:
               "migrations/0002_daga_owner_auth.sql",
               "migrations/0003_daga_owner_credentials.sql",
               "migrations/0004_daga_offers.sql",
-              "migrations/0004_daga_promotions.sql",
+              "migrations/0005_daga_promotions.sql",
           ):
               with open(path, encoding="utf-8") as f:
                   db.executescript(f.read())
