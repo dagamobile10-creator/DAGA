@@ -10,6 +10,7 @@ MIGRATIONS = [
     "0004_daga_offers.sql",
     "0005_daga_store_identity_invitations.sql",
     "0006_daga_public_identity_ids.sql",
+    "0007_daga_company_registration_challenges.sql",
 ]
 
 
@@ -115,6 +116,14 @@ class InvitationSchemaTests(unittest.TestCase):
             "SELECT store_id FROM daga_store_memberships WHERE account_id='employee' ORDER BY store_id"
         ).fetchall()
         self.assertEqual([row["store_id"] for row in rows], ["store-a", "store-b"])
+
+    def test_registration_challenges_store_only_hashes_and_limit_attempts(self):
+        columns = {row["name"] for row in self.db.execute("PRAGMA table_info(daga_company_registration_challenges)")}
+        self.assertTrue({"invitation_token_hash", "channel", "destination_hash", "code_hash", "expires_at", "attempts", "consumed_at"} <= columns)
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.db.execute("""INSERT INTO daga_company_registration_challenges
+              (id,invitation_token_hash,channel,destination_hash,code_hash,expires_at,attempts)
+              VALUES ('bad','hash','phone','dest','hash','2026-10-18T00:00:00.000Z',6)""")
 
     def test_api_guards_role_escalation_and_authentication(self):
         src = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
