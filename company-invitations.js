@@ -5,7 +5,7 @@ const DEFAULT_INVITE_TTL_HOURS = 72;
 const MANAGER_PERMISSION = "inviteEmployees";
 
 export async function handleCompanyInvitations(request, env, url) {
-  const path = url.pathname.replace(/\\/+$/, "") || "/";
+  const path = url.pathname.replace(/\/+$/, "") || "/";
   if (!["/api/company/invitations", "/api/company/invitations/accept"].includes(path) &&
       !/^\/api\/company\/invitations\/[0-9a-f-]{36}(?:\/revoke)?$/i.test(path)) return null;
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors(env) });
