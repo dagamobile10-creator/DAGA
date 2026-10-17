@@ -483,5 +483,23 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertEqual(replay.rowcount, 0)
 
 
+    def test_login_challenge_attempt_counter_cannot_exceed_five(self):
+        self.db.execute(
+            """INSERT INTO daga_company_login_challenges
+            (id,account_id,channel,destination_hash,code_hash,expires_at,attempts)
+            VALUES ('login-limited','owner','phone','dest-limit','hash-limit','2026-10-18T00:00:00.000Z',4)"""
+        )
+        fifth = self.db.execute(
+            "UPDATE daga_company_login_challenges SET attempts=attempts+1 WHERE id='login-limited' AND attempts<5 RETURNING attempts"
+        ).fetchone()
+        sixth = self.db.execute(
+            "UPDATE daga_company_login_challenges SET attempts=attempts+1 WHERE id='login-limited' AND attempts<5 RETURNING attempts"
+        ).fetchone()
+        self.assertEqual(fifth["attempts"], 5)
+        self.assertIsNone(sixth)
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.db.execute("UPDATE daga_company_login_challenges SET attempts=6 WHERE id='login-limited'")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
