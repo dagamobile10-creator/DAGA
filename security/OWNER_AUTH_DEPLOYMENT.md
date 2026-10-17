@@ -52,7 +52,8 @@ The recovery code must be a new, unique secret of at least 20 characters. The re
 
 - `POST /owner/bootstrap/start`: sends independent phone/email OTPs; requires bootstrap bearer token.
 - `POST /owner/bootstrap/verify`: verifies both OTPs and creates the single program owner; requires bootstrap bearer token.
-- `POST /owner/auth/login`: body `{"identifier":"owner email or phone","password":"..." }`; returns an opaque bearer session.
+- `POST /owner/auth/login`: body `{"identifier":"owner email or phone","password":"..." }`; validates the password and sends separate SMS and email OTPs; does not issue a session yet.
+- `POST /owner/auth/login/verify`: body `{"phoneCode":"123456","emailCode":"123456"}`; only after both codes verify does it issue an opaque bearer session.
 - `GET /owner/auth/me`: validates the bearer session and returns masked owner contact details.
 - `POST /owner/auth/logout`: revokes the bearer session.
 - `POST /owner/recovery/start`: sends recovery OTPs to the configured owner phone and email.
@@ -64,7 +65,7 @@ All routes fail closed when required configuration is absent. Sessions expire af
 
 - These routes do not by themselves provide a finished owner dashboard or authorization for every existing business/payment/store endpoint.
 - The existing `/memory`, `/chat`, `/tts`, and LiveAvatar routes have not been comprehensively integrated with authenticated user/store context.
-- The owner endpoints need automated unit/integration tests and a staging deployment before production.
+- The owner endpoints need automated unit/integration tests and a staging deployment before production. Owner password login now requires both SMS and email OTP verification before a session is issued.
 - Restrict CORS to the real production origins, verify provider delivery, verify D1 migrations, and run `tests/OWNER_AUTH_STAGING_CHECKLIST.md` before release.
 - Do not claim production owner security is enabled until the staging checks pass and the Worker deployment is verified.
 
