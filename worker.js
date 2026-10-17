@@ -60,17 +60,25 @@ export default {
     if (url.pathname === "/memory" && (request.method === "GET" || request.method === "POST")) {
       if (!env.DAGA_MEMORY_DB) return json({ error: "persistent_memory_not_configured", detail: "D1 binding DAGA_MEMORY_DB is not configured" }, 503);
       try {
-        const userId = String(url.searchParams.get("userId") || (request.method === "POST" ? (await request.clone().json()).userId : "") || "").trim();
+        let body = null;
+        if (request.method === "POST") {
+          const parsed = await readBoundedJson(request, 160000);
+          if (!parsed.ok) return json({ error: parsed.error }, parsed.status);
+          body = parsed.value;
+        }
+        const userId = String(url.searchParams.get("userId") || (request.method === "POST" ? body?.userId : "") || "").trim();
         if (!/^[a-f0-9-]{32,36}$/i.test(userId)) return json({ error: "valid userId required" }, 400);
         if (request.method === "GET") {
           const row = await env.DAGA_MEMORY_DB.prepare("SELECT profile_json, history_json, updated_at FROM daga_user_memory WHERE user_id = ?").bind(userId).first();
           return json({ ok: true, persistent: true, memory: row ? { profile: JSON.parse(row.profile_json || "{}"), history: JSON.parse(row.history_json || "[]"), updatedAt: row.updated_at } : { profile: {}, history: [], updatedAt: null } });
         }
-        const body = await request.json();
         const profile = body?.profile && typeof body.profile === "object" && !Array.isArray(body.profile) ? body.profile : {};
-        const history = Array.isArray(body?.history) ? body.history.filter(x => x && ["user", "assistant"].includes(x.role) && typeof x.content === "string").slice(-100).map(x => ({ role: x.role, content: x.content.slice(0, 2000) })) : [];
+        const profileJson = JSON.stringify(profile);
+        if (profileJson.length > 10000) return json({ error: "profile_too_large", maxLength: 10000 }, 413);
+        let history = Array.isArray(body?.history) ? body.history.filter(x => x && ["user", "assistant"].includes(x.role) && typeof x.content === "string").slice(-100).map(x => ({ role: x.role, content: x.content.slice(0, 2000) })) : [];
+        while (history.length && JSON.stringify(history).length > 120000) history.shift();
         const now = new Date().toISOString();
-        await env.DAGA_MEMORY_DB.prepare("INSERT INTO daga_user_memory (user_id, profile_json, history_json, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET profile_json=excluded.profile_json, history_json=excluded.history_json, updated_at=excluded.updated_at").bind(userId, JSON.stringify(profile).slice(0, 10000), JSON.stringify(history).slice(0, 120000), now).run();
+        await env.DAGA_MEMORY_DB.prepare("INSERT INTO daga_user_memory (user_id, profile_json, history_json, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET profile_json=excluded.profile_json, history_json=excluded.history_json, updated_at=excluded.updated_at").bind(userId, profileJson, JSON.stringify(history), now).run();
         return json({ ok: true, persistent: true, updatedAt: now });
       } catch (error) {
         return json({ error: "memory_storage_failed", detail: String(error?.message || error) }, 500);
