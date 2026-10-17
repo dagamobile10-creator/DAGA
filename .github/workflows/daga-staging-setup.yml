@@ -70,7 +70,7 @@ database_name = "daga-app-staging"
 database_id = "$D1_ID"
 [[rules]]
 type = "Text"
-globs = ["invite/index.html"]
+globs = ["invite/index.html", "company/portal.html"]
 fallthrough = false
 EOF
       - name: Apply migrations to staging D1 only
