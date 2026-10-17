@@ -308,7 +308,7 @@ class InvitationSchemaTests(unittest.TestCase):
     def test_owner_api_cors_fails_closed_without_allowlist(self):
         source = (ROOT / "owner-auth.js").read_text(encoding="utf-8")
         start = source.index("function cors(env, extra = {})")
-        end = source.index("\\n}", start) + 2
+        end = source.index("\n}", start) + 2
         handler = source[start:end]
         self.assertIn('allowed.includes("*") ? "*" :', handler)
         self.assertNotIn('allowed.length === 0 ? "*" :', handler)
@@ -317,7 +317,7 @@ class InvitationSchemaTests(unittest.TestCase):
     def test_company_api_cors_fails_closed_without_allowlist(self):
         source = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
         start = source.index("function cors(env, extra = {})")
-        end = source.index("\\n}", start) + 2
+        end = source.index("\n}", start) + 2
         handler = source[start:end]
         self.assertIn('allowed.includes("*") ? "*" :', handler)
         self.assertNotIn('allowed.length === 0 ? "*" :', handler)
