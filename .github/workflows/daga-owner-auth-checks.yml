@@ -76,6 +76,28 @@ jobs:
           assert "AND undefined" not in block, "Incomplete payment review SQL predicate"
           print("Payment review conditional guards are present.")
           PY
+      - name: Guard owner identity, dual-channel login, and admin authorization
+        run: |
+          python3 - <<'PY'
+          auth = open("owner-auth.js", encoding="utf-8").read()
+          admin = open("owner-admin.js", encoding="utf-8").read()
+          worker = open("worker.js", encoding="utf-8").read()
+          login = auth[auth.index("async function ownerLogin("):auth.index("async function ownerLoginVerify(")]
+          verify = auth[auth.index("async function ownerLoginVerify("):auth.index("async function ownerMe(")]
+          bootstrap = auth[auth.index("async function bootstrapStart("):auth.index("async function bootstrapVerify(")]
+          checks = {
+              "owner login looks up the singleton program-owner record": "JOIN daga_program_owner o ON o.account_id=a.id" in login and "o.singleton_id=1" in login,
+              "owner login does not issue a session before OTP verification": "createSession(" not in login and "requiresVerification:true" in login,
+              "owner login requires both phone and email codes": 'consumeChallenge(db,env,"login_phone"' in verify and 'consumeChallenge(db,env,"login_email"' in verify and "if(!p||!e)" in verify,
+              "owner bootstrap requires an out-of-band bearer token": 'Authorization' in bootstrap and "DAGA_OWNER_BOOTSTRAP_TOKEN" in bootstrap and "constantTimeEqual" in bootstrap,
+              "owner bootstrap refuses a second owner": "owner_already_provisioned" in bootstrap and "daga_program_owner WHERE singleton_id=1" in bootstrap,
+              "owner admin delegates authorization to authenticatedOwner": "authenticatedOwner(request, db)" in admin,
+              "legacy memory route is explicitly present for separate review": 'url.pathname === "/memory"' in worker,
+          }
+          for name, ok in checks.items():
+              print(("PASS" if ok else "FAIL") + ": " + name)
+          assert all(checks.values()), "Owner-auth security regression guard failed"
+          PY
       - name: Guard OTP consumption against concurrent attempts
         run: |
           python3 - <<'PY'
