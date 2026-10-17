@@ -307,7 +307,7 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertIn("channel='email'", handler)
         self.assertIn("claim_id IS NULL", handler)
         self.assertIn("WHERE EXISTS (SELECT 1 FROM daga_company_login_challenges WHERE id=? AND claim_id=? AND channel='phone')", handler)
-        self.assertIn("WHERE EXISTS (SELECT 1 FROM daga_company_login_challenges WHERE id=? AND claim_id=? AND channel='email')", handler)
+        self.assertIn("AND EXISTS (SELECT 1 FROM daga_company_login_challenges WHERE id=? AND claim_id=? AND channel='email')", handler)
 
     def test_company_logout_revokes_exact_session_once(self):
         source = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
