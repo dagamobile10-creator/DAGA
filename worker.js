@@ -2,6 +2,7 @@ import { handleOwnerAuth } from "./owner-auth.js";
 import { handleOwnerAdmin } from "./owner-admin.js";
 import { handleCompanyInvitations } from "./company-invitations.js";
 import { handleCompanyOrders } from "./company-orders.js";
+import { authenticatedAccount } from "./owner-auth.js";
 import inviteHtml from "./invite/index.html";
 import companyPortalHtml from "./company/portal.html";
 import officialLandingHtml from "./go/index.html";
@@ -83,8 +84,22 @@ export default {
           if (!parsed.ok) return json({ error: parsed.error }, parsed.status);
           body = parsed.value;
         }
-        const userId = String(url.searchParams.get("userId") || (request.method === "POST" ? body?.userId : "") || "").trim();
-        if (!/^[a-f0-9-]{32,36}$/i.test(userId)) return json({ error: "valid userId required" }, 400);
+        // When enabled, persistent memory is bound to the verified server-side account.
+        // Never trust a caller-supplied userId as proof of memory ownership.
+        let userId;
+        if (String(env.DAGA_MEMORY_REQUIRE_AUTH || "").toLowerCase() === "true") {
+          if (!env.DAGA_APP_DB) return json({ error: "authenticated_memory_not_configured" }, 503);
+          const account = await authenticatedAccount(request, env.DAGA_APP_DB);
+          if (!account || account.status !== "approved" || account.role === "program_owner") {
+            return json({ error: "authenticated_account_required" }, 401);
+          }
+          userId = String(account.id || "").trim();
+        } else {
+          // Temporary compatibility mode for the existing anonymous LIVE DAGA client.
+          // Disable after the client has a supported sign-in and one-time memory-claim flow.
+          userId = String(url.searchParams.get("userId") || (request.method === "POST" ? body?.userId : "") || "").trim();
+        }
+        if (!/^[a-f0-9-]{32,36}$/i.test(userId)) return json({ error: "valid_user_identity_required" }, 400);
         if (request.method === "GET") {
           const row = await env.DAGA_MEMORY_DB.prepare("SELECT profile_json, history_json, updated_at FROM daga_user_memory WHERE user_id = ?").bind(userId).first();
           return json({ ok: true, persistent: true, memory: row ? { profile: JSON.parse(row.profile_json || "{}"), history: JSON.parse(row.history_json || "[]"), updatedAt: row.updated_at } : { profile: {}, history: [], updatedAt: null } });
