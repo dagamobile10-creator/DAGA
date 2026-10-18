@@ -73,7 +73,7 @@ export default {
     const companyOrderResponse = await handleCompanyOrders(request, env, url);
     if (companyOrderResponse) return companyOrderResponse;
 
-    if (request.method === "OPTIONS") return new Response(null, { headers: cors() });
+    if (request.method === "OPTIONS") return new Response(null, { headers: cors({ allowedOrigins: env.DAGA_ALLOWED_ORIGINS || "" }) });
 
     // Optional staged protection for expensive public voice routes. Keep disabled
     // until the client has authenticated sessions; staging enables it for smoke tests.
@@ -347,7 +347,7 @@ export default {
         body: JSON.stringify({ text, model_id: "eleven_flash_v2_5", language_code: "ar", voice_settings: { stability: 0.32, similarity_boost: 0.80, style: 0.22, speed: 0.88, use_speaker_boost: true } })
       });
       if (!response.ok) return json({ error: "tts_provider_request_failed", status: response.status }, response.status >= 400 && response.status <= 599 ? response.status : 502);
-      return new Response(response.body, { headers: cors({ "Content-Type": response.headers.get("content-type") || "audio/mpeg", "Cache-Control": "no-store" }) });
+      return new Response(response.body, { headers: cors({ allowedOrigins: env.DAGA_ALLOWED_ORIGINS || "", "Content-Type": response.headers.get("content-type") || "audio/mpeg", "Cache-Control": "no-store" }) });
     } catch (_) { return json({ error: "tts_request_failed" }, 500); }
   }
 };
@@ -385,10 +385,14 @@ async function applyPublicApiRateLimit(db, pepper, key, limit, windowSeconds) {
 }
 
 function json(data, status = 200) {
-  return new Response(JSON.stringify(data), { status, headers: cors({ "Content-Type": "application/json; charset=utf-8" }) });
+  return new Response(JSON.stringify(data), { status, headers: cors({ allowedOrigins: env.DAGA_ALLOWED_ORIGINS || "", "Content-Type": "application/json; charset=utf-8" }) });
 }
 function cors(extra = {}) {
-  return { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET,POST,OPTIONS", "Access-Control-Allow-Headers": "Content-Type, Authorization", ...extra };
+  const allowed = String(extra.allowedOrigins || "").split(",").map(x => x.trim()).filter(Boolean);
+  const origin = allowed.includes("*") ? "*" : allowed.length === 1 ? allowed[0] : allowed.includes("null") ? "null" : "";
+  const headers = { ...(origin ? { "Access-Control-Allow-Origin": origin } : {}), "Access-Control-Allow-Methods": "GET,POST,OPTIONS", "Access-Control-Allow-Headers": "Content-Type, Authorization", "Access-Control-Max-Age": "600", Vary: "Origin", ...extra };
+  delete headers.allowedOrigins;
+  return headers;
 }
 function normalizeArabicReply(value, userText = "") {
   const question = String(userText || "");
