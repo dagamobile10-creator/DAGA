@@ -104,5 +104,16 @@ class CompanyOrderRegressionTests(unittest.TestCase):
         db.close()
 
 
+    def test_order_creation_requires_successful_immutable_price_snapshot(self):
+        start = self.source.index('if (path === "/api/company/orders" && request.method === "POST")')
+        end = self.source.index('if (orderPayment && request.method === "POST")', start)
+        handler = self.source[start:end]
+        self.assertIn('Number(results?.[0]?.meta?.changes || 0) !== 1', handler)
+        self.assertIn('Number(results?.[1]?.meta?.changes || 0) !== 1', handler)
+        self.assertIn('error: "order_price_snapshot_failed"', handler)
+        self.assertIn('DELETE FROM daga_plan_orders WHERE id=? AND account_id=? AND status=\'awaiting_payment\'', handler)
+        self.assertLess(handler.index('error: "order_price_snapshot_failed"'), handler.index('status: "awaiting_payment" } }, 201'))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
