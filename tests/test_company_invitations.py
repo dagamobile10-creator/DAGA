@@ -641,5 +641,17 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertNotIn('LIVEAVATAR_API_KEY:', route)
 
 
+    def test_liveavatar_token_enforces_staged_identity_before_provider_call(self):
+        worker = (ROOT / "worker.js").read_text(encoding="utf-8")
+        start = worker.index('if (url.pathname === "/liveavatar/token" && request.method === "POST")')
+        end = worker.index('if (url.pathname === "/health")', start)
+        route = worker[start:end]
+        self.assertIn('DAGA_VOICE_REQUIRE_AUTH', route)
+        self.assertIn('authenticatedAccount(request, env.DAGA_APP_DB)', route)
+        self.assertIn('account.status !== "approved"', route)
+        self.assertIn('account.role === "program_owner"', route)
+        self.assertLess(route.index('DAGA_VOICE_REQUIRE_AUTH'), route.index('if (!env.LIVEAVATAR_API_KEY)'))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
