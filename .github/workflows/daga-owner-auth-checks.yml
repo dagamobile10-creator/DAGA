@@ -53,6 +53,28 @@ jobs:
           open("/tmp/daga-official-qr.js", "w", encoding="utf-8").write("\n".join(scripts))
           PY
           node --check /tmp/daga-official-qr.js
+      - name: Guard company invitation role and permission boundaries
+        run: |
+          python3 - <<'PY'
+          source = open("company-invitations.js", encoding="utf-8").read()
+          authority = source[source.index("async function getAuthority"):source.index("function normalizePermissions")]
+          normalize = source[source.index("function normalizePermissions"):source.index("function safeStoredPermissions")]
+          create = source[source.index("async function createInvitation"):source.index("async function listInvitations")]
+          accept = source[source.index("async function acceptInvitation"):]
+          checks = {
+              "owner authority is scoped to the exact company owner": 'store.owner_account_id === account.id' in authority,
+              "membership authority requires active membership": 'membership.status !== "active"' in authority,
+              "manager cannot invite another manager": 'authority.role === "manager" && intendedRole !== "employee"' in create,
+              "manager cannot escalate permissions": 'if (out[key] && !authority.permissions[key]) return null' in normalize,
+              "only company owner can issue manager invitation": 'intendedRole === "manager" && authority.role !== "store_owner"' in normalize,
+              "employee invite cannot grant invitation permission": 'intendedRole === "employee" && out.inviteEmployees' in normalize,
+              "invitation token is stored only as a hash": 'const tokenHash = await sha256(token)' in create and 'token_hash' in create,
+              "invitation is single-use and expiry-checked": "use_count=0" in accept and "expires_at>?" in accept,
+          }
+          for name, passed in checks.items():
+              print(("PASS" if passed else "FAIL") + ": " + name)
+          assert all(checks.values()), "Company invitation privilege-boundary guard failed"
+          PY
       - name: Guard provider error redaction
         run: |
           python3 - <<'PY'
