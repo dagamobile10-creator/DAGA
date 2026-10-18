@@ -4,6 +4,7 @@ compatibility_date = "2026-10-06"
 
 [vars]
 DAGA_APP_BASE_URL = "https://daga-voice.dagamobile10.workers.dev"
+DAGA_ALLOWED_ORIGINS = "https://dagamobile10-creator.github.io"
 
 [ai]
 binding = "AI"
