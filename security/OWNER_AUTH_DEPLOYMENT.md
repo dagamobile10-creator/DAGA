@@ -14,6 +14,7 @@ Create a **new dedicated Cloudflare D1 database** for app/account data. Do not r
 6. `migrations/0006_daga_public_identity_ids.sql`
 7. `migrations/0007_daga_company_registration_challenges.sql`
 8. `migrations/0008_daga_company_login_challenges.sql`
+9. `migrations/0009_daga_payment_submission_uniqueness.sql` (prevents more than one pending-review payment submission per order)
 
 Bind that database to the Worker as `DAGA_APP_DB`. Keep the existing `DAGA_MEMORY_DB` binding separate until its user identity model is migrated and tested.
 
@@ -71,7 +72,7 @@ All routes fail closed when required configuration is absent. Sessions expire af
 
 The branch also contains `company-invitations.js`, the company portal at `/company/`, invitation acceptance at `/invite/`, and the public DAGA QR landing page at `/go/`. The company portal creates role-limited invitations and locally renders their QR codes; the public QR is separate from invitation QR codes. The program owner provisions a pending company and owner account in the owner console; the owner can sign in after the company is approved.
 
-The manual/automatic-on-development staging workflow is `.github/workflows/daga-staging-setup.yml`. It uses a separate `daga-app-staging` D1 and `daga-app-staging` Worker; it never targets the production `daga-voice` Worker. It requires GitHub Actions secrets named `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `DAGA_OTP_PEPPER`, `DAGA_OWNER_BOOTSTRAP_TOKEN`, `DAGA_OWNER_PHONE`, `DAGA_OWNER_EMAIL`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`, `RESEND_API_KEY`, and `DAGA_EMAIL_FROM`. The isolated staging Worker and D1 were provisioned successfully, all eight migrations applied, and runtime smoke checks passed for the health endpoint, CORS, /go/, /company/, /invite/, /owner/, /owner-console/, and unauthenticated API denial. However, the latest staging run reported DAGA_OTP_PEPPER missing and intentionally skipped configuring all owner/SMS/email delivery secrets. Therefore owner bootstrap, OTP delivery, real login, and recovery are NOT ready. Add valid values through GitHub repository Actions secrets; do not put their values in chat or source control.
+The manual/automatic-on-development staging workflow is `.github/workflows/daga-staging-setup.yml`. It uses a separate `daga-app-staging` D1 and `daga-app-staging` Worker; it never targets the production `daga-voice` Worker. It requires GitHub Actions secrets named `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `DAGA_OTP_PEPPER`, `DAGA_OWNER_BOOTSTRAP_TOKEN`, `DAGA_OWNER_PHONE`, `DAGA_OWNER_EMAIL`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`, `RESEND_API_KEY`, and `DAGA_EMAIL_FROM`. The isolated staging Worker and D1 were provisioned successfully, all nine migrations applied, and runtime smoke checks passed for the health endpoint, CORS, /go/, /company/, /invite/, /owner/, /owner-console/, and unauthenticated API denial. However, the latest staging run reported DAGA_OTP_PEPPER missing and intentionally skipped configuring all owner/SMS/email delivery secrets. Therefore owner bootstrap, OTP delivery, real login, and recovery are NOT ready. Add valid values through GitHub repository Actions secrets; do not put their values in chat or source control.
 
 ## Not yet release-ready
 
