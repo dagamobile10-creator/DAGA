@@ -150,10 +150,6 @@ class CompanyOrderRegressionTests(unittest.TestCase):
         self.assertIn("daga_payment_one_pending_submission_per_order", (ROOT / "migrations" / "0009_daga_payment_submission_uniqueness.sql").read_text(encoding="utf-8"))
 
 
-if __name__ == "__main__":
-    unittest.main(verbosity=2)
-
-
 class CompanyInvitationAuthorizationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -209,3 +205,5 @@ class CompanyInvitationAuthorizationTests(unittest.TestCase):
         self.assertIn("UNIQUE", migration)
 
 
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
