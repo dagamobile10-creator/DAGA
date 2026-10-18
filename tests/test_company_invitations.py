@@ -623,5 +623,12 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertIn("o.status='paid_approved'", review)
 
 
+    def test_liveavatar_metadata_lookup_uses_optional_public_api_rate_limit(self):
+        worker = (ROOT / "worker.js").read_text(encoding="utf-8")
+        self.assertIn('(url.pathname === "/liveavatar/avatars" && request.method === "GET")', worker)
+        self.assertIn('"/liveavatar/avatars": [30, 300]', worker)
+        self.assertIn('if (publicLimit && String(env.DAGA_PUBLIC_API_RATE_LIMITS || "").toLowerCase() === "true")', worker)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
