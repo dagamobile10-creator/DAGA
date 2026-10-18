@@ -13,12 +13,26 @@
 <main>
 <div id="notice" class="notice hidden" role="status"></div>
 <section id="login" class="card" style="max-width:520px;margin:35px auto">
-<h1>دخول مالك التطبيق</h1><p>الدخول مخصص لحساب المالك الموثق فقط. إنشاء الحساب وتأكيد التليفون والإيميل يتمان من خلال إجراءات الإعداد الآمنة على السيرفر.</p>
+<h1>دخول مالك التطبيق</h1><p>الدخول مخصص لحساب المالك الموثق فقط. لو دي أول مرة يتم فيها إنشاء حساب المالك، افتح قسم الإعداد الآمن أسفل نموذج الدخول.</p>
 <form id="loginForm"><label for="identifier">رقم التليفون أو الإيميل</label><input id="identifier" autocomplete="username" required>
 <label for="password">كلمة السر</label><input id="password" type="password" autocomplete="current-password" required>
 <button id="loginButton" type="submit" style="width:100%">تحقق من كلمة السر</button></form>
 <form id="loginVerifyForm" class="hidden"><p>تم إرسال كودين منفصلين إلى رقم المالك والإيميل. أدخل الكودين لإكمال تسجيل الدخول.</p><label>كود التليفون (6 أرقام)</label><input id="loginPhoneCode" inputmode="numeric" pattern="[0-9]{6}" required><label>كود الإيميل (6 أرقام)</label><input id="loginEmailCode" inputmode="numeric" pattern="[0-9]{6}" required><button type="submit">تأكيد الدخول</button></form>
 <p><small>الجلسة محفوظة في ذاكرة الصفحة فقط. إعادة تحميل الصفحة تتطلب تسجيل الدخول مرة أخرى.</small></p>
+<details id="ownerBootstrap" style="margin-top:18px"><summary style="cursor:pointer;color:var(--gold)">إعداد حساب المالك لأول مرة</summary>
+<p>المسار ده لإنشاء حساب المالك الوحيد على بيئة الاختبار. محتاج رمز الإعداد الموجود في أسرار بيئة الاختبار؛ الرمز لا يُحفظ في المتصفح ولا يُرسل لأي جهة خارجية. بعد إرسال الأكواد، أدخل كود الموبايل والإيميل وأنشئ كلمة السر وكود الاسترداد.</p>
+<form id="bootstrapStartForm">
+<label for="bootstrapToken">رمز الإعداد الآمن</label><input id="bootstrapToken" type="password" autocomplete="off" required minlength="32">
+<button id="bootstrapStartButton" type="submit">إرسال أكواد التحقق</button>
+</form>
+<form id="bootstrapVerifyForm" class="hidden">
+<p id="bootstrapDeliveryNote">أدخل الكودين المرسلين إلى بيانات المالك المسجلة في إعدادات السيرفر. الأكواد صالحة لمدة 10 دقائق.</p>
+<label for="bootstrapPhoneCode">كود الموبايل (6 أرقام)</label><input id="bootstrapPhoneCode" inputmode="numeric" pattern="[0-9]{6}" autocomplete="one-time-code" required>
+<label for="bootstrapEmailCode">كود الإيميل (6 أرقام)</label><input id="bootstrapEmailCode" inputmode="numeric" pattern="[0-9]{6}" autocomplete="one-time-code" required>
+<label for="bootstrapPassword">كلمة السر (14 حرفًا على الأقل، حروف كبيرة وصغيرة ورقم)</label><input id="bootstrapPassword" type="password" autocomplete="new-password" minlength="14" required>
+<label for="bootstrapRecoveryCode">كود استرداد جديد (20 حرفًا على الأقل؛ احتفظ به خارج الجهاز)</label><input id="bootstrapRecoveryCode" type="password" autocomplete="off" minlength="20" required>
+<div class="row"><button id="bootstrapVerifyButton" type="submit">تأكيد الأكواد وإنشاء الحساب</button><button id="bootstrapCancelButton" type="button" class="secondary">إلغاء ومسح بيانات الإعداد</button></div>
+</form></details>
 <details style="margin-top:18px"><summary style="cursor:pointer;color:var(--gold)">استرداد حساب المالك</summary>
 <p>هنبعت كودين منفصلين على رقم المالك وإيميله المسجلين في إعدادات السيرفر. لازم كمان كود الاسترداد الحالي اللي اتعمل وقت إعداد الحساب.</p>
 <form id="recoveryStart"><button type="submit" class="secondary">إرسال أكواد الاسترداد</button></form>
@@ -52,6 +66,7 @@
 const API=window.location.origin;
 let sessionToken='';
 let pendingLogin=false;
+let bootstrapTokenInMemory='';
 const $=id=>document.getElementById(id);
 function message(text,type){const n=$('notice');n.textContent=text;n.className='notice '+(type||'');n.classList.remove('hidden');window.scrollTo({top:0,behavior:'smooth'});}
 function escapeHtml(v){return String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -75,6 +90,39 @@ table('offers',['العرض','الخدمة','الخصم','المدة','الحا�
 }
 function sum(rows){return (rows||[]).reduce((n,r)=>n+Number(r.count||0),0);}
 $('companyOwnerForm').addEventListener('submit',async e=>{e.preventDefault();const btn=e.submitter;if(btn)btn.disabled=true;try{const result=await api('/owner/admin/stores',{method:'POST',body:JSON.stringify({displayName:$('companyName').value.trim(),legalIdentity:$('legalIdentity').value.trim(),ownerName:$('companyOwnerName').value.trim(),phone:$('companyOwnerPhone').value.trim(),email:$('companyOwnerEmail').value.trim()})});message('تم إنشاء الشركة وحساب المالك. معرّف الشركة: '+result.store.publicId+' — معرّف المالك: '+result.owner.publicId+'. وافق على الشركة من الجدول بعد المراجعة.','ok');$('companyOwnerForm').reset();await load();}catch(err){message(err.message,'error')}finally{if(btn)btn.disabled=false;}});
+$('bootstrapStartForm').addEventListener('submit',async e=>{
+e.preventDefault();
+const button=$('bootstrapStartButton');button.disabled=true;
+bootstrapTokenInMemory=$('bootstrapToken').value;
+try{
+const r=await fetch(API+'/owner/bootstrap/start',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+bootstrapTokenInMemory},body:JSON.stringify({})});
+const d=await r.json();if(!r.ok)throw new Error(d.error||'تعذر إرسال أكواد الإعداد');
+$('bootstrapVerifyForm').classList.remove('hidden');
+$('bootstrapDeliveryNote').textContent='تم طلب إرسال الأكواد إلى '+(d.phoneMasked||'الموبايل المسجل')+' و'+(d.emailMasked||'الإيميل المسجل')+'. الأكواد صالحة لمدة 10 دقائق. تأكد من وصول الرسائل قبل المتابعة.';
+$('bootstrapStartForm').classList.add('hidden');
+message('تم بدء إعداد حساب المالك. أدخل الكودين لإنهاء التسجيل.','ok');
+}catch(err){bootstrapTokenInMemory='';$('bootstrapToken').value='';message(err.message,'error')}
+finally{button.disabled=false;}
+});
+$('bootstrapVerifyForm').addEventListener('submit',async e=>{
+e.preventDefault();if(!bootstrapTokenInMemory){message('انتهت جلسة الإعداد؛ ابدأ من جديد.','error');return;}
+const button=$('bootstrapVerifyButton');button.disabled=true;
+try{
+const r=await fetch(API+'/owner/bootstrap/verify',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+bootstrapTokenInMemory},body:JSON.stringify({phoneCode:$('bootstrapPhoneCode').value.trim(),emailCode:$('bootstrapEmailCode').value.trim(),password:$('bootstrapPassword').value,recoveryCode:$('bootstrapRecoveryCode').value})});
+const d=await r.json();if(!r.ok)throw new Error(d.error||'تعذر إنشاء حساب المالك');
+sessionToken=d.sessionToken;bootstrapTokenInMemory='';$('bootstrapToken').value='';$('bootstrapPassword').value='';$('bootstrapRecoveryCode').value='';
+$('login').classList.add('hidden');$('dashboard').classList.remove('hidden');$('logout').classList.remove('hidden');
+$('ownerIdentity').textContent='حساب مالك موثّق: '+(d.account.emailMasked||'')+' — الجلسة تنتهي '+d.expiresAt;
+$('ownerBootstrap').classList.add('hidden');
+message('تم إنشاء حساب المالك بنجاح. احتفظ بكود الاسترداد الذي أنشأته في مكان آمن؛ لن يظهر مرة أخرى.','ok');
+await load();
+}catch(err){message(err.message,'error')}
+finally{button.disabled=false;}
+});
+$('bootstrapCancelButton').addEventListener('click',()=>{
+bootstrapTokenInMemory='';$('bootstrapToken').value='';$('bootstrapPhoneCode').value='';$('bootstrapEmailCode').value='';$('bootstrapPassword').value='';$('bootstrapRecoveryCode').value='';
+$('bootstrapVerifyForm').classList.add('hidden');$('bootstrapStartForm').classList.remove('hidden');message('تم مسح بيانات الإعداد من الصفحة.','ok');
+});
 $('loginForm').addEventListener('submit',async e=>{e.preventDefault();$('loginButton').disabled=true;try{const r=await fetch(API+'/owner/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({identifier:$('identifier').value.trim(),password:$('password').value})});const d=await r.json();if(!r.ok)throw new Error(d.error||'فشل تسجيل الدخول');if(!d.requiresVerification)throw new Error('استجابة تحقق غير متوقعة');pendingLogin=true;$('loginVerifyForm').classList.remove('hidden');message('تم التحقق من كلمة السر وإرسال أكواد التحقق.','ok');}catch(err){message(err.message,'error')}finally{$('loginButton').disabled=false;}});
 $('loginVerifyForm').addEventListener('submit',async e=>{e.preventDefault();if(!pendingLogin)return;try{const r=await fetch(API+'/owner/auth/login/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phoneCode:$('loginPhoneCode').value.trim(),emailCode:$('loginEmailCode').value.trim()})});const d=await r.json();if(!r.ok)throw new Error(d.error||'فشل التحقق');sessionToken=d.sessionToken;pendingLogin=false;$('login').classList.add('hidden');$('dashboard').classList.remove('hidden');$('logout').classList.remove('hidden');$('ownerIdentity').textContent='حساب مالك موثّق: '+(d.account.emailMasked||'')+' — الجلسة تنتهي '+d.expiresAt;message('تم التحقق من كلمة السر والتليفون والإيميل.','ok');await load();}catch(err){message(err.message,'error')}});
 $('logout').addEventListener('click',async()=>{try{await api('/owner/auth/logout',{method:'POST',body:'{}'})}catch(_){}sessionToken='';$('dashboard').classList.add('hidden');$('logout').classList.add('hidden');$('login').classList.remove('hidden');$('password').value='';message('تم إنهاء الجلسة من الصفحة.','ok')});
