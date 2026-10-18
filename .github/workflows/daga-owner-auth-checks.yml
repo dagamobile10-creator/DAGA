@@ -107,6 +107,7 @@ jobs:
           assert '"/chat": [30, 300]' in worker, "Chat rate limit missing"
           assert '"/tts": [30, 300]' in worker, "TTS rate limit missing"
           assert '"/memory": [60, 300]' in worker, "Memory rate limit missing"
+          assert 'request.method === "POST"' in worker and '["GET", "POST"].includes(request.method)' in worker, "Rate-limit gate must match supported methods"
           assert 'env.DAGA_PUBLIC_API_RATE_LIMITS' in worker, "Rate-limit feature flag missing"
           assert 'env.DAGA_APP_DB || !env.DAGA_OTP_PEPPER' in worker, "Rate limits must fail closed when DB/pepper is missing"
           assert 'error: "rate_limited"' in worker, "Rate limit response missing"
