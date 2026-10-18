@@ -601,7 +601,7 @@ class InvitationSchemaTests(unittest.TestCase):
         start = admin.index('if(path==="/owner/admin/words/adjust"&&request.method==="POST")')
         end = admin.index('if(path==="/owner/admin/columns"&&request.method==="GET")', start)
         handler = admin[start:end]
-        self.assertIn('SELECT id FROM daga_live_word_ledger WHERE request_id=?', handler)
+        self.assertIn('SELECT id,account_id,store_id,event_type,words,note FROM daga_live_word_ledger WHERE request_id=?', handler)
         self.assertIn('error:"word_adjustment_request_id_conflict"', handler)
         self.assertIn('prior.account_id===accountId&&prior.store_id===resolvedStoreId', handler)
         self.assertIn('const resolvedStoreId=storeId||account.store_id||null', handler)
