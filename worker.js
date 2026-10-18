@@ -76,7 +76,6 @@ export default {
     if (request.method === "OPTIONS") return new Response(null, { headers: cors() });
 
     if (url.pathname === "/memory" && (request.method === "GET" || request.method === "POST")) {
-      if (!env.DAGA_MEMORY_DB) return json({ error: "persistent_memory_not_configured", detail: "D1 binding DAGA_MEMORY_DB is not configured" }, 503);
       try {
         let body = null;
         if (request.method === "POST") {
@@ -100,6 +99,7 @@ export default {
           userId = String(url.searchParams.get("userId") || (request.method === "POST" ? body?.userId : "") || "").trim();
         }
         if (!/^[a-f0-9-]{32,36}$/i.test(userId)) return json({ error: "valid_user_identity_required" }, 400);
+        if (!env.DAGA_MEMORY_DB) return json({ error: "persistent_memory_not_configured" }, 503);
         if (request.method === "GET") {
           const row = await env.DAGA_MEMORY_DB.prepare("SELECT profile_json, history_json, updated_at FROM daga_user_memory WHERE user_id = ?").bind(userId).first();
           return json({ ok: true, persistent: true, memory: row ? { profile: JSON.parse(row.profile_json || "{}"), history: JSON.parse(row.history_json || "[]"), updatedAt: row.updated_at } : { profile: {}, history: [], updatedAt: null } });
