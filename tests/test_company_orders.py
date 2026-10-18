@@ -134,5 +134,14 @@ class CompanyOrderRegressionTests(unittest.TestCase):
         db.close()
 
 
+    def test_duplicate_pending_payment_returns_conflict(self):
+        start = self.source.index('if (orderPayment && request.method === "POST")')
+        end = self.source.index('return json(env, { error: "method_not_allowed" }, 405);', start)
+        handler = self.source[start:end]
+        self.assertIn("payment_submission_already_pending", handler)
+        self.assertIn("SELECT id FROM daga_payment_submissions WHERE order_id=? AND status='pending_review'", handler)
+        self.assertIn("daga_payment_one_pending_submission_per_order", (ROOT / "migrations" / "0009_daga_payment_submission_uniqueness.sql").read_text(encoding="utf-8"))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
