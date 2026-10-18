@@ -87,6 +87,7 @@ jobs:
           [vars]
           DAGA_APP_BASE_URL = "https://daga-app-staging.dagamobile10.workers.dev"
           DAGA_ALLOWED_ORIGINS = "https://daga-app-staging.dagamobile10.workers.dev"
+          DAGA_MEMORY_REQUIRE_AUTH = "true"
           [[d1_databases]]
           binding = "DAGA_APP_DB"
           database_name = "daga-app-staging"
@@ -196,6 +197,10 @@ jobs:
           fi
           code="$(curl -sS -o /tmp/me.json -w '%{http_code}' --max-time 15 https://daga-app-staging.dagamobile10.workers.dev/api/company/auth/me)"
           test "$code" = "401" || { echo "::error::Unauthenticated company account endpoint returned HTTP $code"; exit 1; }
+          # Staging memory must reject anonymous callers even before its storage binding is configured.
+          code="$(curl -sS -o /tmp/memory-anon.json -w '%{http_code}' --max-time 15 'https://daga-app-staging.dagamobile10.workers.dev/memory?userId=00000000-0000-4000-8000-000000000000')"
+          test "$code" = "401" || { echo "::error::Unauthenticated memory endpoint returned HTTP $code"; exit 1; }
+          grep -q 'authenticated_account_required' /tmp/memory-anon.json || { echo "::error::Memory endpoint did not reject anonymous identity"; exit 1; }
           code="$(curl -sS -o /tmp/invites.json -w '%{http_code}' --max-time 15 'https://daga-app-staging.dagamobile10.workers.dev/api/company/invitations?storeId=00000000-0000-4000-8000-000000000000')"
           test "$code" = "401" || { echo "::error::Unauthenticated invitation endpoint returned HTTP $code"; exit 1; }
           # Owner session and administration endpoints must reject unauthenticated callers too.
