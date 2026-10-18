@@ -4,7 +4,7 @@ Do not use production data, real customer accounts, or real payment records duri
 
 ## Prerequisites
 - [ ] Dedicated D1 database is created and bound as `DAGA_APP_DB`.
-- [ ] Migrations 0001–0008 are applied in order, including stable identities, invitations, registration OTPs, and company-login OTPs.
+- [ ] Migrations 0001–0009 are applied in order, including stable identities, invitations, registration OTPs, company-login OTPs, and the partial unique index that prevents duplicate pending payment submissions.
 - [ ] Worker secrets are set in Cloudflare: bootstrap token, OTP pepper, owner phone/email, Twilio credentials/sender, Resend API key, verified sender.
 - [ ] `DAGA_ALLOWED_ORIGINS` is set to the exact staging frontend origin.
 - [ ] `DAGA_APP_BASE_URL` is set to the trusted HTTPS staging frontend origin/path used to create invitation links; it is never derived from the request Host header.
