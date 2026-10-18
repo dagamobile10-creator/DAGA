@@ -99,6 +99,21 @@ jobs:
           assert 'new Response(await response.text()' not in worker, "Raw TTS provider errors must not be returned to clients"
           print("Provider and storage error responses avoid raw upstream details.")
           PY
+      - name: Guard optional public API rate limits
+        run: |
+          python3 - <<'PY'
+          worker = open("worker.js", encoding="utf-8").read()
+          assert '"/liveavatar/token": [10, 900]' in worker, "LiveAvatar token rate limit missing"
+          assert '"/chat": [30, 300]' in worker, "Chat rate limit missing"
+          assert '"/tts": [30, 300]' in worker, "TTS rate limit missing"
+          assert '"/memory": [60, 300]' in worker, "Memory rate limit missing"
+          assert 'env.DAGA_PUBLIC_API_RATE_LIMITS' in worker, "Rate-limit feature flag missing"
+          assert 'env.DAGA_APP_DB || !env.DAGA_OTP_PEPPER' in worker, "Rate limits must fail closed when DB/pepper is missing"
+          assert 'error: "rate_limited"' in worker, "Rate limit response missing"
+          assert 'FROM daga_auth_rate_limits' not in worker, "Unexpected rate-limit read path"
+          assert 'applyPublicApiRateLimit' in worker and 'RETURNING attempts' in worker, "Atomic D1 rate-limit claim missing"
+          print("Optional public API D1 rate-limit guards are present.")
+          PY
       - name: Guard bounded memory persistence payloads
         run: |
           python3 - <<'PY'
