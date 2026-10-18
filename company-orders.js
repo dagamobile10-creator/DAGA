@@ -144,6 +144,10 @@ export async function handleCompanyOrders(request, env, url) {
       if (Number(results?.[0]?.meta?.changes || 0) !== 1 || Number(results?.[1]?.meta?.changes || 0) !== 1) return json(env, { error: "order_payment_state_changed_retry" }, 409);
       return json(env, { ok: true, paymentSubmission: { id: submissionId, orderId, status: "pending_review", claimedAmountMinor: Number(order.agreed_price_minor) } }, 201);
     } catch (_) {
+      try {
+        const pending = await db.prepare("SELECT id FROM daga_payment_submissions WHERE order_id=? AND status='pending_review'").bind(orderId).first();
+        if (pending) return json(env, { error: "payment_submission_already_pending" }, 409);
+      } catch (_) {}
       return json(env, { error: "payment_submission_failed" }, 500);
     }
   }
