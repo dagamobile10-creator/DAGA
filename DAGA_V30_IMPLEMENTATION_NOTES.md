@@ -24,6 +24,14 @@ migrations/0001_daga_core.sql defines the proposed D1 data model for:
 - `.github/workflows/daga-staging-setup.yml` is a manual-only workflow that provisions/reuses a separate `daga-app-staging` D1 database, applies tracked migrations, deploys a separate `daga-app-staging` Worker, and installs staging secrets. Pushes only validate the workflow; they do not provision or deploy staging resources.
 - CI syntax and SQLite schema/security regression checks pass on the current development branch. This does not prove real SMS/email delivery, Cloudflare D1 runtime behavior, invitation acceptance across two devices, or deployment configuration.
 
+## Legacy voice/API hardening update — 2026-10-18
+
+- The development Worker now returns generic failure messages for chat-provider failures, TTS-provider failures, and unexpected chat/TTS exceptions instead of exposing upstream response bodies or raw exception text.
+- LiveAvatar avatar lookup failures return a generic error and status only; raw provider payloads are not returned.
+- CI includes guards against reintroducing raw LiveAvatar, chat, or TTS provider error details. Company invitation/order authorization tests and fresh SQLite migration checks pass on the latest verified CI run.
+- The legacy `/memory` authenticated mode is available as an opt-in and is enabled in the staging workflow configuration. The existing LIVE DAGA client still does not have a complete personal sign-in and memory-claim flow, so the legacy route must not be declared fully secured or enabled on production yet.
+- This is defensive error redaction and request-size hardening, not a complete rate-limiting or identity migration. The chat, TTS, and LiveAvatar endpoints remain publicly callable; implement and validate abuse controls and a compatible personal identity/session flow before production enforcement.
+
 ## Known release gates
 
 1. Run the manual **DAGA isolated staging setup** workflow in GitHub Actions after confirming the repository secrets listed in `security/OWNER_AUTH_DEPLOYMENT.md` exist. This connector can edit files and inspect workflow runs, but it cannot dispatch the manual workflow or inspect repository secret values.
