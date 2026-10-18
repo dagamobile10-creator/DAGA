@@ -385,7 +385,7 @@ async function applyPublicApiRateLimit(db, pepper, key, limit, windowSeconds) {
 }
 
 function json(data, status = 200) {
-  return new Response(JSON.stringify(data), { status, headers: cors({ allowedOrigins: env.DAGA_ALLOWED_ORIGINS || "", "Content-Type": "application/json; charset=utf-8" }) });
+  return new Response(JSON.stringify(data), { status, headers: cors({ "Content-Type": "application/json; charset=utf-8" }) });
 }
 function cors(extra = {}) {
   // JSON/audio helpers do not receive env directly, so use the deployed Pages origin as the safe default.
