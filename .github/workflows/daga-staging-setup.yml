@@ -128,12 +128,25 @@ jobs:
           for name in DAGA_OTP_PEPPER DAGA_OWNER_BOOTSTRAP_TOKEN DAGA_OWNER_PHONE DAGA_OWNER_EMAIL TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN TWILIO_FROM_NUMBER RESEND_API_KEY DAGA_EMAIL_FROM; do
             if [ -z "${!name:-}" ]; then
               echo "::warning::Missing $name; staging auth/bootstrap stays disabled until all required auth and delivery secrets are added."
+              {
+                echo "## DAGA staging readiness"
+                echo "- Infrastructure: deployed; schema migrations and runtime smoke checks are verified separately below."
+                echo "- Owner authentication / OTP delivery: **BLOCKED** — one or more required GitHub Actions secrets are missing (first missing name: $name)."
+                echo "- Next step: configure all required owner, OTP pepper, Twilio SMS, and Resend email secrets in repository Actions secrets, then rerun this workflow."
+                echo "- Production Worker and main branch were not targeted."
+              } >> "$GITHUB_STEP_SUMMARY"
               exit 0
             fi
           done
           for name in DAGA_OTP_PEPPER DAGA_OWNER_BOOTSTRAP_TOKEN DAGA_OWNER_PHONE DAGA_OWNER_EMAIL TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN TWILIO_FROM_NUMBER RESEND_API_KEY DAGA_EMAIL_FROM; do
             printf '%s' "${!name}" | npx --yes wrangler@3 secret put "$name" --name daga-app-staging
           done
+          {
+            echo "## DAGA staging readiness"
+            echo "- Required owner-auth and SMS/email delivery secrets: present and configured on the isolated staging Worker."
+            echo "- Owner bootstrap and real OTP delivery still require end-to-end verification with the designated owner."
+            echo "- Production Worker and main branch were not targeted."
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Verify staging health without printing secrets
         run: |
           set -euo pipefail
