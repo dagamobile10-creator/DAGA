@@ -102,3 +102,13 @@ The user-facing business entity is **Company** (Arabic: الشركة), not shop/
 - **Stage-six is in progress, not complete.** The passing checks are code/schema/regression checks; they do not prove real authentication delivery or complete runtime authorization.
 - Confirmed release blockers still include the unauthenticated legacy `/memory` route accepting a caller-selected `userId`, unauthenticated `/chat` and `/tts`, and LiveAvatar token issuance without a company/role identity check. These routes must be integrated with authenticated identity without breaking the existing LIVE DAGA UI/voice flow. Until then, this branch is not safe to merge into production.
 - The staging environment still needs the intentionally deferred owner contact and SMS/email provider secrets before real OTP bootstrap/login/recovery can be verified. After those are supplied through repository/Cloudflare secret settings, run the full staging checklist in `tests/OWNER_AUTH_STAGING_CHECKLIST.md`, then resolve any failures before considering a production release.
+
+
+## Follow-up verification — 2026-10-18 (isolated staging and owner-console routing)
+
+- Added Worker routes /owner/ and /owner-console/ for the Arabic RTL owner console; the console now uses window.location.origin rather than hard-coding the production voice Worker.
+- Added staging smoke assertions for both owner-console routes, expected owner-console markup, same-origin API configuration, and absence of the production Worker URL in the served console.
+- Isolated staging workflow run 39083515409 passed: the dedicated daga-app-staging D1 migrations and Worker deployment succeeded; /health, allowlisted/hostile-origin CORS checks, all five pages, and unauthenticated company/invitation/owner API checks passed.
+- Owner-auth CI passed at commit 6a8f8cba38ffb7f73fbe507a2451c4c05a568ad7: run 39083517946. Session-security regression CI passed: run 39083515562. The Pages workflow validated the PR source and skipped publishing as expected: run 39083517887.
+- Important: staging health passed, but the staging workflow log explicitly reports missing DAGA_OTP_PEPPER and exits the secret-configuration step successfully by design. Owner bootstrap/OTP delivery is therefore still disabled; a green infrastructure smoke test is not proof of end-to-end authentication readiness.
+- PR #7 remains a draft and unmerged. Production daga-voice and main were not targeted by the staging workflow.
