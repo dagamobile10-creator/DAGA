@@ -170,7 +170,10 @@ export default {
         });
         const data = await response.json();
         if (!response.ok) return json({ error: "liveavatar_session_token_failed", status: response.status }, response.status);
-        return json({ ok: true, sessionToken: data?.data?.session_token, sessionId: data?.data?.session_id });
+        const sessionToken = typeof data?.data?.session_token === "string" ? data.data.session_token.trim() : "";
+        const sessionId = typeof data?.data?.session_id === "string" ? data.data.session_id.trim() : "";
+        if (!sessionToken || !sessionId) return json({ error: "liveavatar_session_token_invalid" }, 502);
+        return json({ ok: true, sessionToken, sessionId });
       } catch (_) { return json({ error: "liveavatar_token_failed" }, 502); }
     }
 
