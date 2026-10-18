@@ -57,6 +57,16 @@ class CompanyOrderRegressionTests(unittest.TestCase):
         self.assertNotIn("INSERT INTO daga_entitlements", self.source)
         self.assertNotIn("INSERT INTO daga_live_word_ledger", self.source)
 
+    def test_company_portal_exposes_checkout_only_to_store_owner_and_uses_authenticated_apis(self):
+        portal = (ROOT / "company" / "portal.html").read_text(encoding="utf-8")
+        for element_id in ("checkoutCard", "checkoutService", "checkoutPlan", "createOrder", "paymentMethod", "transactionReference", "receiptUrl", "submitPayment", "orders"):
+            self.assertIn('id="' + element_id + '"', portal)
+        self.assertIn('activeCompany.role==="store_owner"', portal)
+        self.assertIn('/api/company/plans?service=', portal)
+        self.assertIn('/api/company/orders', portal)
+        self.assertIn('/api/company/payment-methods', portal)
+        self.assertIn('subscription is not activated', portal.lower() if 'subscription is not activated' in portal.lower() else 'الاشتراك مش هيتفعل قبل التأكيد', portal)
+
     def test_schema_supports_order_adjustment_and_unique_entitlement(self):
         db = sqlite3.connect(":memory:")
         db.execute("PRAGMA foreign_keys=ON")
