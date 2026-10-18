@@ -65,7 +65,7 @@ class CompanyOrderRegressionTests(unittest.TestCase):
         self.assertIn('/api/company/plans?service=', portal)
         self.assertIn('/api/company/orders', portal)
         self.assertIn('/api/company/payment-methods', portal)
-        self.assertIn('subscription is not activated', portal.lower() if 'subscription is not activated' in portal.lower() else 'الاشتراك مش هيتفعل قبل التأكيد', portal)
+        self.assertIn('الاشتراك مش هيتفعل قبل التأكيد', portal)
 
     def test_schema_supports_order_adjustment_and_unique_entitlement(self):
         db = sqlite3.connect(":memory:")
