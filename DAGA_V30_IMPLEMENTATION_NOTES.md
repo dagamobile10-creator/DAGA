@@ -32,6 +32,13 @@ migrations/0001_daga_core.sql defines the proposed D1 data model for:
 - The legacy `/memory` authenticated mode is available as an opt-in and is enabled in the staging workflow configuration. The existing LIVE DAGA client still does not have a complete personal sign-in and memory-claim flow, so the legacy route must not be declared fully secured or enabled on production yet.
 - This is defensive error redaction and request-size hardening, not a complete rate-limiting or identity migration. The chat, TTS, and LiveAvatar endpoints remain publicly callable; implement and validate abuse controls and a compatible personal identity/session flow before production enforcement.
 
+## Public API rate-limit groundwork — 2026-10-18
+
+- Added an optional D1-backed rate-limit gate for POST /liveavatar/token (10 per 15 minutes), POST /chat (30 per 5 minutes), POST /tts (30 per 5 minutes), and GET/POST /memory (60 per 5 minutes).
+- The gate is feature-flagged by DAGA_PUBLIC_API_RATE_LIMITS and requires DAGA_APP_DB plus DAGA_OTP_PEPPER when enabled. Database/configuration failures fail closed; production defaults remain unchanged.
+- The isolated staging workflow enables this flag. This is IP-bucket abuse protection, not per-account quotas or authenticated identity enforcement.
+- CI verified the branch head 88018ce90f55a12462c343855ae87fee835edfd1: session-security regression checks and owner-auth checks passed; deployment validation passed while production deployment was skipped. This confirms those CI checks only, not a new staging runtime test.
+
 ## LiveAvatar token response validation — 2026-10-18
 
 - The Worker now validates that the LiveAvatar session response includes non-empty string values for both `session_token` and `session_id` before returning a success response. Malformed or incomplete provider responses fail closed with a generic 502 error.
