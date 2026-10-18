@@ -102,3 +102,12 @@ The payment review route is an explicit owner action. The owner must verify that
 ## Offers and discounts
 
 The owner console exposes `GET/POST /owner/admin/offers` and `PATCH /owner/admin/offers/:id` for configuring store or LIVE DAGA offers. Apply migration `0004_daga_offers.sql` before using these routes. Offer definitions are separate from an order's immutable price snapshot. The order-creation path must calculate the applicable offer and write `daga_order_price_adjustments` at purchase time; this checkout integration is not yet implemented, so offer configuration alone does not apply discounts to purchases.
+
+
+## Company checkout API (implementation groundwork)
+
+The authenticated company portal now includes an initial subscription/payment flow for approved store-owner accounts. APIs are served by the Worker module `company-orders.js`: `GET /api/company/plans`, `GET /api/company/payment-methods`, `GET|POST /api/company/orders`, and `POST /api/company/orders/:uuid/payment`.
+
+Order creation snapshots the server-calculated price and any supplied eligible offer; client-provided amounts are ignored. Payment submission records a claimed transfer for owner review only. It does not activate entitlements or credit LIVE DAGA words. Owner confirmation remains required, and the payment destination is a manual-transfer instruction until a trusted provider webhook is integrated.
+
+Before production release, complete authenticated end-to-end checkout tests, offer selection UI, payment-review idempotency tests, SMS/email owner OTP setup, authenticated identity/tenant integration for legacy memory/chat/TTS/LiveAvatar endpoints, and manager/employee cross-company isolation checks. Do not treat staging anonymous-denial smoke tests as proof of a complete production authorization model.
