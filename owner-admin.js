@@ -223,7 +223,13 @@ export async function handleOwnerAdmin(request, env, url) {
       if(!account||account.status!=="approved"||account.role==="program_owner")return json(env, {error:"eligible_account_not_found"},404);
       if(storeId&&account.store_id!==storeId)return json(env, {error:"store_account_mismatch"},409);
       const id=crypto.randomUUID();
-      await db.prepare("INSERT INTO daga_live_word_ledger (id,account_id,store_id,event_type,words,request_id,note) VALUES (?,?,?,'credit',?,?,?)").bind(id,accountId,storeId,words,requestId,note||"Owner adjustment").run();
+      try {
+        await db.prepare("INSERT INTO daga_live_word_ledger (id,account_id,store_id,event_type,words,request_id,note) VALUES (?,?,?,'credit',?,?,?)").bind(id,accountId,storeId,words,requestId,note||"Owner adjustment").run();
+      } catch (_) {
+        const duplicate = await db.prepare("SELECT id FROM daga_live_word_ledger WHERE request_id=?").bind(requestId).first();
+        if (duplicate) return json(env, {ok:true,duplicate:true,entryId:duplicate.id});
+        return json(env, {error:"word_adjustment_conflict"},409);
+      }
       await audit(db,owner.id,"live_words_credited","daga_live_word_ledger",id,{accountId,words,requestId});
       return json(env, {ok:true,entryId:id},201);
     }
