@@ -185,6 +185,8 @@ jobs:
           done
           grep -q 'إدارة مالك التطبيق' /tmp/page-_owner_.html || { echo "::error::Owner console route did not serve the owner console HTML"; exit 1; }
           grep -q 'const API=window.location.origin;' /tmp/page-_owner_.html || { echo "::error::Owner console is not configured to use its same-origin Worker API"; exit 1; }
+          grep -q 'الاشتراكات والمدفوعات' /tmp/page-_company_.html || { echo "::error::Company portal checkout UI is missing from the served HTML"; exit 1; }
+          grep -q '/api/company/offers?service=' /tmp/page-_company_.html || { echo "::error::Company portal offer selection is missing from the served HTML"; exit 1; }
           if grep -q 'const API=.https://daga-voice.dagamobile10.workers.dev' /tmp/page-_owner_.html; then
             echo "::error::Owner console must not hard-code the production voice Worker"; exit 1
           fi
@@ -205,5 +207,5 @@ jobs:
           test "$code" = "401" || { echo "::error::Unauthenticated order payment submission returned HTTP $code"; exit 1; }
           code="$(curl -sS -o /tmp/register.json -w '%{http_code}' --max-time 15 -H 'Content-Type: application/json' -d '{}' https://daga-app-staging.dagamobile10.workers.dev/api/company/auth/register)"
           test "$code" = "503" || { echo "::error::Registration must fail closed without delivery secrets; got HTTP $code"; exit 1; }
-          echo "Unauthenticated company, invitation, owner-session, owner-admin, plan, payment-method, order, and order-payment APIs reject access; registration fails closed while delivery secrets are absent."
+          echo "Unauthenticated company, invitation, owner-session, owner-admin, plan, payment-method, offer, order, and order-payment APIs reject access; registration fails closed while delivery secrets are absent."
           echo "Staging Worker only. Production Worker and main branch were not targeted."
