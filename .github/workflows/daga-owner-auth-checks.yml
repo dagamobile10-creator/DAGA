@@ -239,6 +239,7 @@ jobs:
               "migrations/0006_daga_public_identity_ids.sql",
               "migrations/0007_daga_company_registration_challenges.sql",
               "migrations/0008_daga_company_login_challenges.sql",
+              "migrations/0009_daga_payment_submission_uniqueness.sql",
           ):
               with open(path, encoding="utf-8") as f:
                   db.executescript(f.read())
@@ -260,6 +261,10 @@ jobs:
               assert [column] in unique_columns, table + "." + column + " must be unique to prevent duplicate grants"
           required_store_tables = {"daga_store_memberships", "daga_store_invitations", "daga_company_registration_challenges", "daga_company_login_challenges"}
           assert required_store_tables <= names, f"Missing store identity/invitation tables: {sorted(required_store_tables - names)}"
+          pending_indexes = {row[1] for row in db.execute("PRAGMA index_list(daga_payment_submissions)") if row[2]}
+          assert "daga_payment_one_pending_submission_per_order" in pending_indexes, "An order must not have multiple pending payment submissions"
+          pending_index_sql = db.execute("SELECT sql FROM sqlite_master WHERE type='index' AND name='daga_payment_one_pending_submission_per_order'").fetchone()[0]
+          assert "WHERE status = 'pending_review'" in pending_index_sql, "Payment uniqueness must apply to pending review rows only"
           challenge_sql = db.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='daga_company_registration_challenges'").fetchone()[0]
           assert "attempts BETWEEN 0 AND 5" in challenge_sql, "Company registration OTP attempts must be bounded"
           membership_columns = {row[1] for row in db.execute("PRAGMA table_info(daga_store_memberships)")}
