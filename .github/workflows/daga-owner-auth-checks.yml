@@ -88,6 +88,10 @@ jobs:
           assert 'error: "memory_storage_failed"' in worker
           assert 'detail: data' not in worker, "Raw provider response must not be returned to clients"
           assert 'detail: listData' not in worker, "LiveAvatar lookup failures must not expose raw provider payloads"
+          assert "failures.join" not in worker, "Provider error details must not be returned to clients"
+          assert 'All configured chat providers failed", detail:' not in worker, "Chat provider failure details must be redacted"
+          assert 'detail: String(error)' not in worker, "Internal exceptions must not be returned to clients"
+          assert 'new Response(await response.text()' not in worker, "Raw TTS provider errors must not be returned to clients"
           print("Provider and storage error responses avoid raw upstream details.")
           PY
       - name: Guard bounded memory persistence payloads
