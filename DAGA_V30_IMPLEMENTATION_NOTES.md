@@ -163,3 +163,6 @@ The user-facing business entity is **Company** (Arabic: الشركة), not shop/
 - The public LiveAvatar metadata route is covered by the optional rate-limit guard; this change is not enabled in production by default. PR #7 remains a draft and unmerged. Production `main` and `daga-voice` were not deployed.
 - Follow-up CI at commit `2ce4261ae634ad408f08aebfeb61ddd22888db4`: owner-auth syntax/schema and invitation/order/payment regression suite passed (run 39089969818); session-security regression checks passed (run 39089969831); source validation passed and deployment was skipped (run 39089969833). Added a regression guard that public LiveAvatar metadata responses do not return raw provider payloads.
 
+
+
+- Follow-up payment hardening: migration `0009_daga_payment_submission_uniqueness.sql` enforces at most one `pending_review` payment submission per order using a partial unique index. The payment API returns a 409 conflict when a concurrent/duplicate pending submission already exists. The owner-auth workflow applies all nine migrations to fresh SQLite and checks the index; the order regression suite tests the database uniqueness and conflict response.
