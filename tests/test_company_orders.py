@@ -259,5 +259,47 @@ class LiveClientSessionForwardingTests(unittest.TestCase):
 
 
 
+class LiveDagaLoginFlowTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.client = (ROOT / "index.html").read_text(encoding="utf-8")
+        cls.worker = (ROOT / "worker.js").read_text(encoding="utf-8")
+        cls.auth = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
+
+    def test_live_page_has_two_channel_login_and_session_verification(self):
+        for element_id in ("dagaAuthIdentifier", "dagaAuthPhoneCode", "dagaAuthEmailCode", "dagaAuthSend", "dagaAuthVerify", "dagaAuthLogout"):
+            self.assertIn('id="' + element_id + '"', self.client)
+        self.assertIn("'/api/company/auth/login'", self.client)
+        self.assertIn("'/api/company/auth/login/verify'", self.client)
+        self.assertIn("sessionStorage.setItem('daga_account_session_v1',data.sessionToken)", self.client)
+        self.assertIn("'/api/company/auth/me'", self.client)
+        self.assertIn("'/api/company/auth/logout'", self.client)
+
+    def test_session_is_forwarded_to_chat_tts_memory_and_liveavatar(self):
+        self.assertIn("headers.Authorization='Bearer '+token", self.client)
+        self.assertIn("headers:dagaAuthHeaders({'Content-Type':'application/json'})", self.client)
+        self.assertIn('headers:dagaAuthHeaders({"Content-Type":"application/json"})', self.client)
+        self.assertIn("headers:dagaAuthHeaders()", self.client)
+
+    def test_worker_cors_allows_authorization_header(self):
+        self.assertIn('"Access-Control-Allow-Headers": "Content-Type, Authorization"', self.worker)
+
+    def test_login_verify_issues_a_hashed_server_session(self):
+        verify = self.auth[self.auth.index("async function companyLoginVerify"):self.auth.index("async function registerStart")]
+        self.assertIn("const sessionToken = companyRandomToken(32)", verify)
+        self.assertIn("const sessionHash = await sha256(sessionToken)", verify)
+        self.assertIn("INSERT INTO daga_auth_sessions", verify)
+        self.assertIn("return json(env, { ok: true, account:", verify)
+        self.assertIn("sessionToken, expiresAt", verify)
+
+    def test_optional_voice_gate_and_memory_gate_use_server_verified_identity(self):
+        self.assertIn('voiceIdentityRequired && ["/chat", "/tts", "/liveavatar/token"].includes(url.pathname)', self.worker)
+        self.assertIn('const account = await authenticatedAccount(request, env.DAGA_APP_DB)', self.worker)
+        self.assertIn('DAGA_MEMORY_REQUIRE_AUTH', self.worker)
+        self.assertIn('DAGA_VOICE_REQUIRE_AUTH', self.worker)
+
+
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
