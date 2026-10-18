@@ -603,7 +603,8 @@ class InvitationSchemaTests(unittest.TestCase):
         handler = admin[start:end]
         self.assertIn('SELECT id FROM daga_live_word_ledger WHERE request_id=?', handler)
         self.assertIn('error:"word_adjustment_request_id_conflict"', handler)
-        self.assertIn('prior.account_id===accountId&&prior.store_id===storeId', handler)
+        self.assertIn('prior.account_id===accountId&&prior.store_id===resolvedStoreId', handler)
+        self.assertIn('const resolvedStoreId=storeId||account.store_id||null', handler)
         self.assertIn('Number(prior.words)===words&&prior.note===adjustmentNote', handler)
         self.assertIn('error:"word_adjustment_conflict"', handler)
         self.assertIn('request_id TEXT UNIQUE', (ROOT / "migrations" / "0001_daga_core.sql").read_text(encoding="utf-8"))
