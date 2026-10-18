@@ -205,5 +205,28 @@ class CompanyInvitationAuthorizationTests(unittest.TestCase):
         self.assertIn("UNIQUE", migration)
 
 
+class VoiceIdentityGateTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.worker = (ROOT / "worker.js").read_text(encoding="utf-8")
+
+    def test_voice_auth_gate_is_opt_in_and_preserves_legacy_client_by_default(self):
+        self.assertIn('env.DAGA_VOICE_REQUIRE_AUTH || ""', self.worker)
+        self.assertIn('voiceIdentityRequired && ["/chat", "/tts", "/liveavatar/token"].includes(url.pathname)', self.worker)
+        self.assertIn('if (!voiceAccount || voiceAccount.status !== "approved" || voiceAccount.role === "program_owner")', self.worker)
+        self.assertIn('error: "authenticated_account_required"', self.worker)
+
+    def test_chat_identity_context_comes_from_server_authenticated_account(self):
+        self.assertIn('JSON.stringify({ accountId: voiceAccount.id, publicId: voiceAccount.public_id || null, displayName: voiceAccount.display_name || null, role: voiceAccount.role, storeId: voiceAccount.store_id || null })', self.worker)
+        self.assertIn('].join("\\n") + verifiedIdentityContext', self.worker)
+        self.assertIn('authenticatedAccount(request, env.DAGA_APP_DB)', self.worker)
+
+    def test_voice_identity_gate_does_not_claim_to_authorize_company_financial_data(self):
+        self.assertIn('لا تعتبرها دليلًا على بيانات مالية أو صلاحيات شركة غير مسترجعة من قاعدة البيانات', self.worker)
+        self.assertIn('DAGA_MEMORY_REQUIRE_AUTH', self.worker)
+
+
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
