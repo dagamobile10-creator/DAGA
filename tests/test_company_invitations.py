@@ -630,5 +630,16 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertIn('if (publicLimit && String(env.DAGA_PUBLIC_API_RATE_LIMITS || "").toLowerCase() === "true")', worker)
 
 
+    def test_liveavatar_metadata_never_returns_raw_provider_payload(self):
+        worker = (ROOT / "worker.js").read_text(encoding="utf-8")
+        start = worker.index('if (url.pathname === "/liveavatar/avatars" && request.method === "GET")')
+        end = worker.index('if (url.pathname === "/liveavatar/token" && request.method === "POST")', start)
+        route = worker[start:end]
+        self.assertIn('return json({ ok: true, count:', route)
+        self.assertNotIn('return json(data', route)
+        self.assertNotIn('return json(publicData', route)
+        self.assertNotIn('LIVEAVATAR_API_KEY:', route)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
