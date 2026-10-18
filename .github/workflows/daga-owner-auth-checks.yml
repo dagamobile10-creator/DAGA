@@ -87,6 +87,7 @@ jobs:
           assert 'error: "liveavatar_token_failed"' in worker
           assert 'error: "memory_storage_failed"' in worker
           assert 'detail: data' not in worker, "Raw provider response must not be returned to clients"
+          assert 'detail: listData' not in worker, "LiveAvatar lookup failures must not expose raw provider payloads"
           print("Provider and storage error responses avoid raw upstream details.")
           PY
       - name: Guard bounded memory persistence payloads
