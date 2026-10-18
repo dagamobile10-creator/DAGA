@@ -35,6 +35,22 @@ class CompanyOrderRegressionTests(unittest.TestCase):
         self.assertIn("approved_owned_store_required", self.source)
         self.assertIn("WHERE id=? AND owner_account_id=? AND status='approved')", self.source)
 
+    def test_order_listing_and_payment_submission_are_scoped_to_the_authenticated_owner(self):
+        self.assertIn("WHERE o.account_id=? AND o.store_id=?", self.source)
+        self.assertIn(".bind(account.id, storeId).all()", self.source)
+        self.assertIn("WHERE id=? AND account_id=?", self.source)
+        self.assertIn("ownedApprovedStore(db, account.id, order.store_id)", self.source)
+        self.assertIn("WHERE id=? AND owner_account_id=? AND status='approved'", self.source)
+
+    def test_order_creation_cannot_cross_company_or_trust_client_identity(self):
+        create_start = self.source.index('if (path === "/api/company/orders" && request.method === "POST")')
+        create_end = self.source.index('if (path === "/api/company/orders/"', create_start)
+        create_handler = self.source[create_start:create_end]
+        self.assertIn("ownedApprovedStore(db, account.id, storeId)", create_handler)
+        self.assertIn("account.id", create_handler)
+        self.assertNotRegex(create_handler, r"body\\.(?:accountId|ownerId|userId)")
+        self.assertIn("owner_account_id=? AND status='approved'", create_handler)
+
     def test_price_is_calculated_server_side_and_snapshotted(self):
         self.assertIn("Math.floor(Number(plan.price_minor) * Number(offer.discount_value) / 100)", self.source)
         self.assertIn("Math.min(Number(plan.price_minor), Number(offer.discount_value))", self.source)
