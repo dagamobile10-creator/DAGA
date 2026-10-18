@@ -49,7 +49,7 @@
 </main>
 <script>
 (function(){
-const API='https://daga-voice.dagamobile10.workers.dev';
+const API=window.location.origin;
 let sessionToken='';
 let pendingLogin=false;
 const $=id=>document.getElementById(id);
