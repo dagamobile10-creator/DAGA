@@ -653,5 +653,23 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertLess(route.index('DAGA_VOICE_REQUIRE_AUTH'), route.index('if (!env.LIVEAVATAR_API_KEY)'))
 
 
+    def test_core_worker_cors_uses_allowlist_not_wildcard(self):
+        worker = (ROOT / "worker.js").read_text(encoding="utf-8")
+        start = worker.index("function cors(extra = {})")
+        end = worker.index("\n}", start) + 2
+        handler = worker[start:end]
+        self.assertIn('extra.allowedOrigins || "https://dagamobile10-creator.github.io"', handler)
+        self.assertIn('allowed.includes("*") ? "*" :', handler)
+        self.assertIn('"Access-Control-Allow-Headers": "Content-Type, Authorization"', handler)
+        self.assertIn('Vary: "Origin"', handler)
+        self.assertIn('delete headers.allowedOrigins', handler)
+        self.assertNotIn('"Access-Control-Allow-Origin": "*"', handler)
+
+    def test_core_worker_options_uses_configured_cors_allowlist(self):
+        worker = (ROOT / "worker.js").read_text(encoding="utf-8")
+        self.assertIn('if (request.method === "OPTIONS") return new Response(null, { headers: cors({ allowedOrigins: env.DAGA_ALLOWED_ORIGINS || "" }) });', worker)
+        self.assertIn('headers: cors({ allowedOrigins: env.DAGA_ALLOWED_ORIGINS || "", "Content-Type": "application/json; charset=utf-8" })', worker)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
