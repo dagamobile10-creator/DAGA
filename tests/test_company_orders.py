@@ -41,6 +41,8 @@ class CompanyOrderRegressionTests(unittest.TestCase):
         self.assertIn("Math.max(0, listPrice - discount)", self.source)
         self.assertIn("agreed_price_minor", self.source)
         self.assertIn("daga_order_price_adjustments", self.source)
+        self.assertIn('/api/company/offers', self.source)
+        self.assertIn("offer_name_snapshot", self.source)
         self.assertNotRegex(self.source, r"body\\.(?:price|amount|discountMinor|agreedPriceMinor)")
 
     def test_offer_is_active_in_window_and_redemption_limit_is_atomic(self):
@@ -59,12 +61,14 @@ class CompanyOrderRegressionTests(unittest.TestCase):
 
     def test_company_portal_exposes_checkout_only_to_store_owner_and_uses_authenticated_apis(self):
         portal = (ROOT / "company" / "portal.html").read_text(encoding="utf-8")
-        for element_id in ("checkoutCard", "checkoutService", "checkoutPlan", "createOrder", "paymentMethod", "transactionReference", "receiptUrl", "submitPayment", "orders"):
+        for element_id in ("checkoutCard", "checkoutService", "checkoutPlan", "checkoutOffer", "createOrder", "paymentMethod", "transactionReference", "receiptUrl", "submitPayment", "orders"):
             self.assertIn('id="' + element_id + '"', portal)
         self.assertIn('activeCompany.role==="store_owner"', portal)
         self.assertIn('/api/company/plans?service=', portal)
         self.assertIn('/api/company/orders', portal)
         self.assertIn('/api/company/payment-methods', portal)
+        self.assertIn('/api/company/offers?service=', portal)
+        self.assertIn("offerId:offerId||null", portal)
         self.assertIn('الاشتراك مش هيتفعل قبل التأكيد', portal)
 
     def test_schema_supports_order_adjustment_and_unique_entitlement(self):
