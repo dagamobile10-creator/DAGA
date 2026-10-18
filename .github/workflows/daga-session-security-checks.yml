@@ -1,0 +1,50 @@
+name: DAGA V30 session security regression checks
+
+on:
+  push:
+    branches: [daga-v30-implementation]
+  pull_request:
+    branches: [main]
+
+jobs:
+  session-security-regressions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify owner session expiry, revocation, and privilege boundaries
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          auth = Path("owner-auth.js").read_text(encoding="utf-8")
+          admin = Path("owner-admin.js").read_text(encoding="utf-8")
+          worker = Path("worker.js").read_text(encoding="utf-8")
+
+          def section(source, start, end):
+              assert start in source, f"Missing section start: {start}"
+              assert end in source, f"Missing section end: {end}"
+              return source[source.index(start):source.index(end, source.index(start))]
+
+          checks = {
+              "owner sessions have a finite eight-hour TTL":
+                  "const SESSION_TTL_SECONDS = 60 * 60 * 8" in auth,
+              "owner authentication checks session expiry and revocation":
+                  "s.revoked_at IS NULL AND s.expires_at>?" in section(auth, "export async function authenticatedOwner", "async function createSession"),
+              "owner session lookup is bound to the singleton owner identity":
+                  "JOIN daga_program_owner o ON o.account_id=a.id" in section(auth, "export async function authenticatedOwner", "async function createSession") and "o.singleton_id=1" in section(auth, "export async function authenticatedOwner", "async function createSession"),
+              "logout revokes only the matching active session token hash":
+                  "UPDATE daga_auth_sessions SET revoked_at=? WHERE token_hash=? AND revoked_at IS NULL" in section(auth, "async function ownerLogout", "export async function authenticatedAccount"),
+              "session token is hashed before persistence":
+                  "await sha256(token)" in section(auth, "async function createSession", "async function consumeChallenge"),
+              "recovery revokes prior sessions":
+                  "UPDATE daga_auth_sessions SET revoked_at" in section(auth, "async function recoveryComplete", "async function ownerLogin"),
+              "owner admin routes require an authenticated owner":
+                  "authenticatedOwner(request, db)" in admin,
+              "legacy memory endpoint remains identified as a separate authorization gate":
+                  'url.pathname === "/memory"' in worker,
+          }
+
+          for name, passed in checks.items():
+              print(("PASS" if passed else "FAIL") + ": " + name)
+          assert all(checks.values()), "Session security regression check failed"
+          PY

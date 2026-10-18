@@ -1,28 +1,104 @@
+import { handleOwnerAuth } from "./owner-auth.js";
+import { handleOwnerAdmin } from "./owner-admin.js";
+import { handleCompanyInvitations } from "./company-invitations.js";
+import { handleCompanyOrders } from "./company-orders.js";
+import inviteHtml from "./invite/index.html";
+import companyPortalHtml from "./company/portal.html";
+import officialLandingHtml from "./go/index.html";
+import ownerConsoleHtml from "./owner-console.html";
 const VOICE_ID = "NG9zqiTuEbX3Nw0gjYcc"; // Previous voice ID backup: PF3gVGPrCr6Dw1WaSSiy
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
+    if ((url.pathname === "/go" || url.pathname === "/go/") && request.method === "GET") {
+      return new Response(officialLandingHtml, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/html; charset=utf-8",
+          "Cache-Control": "public, max-age=300",
+          "X-Content-Type-Options": "nosniff",
+          "Content-Security-Policy": "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"
+        }
+      });
+    }
+
+    if ((url.pathname === "/owner" || url.pathname === "/owner/" || url.pathname === "/owner-console" || url.pathname === "/owner-console/") && request.method === "GET") {
+      return new Response(ownerConsoleHtml, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/html; charset=utf-8",
+          "Cache-Control": "no-store",
+          "Referrer-Policy": "no-referrer",
+          "X-Content-Type-Options": "nosniff",
+          "Content-Security-Policy": "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+        }
+      });
+    }
+
+    if ((url.pathname === "/company" || url.pathname === "/company/") && request.method === "GET") {
+      return new Response(companyPortalHtml, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/html; charset=utf-8",
+          "Cache-Control": "no-store",
+          "Referrer-Policy": "no-referrer",
+          "X-Content-Type-Options": "nosniff",
+          "Content-Security-Policy": "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"
+        }
+      });
+    }
+
+    if ((url.pathname === "/invite" || url.pathname === "/invite/") && request.method === "GET") {
+      return new Response(inviteHtml, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/html; charset=utf-8",
+          "Cache-Control": "no-store",
+          "Referrer-Policy": "no-referrer",
+          "X-Content-Type-Options": "nosniff",
+          "Content-Security-Policy": "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"
+        }
+      });
+    }
+
+    const ownerAuthResponse = await handleOwnerAuth(request, env, url);
+    if (ownerAuthResponse) return ownerAuthResponse;
+    const ownerAdminResponse = await handleOwnerAdmin(request, env, url);
+    if (ownerAdminResponse) return ownerAdminResponse;
+    const invitationResponse = await handleCompanyInvitations(request, env, url);
+    if (invitationResponse) return invitationResponse;
+    const companyOrderResponse = await handleCompanyOrders(request, env, url);
+    if (companyOrderResponse) return companyOrderResponse;
+
     if (request.method === "OPTIONS") return new Response(null, { headers: cors() });
 
     if (url.pathname === "/memory" && (request.method === "GET" || request.method === "POST")) {
       if (!env.DAGA_MEMORY_DB) return json({ error: "persistent_memory_not_configured", detail: "D1 binding DAGA_MEMORY_DB is not configured" }, 503);
       try {
-        const userId = String(url.searchParams.get("userId") || (request.method === "POST" ? (await request.clone().json()).userId : "") || "").trim();
+        let body = null;
+        if (request.method === "POST") {
+          const parsed = await readBoundedJson(request, 160000);
+          if (!parsed.ok) return json({ error: parsed.error }, parsed.status);
+          body = parsed.value;
+        }
+        const userId = String(url.searchParams.get("userId") || (request.method === "POST" ? body?.userId : "") || "").trim();
         if (!/^[a-f0-9-]{32,36}$/i.test(userId)) return json({ error: "valid userId required" }, 400);
         if (request.method === "GET") {
           const row = await env.DAGA_MEMORY_DB.prepare("SELECT profile_json, history_json, updated_at FROM daga_user_memory WHERE user_id = ?").bind(userId).first();
           return json({ ok: true, persistent: true, memory: row ? { profile: JSON.parse(row.profile_json || "{}"), history: JSON.parse(row.history_json || "[]"), updatedAt: row.updated_at } : { profile: {}, history: [], updatedAt: null } });
         }
-        const body = await request.json();
         const profile = body?.profile && typeof body.profile === "object" && !Array.isArray(body.profile) ? body.profile : {};
-        const history = Array.isArray(body?.history) ? body.history.filter(x => x && ["user", "assistant"].includes(x.role) && typeof x.content === "string").slice(-100).map(x => ({ role: x.role, content: x.content.slice(0, 2000) })) : [];
+        const profileJson = JSON.stringify(profile);
+        if (profileJson.length > 10000) return json({ error: "profile_too_large", maxLength: 10000 }, 413);
+        let history = Array.isArray(body?.history) ? body.history.filter(x => x && ["user", "assistant"].includes(x.role) && typeof x.content === "string").slice(-100).map(x => ({ role: x.role, content: x.content.slice(0, 2000) })) : [];
+        while (history.length && JSON.stringify(history).length > 120000) history.shift();
         const now = new Date().toISOString();
-        await env.DAGA_MEMORY_DB.prepare("INSERT INTO daga_user_memory (user_id, profile_json, history_json, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET profile_json=excluded.profile_json, history_json=excluded.history_json, updated_at=excluded.updated_at").bind(userId, JSON.stringify(profile).slice(0, 10000), JSON.stringify(history).slice(0, 120000), now).run();
+        await env.DAGA_MEMORY_DB.prepare("INSERT INTO daga_user_memory (user_id, profile_json, history_json, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET profile_json=excluded.profile_json, history_json=excluded.history_json, updated_at=excluded.updated_at").bind(userId, profileJson, JSON.stringify(history), now).run();
         return json({ ok: true, persistent: true, updatedAt: now });
       } catch (error) {
-        return json({ error: "memory_storage_failed", detail: String(error?.message || error) }, 500);
+        return json({ error: "memory_storage_failed" }, 500);
       }
     }
 
@@ -34,7 +110,7 @@ export default {
           signal: AbortSignal.timeout(10000)
         });
         const data = await response.json();
-        if (!response.ok) return json({ error: "LiveAvatar avatar lookup failed", status: response.status, detail: data }, response.status);
+        if (!response.ok) return json({ error: "liveavatar_avatar_lookup_failed", status: response.status }, response.status);
         const avatars = data?.data?.results || [];
         const active = avatars.filter(a => a.status === "ACTIVE");
         let publicActiveCount = 0;
@@ -49,7 +125,7 @@ export default {
           }
         } catch (_) {}
         return json({ ok: true, count: data?.data?.count ?? avatars.length, activeCount: active.length, hasActiveDaga: active.some(a => /daga|ضجه|ضجّة/i.test(String(a.name || ""))), publicActiveCount });
-      } catch (error) { return json({ error: "LiveAvatar lookup failed", detail: String(error?.message || error) }, 502); }
+      } catch (_) { return json({ error: "liveavatar_lookup_failed" }, 502); }
     }
 
     if (url.pathname === "/liveavatar/token" && request.method === "POST") {
@@ -78,9 +154,9 @@ export default {
           signal: AbortSignal.timeout(12000)
         });
         const data = await response.json();
-        if (!response.ok) return json({ error: "LiveAvatar session token failed", status: response.status, detail: data }, response.status);
+        if (!response.ok) return json({ error: "liveavatar_session_token_failed", status: response.status }, response.status);
         return json({ ok: true, sessionToken: data?.data?.session_token, sessionId: data?.data?.session_id });
-      } catch (error) { return json({ error: "LiveAvatar token failed", detail: String(error?.message || error) }, 502); }
+      } catch (_) { return json({ error: "liveavatar_token_failed" }, 502); }
     }
 
     if (url.pathname === "/health") {
@@ -89,9 +165,12 @@ export default {
 
     if (url.pathname === "/chat" && request.method === "POST") {
       try {
-        const body = await request.json();
+        const parsed = await readBoundedJson(request, 32768);
+        if (!parsed.ok) return json({ error: parsed.error }, parsed.status);
+        const body = parsed.value;
         const userText = String(body?.text || "").trim();
         if (!userText) return json({ error: "text is required" }, 400);
+        if (userText.length > 2000) return json({ error: "text_too_long", maxLength: 2000 }, 413);
         if (/(اسمك\s*(?:إيه|ايه|ما|ماذا)|مين\s*إنت|من\s*أنت|عرفني\s*بنفسك)/u.test(userText)) return json({ reply: "أنا اسمي ضَجَّة، مساعدك الذكي.", provider: "built-in" });
         const history = Array.isArray(body?.history) ? body.history.slice(-8).filter(item => item && ["user", "assistant"].includes(item.role) && typeof item.content === "string" && item.content.trim()).map(item => ({ role: item.role, content: item.content.trim().slice(0, 1200) })) : [];
         const conversation = [...history, { role: "user", content: userText }];
@@ -185,9 +264,12 @@ export default {
 
     try {
       if (!env.ELEVENLABS_API_KEY) return json({ error: "DAGA voice is not configured" }, 503);
-      const body = await request.json();
+      const parsed = await readBoundedJson(request, 16384);
+      if (!parsed.ok) return json({ error: parsed.error }, parsed.status);
+      const body = parsed.value;
       let text = String(body?.text || "").trim();
       if (!text) return json({ error: "text is required" }, 400);
+      if (text.length > 2500) return json({ error: "text_too_long", maxLength: 2500 }, 413);
 
       // Keep the generated text unchanged; pronunciation should follow general language rules.
       // No word-specific phonetic substitutions or pronunciation exceptions.
@@ -205,6 +287,23 @@ export default {
     } catch (error) { return json({ error: "Worker failure", detail: String(error) }, 500); }
   }
 };
+
+
+async function readBoundedJson(request, maxBytes) {
+  const contentType = String(request.headers.get("Content-Type") || "").split(";")[0].trim().toLowerCase();
+  if (contentType !== "application/json") return { ok: false, status: 415, error: "application_json_required" };
+  const length = Number(request.headers.get("Content-Length") || 0);
+  if (Number.isFinite(length) && length > maxBytes) return { ok: false, status: 413, error: "request_body_too_large" };
+  try {
+    const raw = await request.text();
+    if (new TextEncoder().encode(raw).byteLength > maxBytes) return { ok: false, status: 413, error: "request_body_too_large" };
+    const value = JSON.parse(raw);
+    if (!value || typeof value !== "object" || Array.isArray(value)) return { ok: false, status: 400, error: "json_object_required" };
+    return { ok: true, value };
+  } catch (_) {
+    return { ok: false, status: 400, error: "invalid_json" };
+  }
+}
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: cors({ "Content-Type": "application/json; charset=utf-8" }) });
