@@ -51,6 +51,20 @@ Do not use production data, real customer accounts, or real payment records duri
 - [ ] Privileged changes create audit events.
 - [ ] Tenant isolation is tested before enabling store/manager/employee data routes.
 
+## Company checkout and payment review
+- [ ] Unauthenticated requests to `/api/company/plans`, `/api/company/payment-methods`, `/api/company/orders`, and `/api/company/orders/:id/payment` return 401.
+- [ ] Manager and employee sessions cannot create orders or submit payment for a company.
+- [ ] A store owner can list only orders belonging to an approved store they own; changing `storeId` to another company's ID returns 403.
+- [ ] Inactive plans cannot be ordered; order creation uses the current server-side plan price/version and ignores any client-supplied amount.
+- [ ] An eligible offer is applied only for the matching service and within its active time window; fixed and percentage discounts never make the final price negative.
+- [ ] Offer redemption limits remain correct under concurrent order attempts; failed order creation does not permanently consume a redemption.
+- [ ] The order and immutable price adjustment snapshot match the final agreed price, list price, discount, and offer name at order time.
+- [ ] Payment submission is accepted only for the account's own order in `awaiting_payment`, uses an active payment method, and cannot set the order to paid/approved.
+- [ ] Duplicate or concurrent payment submissions cannot create multiple pending submissions for one order.
+- [ ] Payment submission alone never creates an entitlement or LIVE DAGA word credit; only a successful owner review can do so.
+- [ ] Manual-transfer references/receipts are reviewed by the owner; do not treat a user-supplied receipt URL or claimed amount as proof that funds arrived.
+- [ ] Company portal checkout controls appear only for store-owner accounts; employee/manager invitation permissions remain unchanged.
+
 ## Store identity and invitation gates
 - [ ] Every store receives a stable public ID distinct from its internal database ID; changing the display name does not change either identity.
 - [ ] The store QR identifies the store only and grants no membership or session.
