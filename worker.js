@@ -1,6 +1,7 @@
 import { handleOwnerAuth } from "./owner-auth.js";
 import { handleOwnerAdmin } from "./owner-admin.js";
 import { handleCompanyInvitations } from "./company-invitations.js";
+import { handleCompanyOrders } from "./company-orders.js";
 import inviteHtml from "./invite/index.html";
 import companyPortalHtml from "./company/portal.html";
 import officialLandingHtml from "./go/index.html";
@@ -68,6 +69,8 @@ export default {
     if (ownerAdminResponse) return ownerAdminResponse;
     const invitationResponse = await handleCompanyInvitations(request, env, url);
     if (invitationResponse) return invitationResponse;
+    const companyOrderResponse = await handleCompanyOrders(request, env, url);
+    if (companyOrderResponse) return companyOrderResponse;
 
     if (request.method === "OPTIONS") return new Response(null, { headers: cors() });
 
