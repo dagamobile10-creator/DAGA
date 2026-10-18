@@ -668,7 +668,8 @@ class InvitationSchemaTests(unittest.TestCase):
     def test_core_worker_options_uses_configured_cors_allowlist(self):
         worker = (ROOT / "worker.js").read_text(encoding="utf-8")
         self.assertIn('if (request.method === "OPTIONS") return new Response(null, { headers: cors({ allowedOrigins: env.DAGA_ALLOWED_ORIGINS || "" }) });', worker)
-        self.assertIn('headers: cors({ allowedOrigins: env.DAGA_ALLOWED_ORIGINS || "", "Content-Type": "application/json; charset=utf-8" })', worker)
+        self.assertIn('if (request.method === "OPTIONS") return new Response(null, { headers: cors({ allowedOrigins: env.DAGA_ALLOWED_ORIGINS || "" }) });', worker)
+        self.assertIn('function json(data, status = 200) {\n  return new Response(JSON.stringify(data), { status, headers: cors({ "Content-Type": "application/json; charset=utf-8" }) });\n}', worker)
 
 
 if __name__ == "__main__":
