@@ -164,11 +164,16 @@ jobs:
             echo "::error::Owner API returned an allow-origin header for an untrusted origin"; exit 1
           fi
           echo "Staging company and owner API CORS checks passed: no wildcard origin was returned."
-          for path in /go/ /company/ /invite/; do
-            code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "https://daga-app-staging.dagamobile10.workers.dev$path")"
+          for path in /go/ /company/ /invite/ /owner/ /owner-console/; do
+            code="$(curl -sS -o "/tmp/page-$(echo "$path" | tr '/' '_').html" -w '%{http_code}' --max-time 15 "https://daga-app-staging.dagamobile10.workers.dev$path")"
             if [ "$code" != "200" ]; then echo "::error::Staging page $path returned HTTP $code"; exit 1; fi
             echo "Staging page $path returned HTTP 200."
           done
+          grep -q 'إدارة مالك التطبيق' /tmp/page-_owner_.html || { echo "::error::Owner console route did not serve the owner console HTML"; exit 1; }
+          grep -q 'const API=window.location.origin;' /tmp/page-_owner_.html || { echo "::error::Owner console is not configured to use its same-origin Worker API"; exit 1; }
+          if grep -q 'const API=.https://daga-voice.dagamobile10.workers.dev' /tmp/page-_owner_.html; then
+            echo "::error::Owner console must not hard-code the production voice Worker"; exit 1
+          fi
           code="$(curl -sS -o /tmp/me.json -w '%{http_code}' --max-time 15 https://daga-app-staging.dagamobile10.workers.dev/api/company/auth/me)"
           test "$code" = "401" || { echo "::error::Unauthenticated company account endpoint returned HTTP $code"; exit 1; }
           code="$(curl -sS -o /tmp/invites.json -w '%{http_code}' --max-time 15 'https://daga-app-staging.dagamobile10.workers.dev/api/company/invitations?storeId=00000000-0000-4000-8000-000000000000')"
