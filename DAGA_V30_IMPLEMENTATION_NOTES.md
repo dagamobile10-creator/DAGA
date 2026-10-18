@@ -32,6 +32,12 @@ migrations/0001_daga_core.sql defines the proposed D1 data model for:
 - The legacy `/memory` authenticated mode is available as an opt-in and is enabled in the staging workflow configuration. The existing LIVE DAGA client still does not have a complete personal sign-in and memory-claim flow, so the legacy route must not be declared fully secured or enabled on production yet.
 - This is defensive error redaction and request-size hardening, not a complete rate-limiting or identity migration. The chat, TTS, and LiveAvatar endpoints remain publicly callable; implement and validate abuse controls and a compatible personal identity/session flow before production enforcement.
 
+## LiveAvatar token response validation — 2026-10-18
+
+- The Worker now validates that the LiveAvatar session response includes non-empty string values for both `session_token` and `session_id` before returning a success response. Malformed or incomplete provider responses fail closed with a generic 502 error.
+- CI asserts that this validation remains present.
+- This does not add request rate limiting or caller authentication to the public LiveAvatar token endpoint. Those remain release gates; do not treat this endpoint as fully protected.
+
 ## Known release gates
 
 1. Run the manual **DAGA isolated staging setup** workflow in GitHub Actions after confirming the repository secrets listed in `security/OWNER_AUTH_DEPLOYMENT.md` exist. This connector can edit files and inspect workflow runs, but it cannot dispatch the manual workflow or inspect repository secret values.
