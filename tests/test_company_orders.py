@@ -152,3 +152,60 @@ class CompanyOrderRegressionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class CompanyInvitationAuthorizationTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.source = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
+        cls.worker = (ROOT / "worker.js").read_text(encoding="utf-8")
+
+    def test_invitation_routes_are_wired_and_require_a_session(self):
+        self.assertIn('import { handleCompanyInvitations } from "./company-invitations.js";', self.worker)
+        self.assertIn("handleCompanyInvitations(request, env, url)", self.worker)
+        handler = self.source[:self.source.index("async function companyAccountMe")]
+        self.assertIn("authenticatedAccount(request, db)", handler)
+        self.assertIn('account.status !== "approved"', handler)
+        self.assertIn('account.role === "program_owner"', handler)
+
+    def test_store_id_from_request_is_never_authority_by_itself(self):
+        create = self.source[self.source.index("async function createInvitation"):self.source.index("async function listInvitations")]
+        listing = self.source[self.source.index("async function listInvitations"):self.source.index("async function acceptInvitation")]
+        self.assertIn("getAuthority(db, account, store)", create)
+        self.assertIn("getAuthority(db, account, store)", listing)
+        self.assertIn('store.status !== "approved"', create)
+        self.assertIn('store.status === "approved"', listing)
+
+    def test_owner_and_manager_invitation_scope_is_enforced(self):
+        authority = self.source[self.source.index("async function getAuthority"):self.source.index("function normalizePermissions")]
+        create = self.source[self.source.index("async function createInvitation"):self.source.index("async function listInvitations")]
+        revoke = self.source[self.source.index("async function revokeInvitation"):self.source.index("async function getAuthority")]
+        self.assertIn('store.owner_account_id === account.id', authority)
+        self.assertIn('authority.role === "manager" && intendedRole !== "employee"', create)
+        self.assertIn('!authority.permissions.inviteEmployees', create)
+        self.assertIn('invite.inviter_account_id !== account.id', revoke)
+        self.assertIn('invite.intended_role !== "employee"', revoke)
+
+    def test_manager_cannot_escalate_permissions_or_invite_another_manager(self):
+        normalize = self.source[self.source.index("function normalizePermissions"):self.source.index("function safeStoredPermissions")]
+        self.assertIn('if (value[key] !== undefined && typeof value[key] !== "boolean") return null;', normalize)
+        self.assertIn('if (out[key] && !authority.permissions[key]) return null;', normalize)
+        self.assertIn('if (intendedRole === "manager" && authority.role !== "store_owner") return null;', normalize)
+        self.assertIn('if (intendedRole === "employee" && out.inviteEmployees) return null;', normalize)
+
+    def test_acceptance_is_single_use_and_checks_active_store(self):
+        accept = self.source[self.source.index("async function acceptInvitation"):self.source.index("async function revokeInvitation")]
+        self.assertIn("i.status='pending' AND i.use_count=0 AND i.max_uses=1", accept)
+        self.assertIn("i.expires_at>?", accept)
+        self.assertIn("s.status='approved'", accept)
+        self.assertIn("NOT EXISTS (SELECT 1 FROM daga_store_memberships", accept)
+        self.assertIn("claimed !== 1 || inserted !== 1", accept)
+
+    def test_invitation_schema_has_single_use_and_role_constraints(self):
+        migration = (ROOT / "migrations" / "0005_daga_store_identity_invitations.sql").read_text(encoding="utf-8")
+        self.assertIn("max_uses", migration)
+        self.assertIn("use_count", migration)
+        self.assertIn("token_hash", migration)
+        self.assertIn("UNIQUE", migration)
+
+
