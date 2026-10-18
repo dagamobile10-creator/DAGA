@@ -88,6 +88,7 @@ jobs:
           DAGA_APP_BASE_URL = "https://daga-app-staging.dagamobile10.workers.dev"
           DAGA_ALLOWED_ORIGINS = "https://daga-app-staging.dagamobile10.workers.dev"
           DAGA_MEMORY_REQUIRE_AUTH = "true"
+          DAGA_PUBLIC_API_RATE_LIMITS = "true"
           [[d1_databases]]
           binding = "DAGA_APP_DB"
           database_name = "daga-app-staging"
