@@ -8,3 +8,6 @@ DAGA_APP_BASE_URL = "https://daga-voice.dagamobile10.workers.dev"
 [ai]
 binding = "AI"
 
+[[previews.d1_databases]]
+binding = "DAGA_APP_DB"
+database_id = "a4b15995-8ec7-4bb9-aa49-cf1bce9d7341"
