@@ -100,6 +100,13 @@ export async function handleCompanyOrders(request, env, url) {
         if (offer) await db.prepare("UPDATE daga_offers SET redemption_count=CASE WHEN redemption_count>0 THEN redemption_count-1 ELSE 0 END WHERE id=?").bind(offer.id).run();
         return json(env, { error: "plan_or_store_changed_retry" }, 409);
       }
+      if (Number(results?.[1]?.meta?.changes || 0) !== 1) {
+        // The order must never exist without its immutable price/discount snapshot.
+        await db.prepare("DELETE FROM daga_plan_orders WHERE id=? AND account_id=? AND status='awaiting_payment' AND NOT EXISTS (SELECT 1 FROM daga_payment_submissions WHERE order_id=?)")
+          .bind(orderId, account.id, orderId).run();
+        if (offer) await db.prepare("UPDATE daga_offers SET redemption_count=CASE WHEN redemption_count>0 THEN redemption_count-1 ELSE 0 END WHERE id=?").bind(offer.id).run();
+        return json(env, { error: "order_price_snapshot_failed" }, 500);
+      }
       return json(env, { ok: true, order: { id: orderId, storeId, planId, service: plan.service, planVersion: plan.version, currency: plan.currency, listPriceMinor: listPrice, discountMinor: discount, agreedPriceMinor: finalPrice, offerName, status: "awaiting_payment" } }, 201);
     } catch (_) {
       if (offer) {
