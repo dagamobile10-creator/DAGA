@@ -121,7 +121,7 @@ class CompanyOrderRegressionTests(unittest.TestCase):
         db.execute("PRAGMA foreign_keys=ON")
         for migration in MIGRATIONS:
             db.executescript((ROOT / "migrations" / migration).read_text(encoding="utf-8"))
-        db.execute("INSERT INTO daga_accounts (id,display_name,phone_e164,email,password_hash,role,status,created_at,updated_at) VALUES ('acct','Shop','+201000000000','shop@example.com','hash','store_owner','approved','2026-01-01','2026-01-01')")
+        db.execute("INSERT INTO daga_accounts (id,display_name,phone_e164,email,role,status,created_at,updated_at) VALUES ('acct','Shop','+201000000000','shop@example.com','store_owner','approved','2026-01-01','2026-01-01')")
         db.execute("INSERT INTO daga_stores (id,owner_account_id,legal_identity,display_name,status) VALUES ('store','acct','legal-1','Shop','approved')")
         db.execute("INSERT INTO daga_plans (id,service,name,price_minor,currency,duration_days,is_active,version) VALUES ('plan','store','Monthly',10000,'EGP',30,1,1)")
         db.execute("INSERT INTO daga_payment_methods (id,provider,display_label,destination_value,is_active) VALUES ('method','vodafone_cash','Vodafone Cash','01000000000',1)")
