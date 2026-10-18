@@ -221,21 +221,22 @@ export async function handleOwnerAdmin(request, env, url) {
       const accountId=String(b.accountId||""), storeId=b.storeId?String(b.storeId):null, words=Number(b.words), requestId=String(b.requestId||"").trim(), note=String(b.note||"").trim().slice(0,240);
       if(!/^[a-f0-9-]{36}$/i.test(accountId)||!Number.isSafeInteger(words)||words<1||words>100000000||requestId.length<12||requestId.length>128)return json(env, {error:"invalid_word_adjustment"},400);
       const adjustmentNote=note||"Owner adjustment";
-      const prior=await db.prepare("SELECT id,account_id,store_id,event_type,words,note FROM daga_live_word_ledger WHERE request_id=?").bind(requestId).first();
-      if(prior){
-        const same=prior.account_id===accountId&&prior.store_id===storeId&&prior.event_type==="credit"&&Number(prior.words)===words&&prior.note===adjustmentNote;
-        return same?json(env,{ok:true,duplicate:true,entryId:prior.id}):json(env,{error:"word_adjustment_request_id_conflict"},409);
-      }
       const account=await db.prepare("SELECT id,role,status,store_id FROM daga_accounts WHERE id=?").bind(accountId).first();
       if(!account||account.status!=="approved"||account.role==="program_owner")return json(env, {error:"eligible_account_not_found"},404);
       if(storeId&&account.store_id!==storeId)return json(env, {error:"store_account_mismatch"},409);
+      const resolvedStoreId=storeId||account.store_id||null;
+      const prior=await db.prepare("SELECT id,account_id,store_id,event_type,words,note FROM daga_live_word_ledger WHERE request_id=?").bind(requestId).first();
+      if(prior){
+        const same=prior.account_id===accountId&&prior.store_id===resolvedStoreId&&prior.event_type==="credit"&&Number(prior.words)===words&&prior.note===adjustmentNote;
+        return same?json(env,{ok:true,duplicate:true,entryId:prior.id}):json(env,{error:"word_adjustment_request_id_conflict"},409);
+      }
       const id=crypto.randomUUID();
       try {
-        await db.prepare("INSERT INTO daga_live_word_ledger (id,account_id,store_id,event_type,words,request_id,note) VALUES (?,?,?,'credit',?,?,?)").bind(id,accountId,storeId,words,requestId,adjustmentNote).run();
+        await db.prepare("INSERT INTO daga_live_word_ledger (id,account_id,store_id,event_type,words,request_id,note) VALUES (?,?,?,'credit',?,?,?)").bind(id,accountId,resolvedStoreId,words,requestId,adjustmentNote).run();
       } catch (_) {
         const duplicate = await db.prepare("SELECT id,account_id,store_id,event_type,words,note FROM daga_live_word_ledger WHERE request_id=?").bind(requestId).first();
         if (duplicate) {
-          const same=duplicate.account_id===accountId&&duplicate.store_id===storeId&&duplicate.event_type==="credit"&&Number(duplicate.words)===words&&duplicate.note===adjustmentNote;
+          const same=duplicate.account_id===accountId&&duplicate.store_id===resolvedStoreId&&duplicate.event_type==="credit"&&Number(duplicate.words)===words&&duplicate.note===adjustmentNote;
           return same?json(env,{ok:true,duplicate:true,entryId:duplicate.id}):json(env,{error:"word_adjustment_request_id_conflict"},409);
         }
         return json(env, {error:"word_adjustment_conflict"},409);
