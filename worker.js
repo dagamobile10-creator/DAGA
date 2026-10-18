@@ -153,7 +153,7 @@ export default {
             signal: AbortSignal.timeout(10000)
           });
           const listData = await listResponse.json();
-          if (!listResponse.ok) return json({ error: "LiveAvatar avatar lookup failed", status: listResponse.status, detail: listData }, listResponse.status);
+          if (!listResponse.ok) return json({ error: "liveavatar_avatar_lookup_failed", status: listResponse.status }, listResponse.status);
           const avatars = listData?.data?.results || [];
           const chosen = avatars.find(a => /daga|ضجه|ضجّة/i.test(String(a.name || "")) && a.status === "ACTIVE") || (avatars.length === 1 && avatars[0].status === "ACTIVE" ? avatars[0] : null);
           if (chosen) {
