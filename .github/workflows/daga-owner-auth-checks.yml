@@ -84,6 +84,10 @@ jobs:
           assert 'error: "liveavatar_avatar_lookup_failed"' in worker
           assert 'error: "liveavatar_session_token_failed"' in worker
           assert 'error: "liveavatar_session_token_invalid"' in worker, "Missing LiveAvatar token/session ID must fail closed"
+          assert 'typeof data?.data?.session_token === "string"' in worker, "LiveAvatar session token must be a string"
+          assert 'typeof data?.data?.session_id === "string"' in worker, "LiveAvatar session ID must be a string"
+          assert 'if (!sessionToken || !sessionId)' in worker, "LiveAvatar session response must fail closed when fields are missing"
+          assert 'return json({ ok: true, sessionToken, sessionId })' in worker, "Only validated LiveAvatar session fields may be returned"
           assert 'error: "liveavatar_lookup_failed"' in worker
           assert 'error: "liveavatar_token_failed"' in worker
           assert 'error: "memory_storage_failed"' in worker
