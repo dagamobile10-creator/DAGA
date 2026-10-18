@@ -8,6 +8,7 @@ export async function handleCompanyOrders(request, env, url) {
   const known = new Set([
     "/api/company/plans",
     "/api/company/payment-methods",
+    "/api/company/offers",
     "/api/company/orders"
   ]);
   if (!known.has(path) && !orderPayment) return null;
@@ -33,6 +34,14 @@ export async function handleCompanyOrders(request, env, url) {
   if (path === "/api/company/payment-methods" && request.method === "GET") {
     const result = await db.prepare("SELECT id,provider,display_label,destination_value,instructions FROM daga_payment_methods WHERE is_active=1 ORDER BY provider").all();
     return json(env, { ok: true, paymentMethods: result.results || [] });
+  }
+
+  if (path === "/api/company/offers" && request.method === "GET") {
+    const service = String(url.searchParams.get("service") || "").trim();
+    if (!["store", "live_daga"].includes(service)) return json(env, { error: "valid_service_required" }, 400);
+    const now = new Date().toISOString();
+    const result = await db.prepare("SELECT id,name,service,discount_type,discount_value,starts_at,ends_at,max_redemptions,redemption_count FROM daga_offers WHERE is_active=1 AND service=? AND (starts_at IS NULL OR starts_at<=?) AND (ends_at IS NULL OR ends_at>?) AND (max_redemptions IS NULL OR redemption_count<max_redemptions) ORDER BY created_at DESC").bind(service, now, now).all();
+    return json(env, { ok: true, offers: result.results || [] });
   }
 
   if (path === "/api/company/orders" && request.method === "GET") {
