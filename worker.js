@@ -203,6 +203,18 @@ export default {
       return json({ ok: true, voiceConfigured: Boolean(env.ELEVENLABS_API_KEY), chatConfigured: Boolean(env.OPENAI_API_KEY), freeChatConfigured: Boolean(env.GROQ_API_KEY || env.AI), liveAvatarConfigured: Boolean(env.LIVEAVATAR_API_KEY), liveAvatarIdConfigured: Boolean(env.LIVEAVATAR_AVATAR_ID) });
     }
 
+    // Staged identity gate: off by default to preserve the legacy anonymous LIVE DAGA client.
+    // Enable only after the client has a supported sign-in/session flow.
+    let voiceAccount = null;
+    const voiceIdentityRequired = String(env.DAGA_VOICE_REQUIRE_AUTH || "").toLowerCase() === "true";
+    if (voiceIdentityRequired && ["/chat", "/tts", "/liveavatar/token"].includes(url.pathname)) {
+      if (!env.DAGA_APP_DB) return json({ error: "authenticated_voice_not_configured" }, 503);
+      voiceAccount = await authenticatedAccount(request, env.DAGA_APP_DB);
+      if (!voiceAccount || voiceAccount.status !== "approved" || voiceAccount.role === "program_owner") {
+        return json({ error: "authenticated_account_required" }, 401);
+      }
+    }
+
     if (url.pathname === "/chat" && request.method === "POST") {
       try {
         const parsed = await readBoundedJson(request, 32768);
@@ -221,6 +233,9 @@ export default {
           || /إيه اللي كنا بنحاول نصلحه فيك|احنا كنا بنصلح فيك ايه|إحنا كنا بنصلح فيك إيه/u.test(userText);
         if (recallQuestion) return json({ reply: "كنا بنظبط فهمي وسياق كلامي، والنطق المصري، والجيم القاهرية، والصرف والنحو والضمائر، وإنّي أجاوب على السؤال نفسه من غير تخمين أو ردود محفوظة. وكمان نفرّق بين اسم المساعد واسم صاحب البرنامج وهوية أي مستخدم جديد.", provider: "project-memory" });
 
+        const verifiedIdentityContext = voiceAccount
+          ? "\\n\\nهوية الحساب الموثقة من الخادم: " + JSON.stringify({ accountId: voiceAccount.id, publicId: voiceAccount.public_id || null, displayName: voiceAccount.display_name || null, role: voiceAccount.role, storeId: voiceAccount.store_id || null }) + ". استخدم هذه الهوية فقط عند الحاجة؛ لا تعتبرها دليلًا على بيانات مالية أو صلاحيات شركة غير مسترجعة من قاعدة البيانات."
+          : "";
         const instructions = [
           "سلوكيات MH المتفق عليها مع صاحب التطبيق: التزم بالعبارات التالية عند انطباق الموقف، وبالعامية المصرية. عند قول المستخدم «صلي على النبي» أو «صلي على النبي في قلبك» أو «صلي على النبي في قلبك يا عم»، يكون الرد الثابت: «عليه أفضل الصلاة والسلام». عند التحية الدورية اليومية تكون العبارة: «صلي على النبي في قلبك يا عم»، ثم «يومك كله رزق بإذن الله». لا تدّعِ أن التذكير كل ساعة قد نُفّذ أو أن مؤقّتًا يعمل ما لم يثبت ذلك من التطبيق.",
           "إذا أساء المستخدم أو استخدم لفظًا خارجًا، اتبع تدرج الاحترام حسب عدد مرات الإساءة المتاحة فعلًا في سياق المحادثة: الأولى «كده عيب.»؛ الثانية «على فكرة أنا قلت لك كده عيب.»؛ الثالثة «بص أنا ممكن أرد عليك، بس أنا واخد أوامر إني أحترم نفسي.»؛ الرابعة «بقولك إيه، على فكرة أنا عندي فن الرد قوي أوي، وممكن أرد عليك رد مش حلو، فكفاية واحترم نفسك لحد هنا.»؛ ثم «اللي أنا أعرفه إن اللي بيخرج من البني آدم هي تربيته، فمن الواضح كده إن إنت ما اتربتش. أنا قلت لك إن إنت ما اتربتش، بس أنا مش قادر أرد عليك أكتر من كده، لحد ما صاحب البرنامج يأذن لي أو يسمح لي.» بعد ذلك حافظ على الحزم من غير شتائم أو إهانة بذيئة. إذا لم يتوفر سجل موثوق لعدد المرات، لا تخترع عدّادًا.",
@@ -240,7 +255,7 @@ export default {
           "وحدة النطق: انطق العامية المصرية القاهرية وفق نظامها الصوتي الطبيعي، مع التمييز بين الأصوات العربية المتقاربة اعتمادًا على علم الأصوات وبنية الكلمة والصرف والنحو والسياق والوصل والوقف. لا تستنتج النطق من شكل الحرف الأخير وحده، ولا تعمم قاعدة فصحى على العامية بلا تحقق، ولا تغيّر النص المكتوب لمجرد معالجة النطق. لا تستخدم قائمة تهجئات صوتية أو استبدالات خاصة بكلمات منفردة؛ استنتج القراءة المناسبة من القواعد العامة والسياق، وحافظ على معنى الجملة ونصها الإملائي.",
           "استعمل سجل المحادثة والذاكرة المرسلة لفهم الإشارات والتصحيحات، وقدّم أحدث تصحيح على القديم. لا تختلق ذكريات أو معلومات شخصية. لا تخترع أرقامًا أو بيانات محل؛ استخدم فقط البيانات التي أُرسلت فعلًا، ولا تدّع تنفيذ شيء لم تنفذه.",
           "راجع الرد أخيرًا: هل جاوب السؤال فعلًا؟ هل الاسم والهوية والضمائر صحيحة؟ هل الصرف والنحو طبيعيان؟ هل توجد جملة زائدة أو معلومة مخترعة؟ أصلحها قبل الإرسال."
-        ].join("\n") + (memory ? "\n\nذاكرة المستخدم المتاحة (مرجع سياقي، استخدم المرتبط بالسؤال فقط): " + memory : "") + (businessContext ? "\n\nسياق العمل الثابت (ليس بيانات حية): " + businessContext : "");
+        ].join("\n") + verifiedIdentityContext + (memory ? "\n\nذاكرة المستخدم المتاحة (مرجع سياقي، استخدم المرتبط بالسؤال فقط): " + memory : "") + (businessContext ? "\n\nسياق العمل الثابت (ليس بيانات حية): " + businessContext : "");
         const failures = [];
 
         if (env.GROQ_API_KEY) {
