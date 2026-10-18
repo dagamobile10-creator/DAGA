@@ -25,8 +25,10 @@ async function bootstrapStart(request, env) {
   const db = env.DAGA_APP_DB;
   if (!db) return json(env, { error: "owner_auth_database_not_configured" }, 503);
   const required = ["DAGA_OWNER_BOOTSTRAP_TOKEN", "DAGA_OWNER_PHONE", "DAGA_OWNER_EMAIL",
-    "TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER", "RESEND_API_KEY", "DAGA_EMAIL_FROM", "DAGA_OTP_PEPPER"];
-  if (required.some(key => !env[key])) return json(env, { error: "owner_auth_not_configured" }, 503);
+    "RESEND_API_KEY", "DAGA_EMAIL_FROM", "DAGA_OTP_PEPPER"];
+  const smsConfigured = Boolean(env.ESMS_API_KEY ||
+    (env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN && env.TWILIO_FROM_NUMBER));
+  if (required.some(key => !env[key]) || !smsConfigured) return json(env, { error: "owner_auth_not_configured" }, 503);
   const auth = request.headers.get("Authorization") || "";
   if (!constantTimeEqual(auth, "Bearer " + env.DAGA_OWNER_BOOTSTRAP_TOKEN)) {
     await audit(db, null, "owner_bootstrap_start", "failure");
@@ -128,8 +130,10 @@ async function bootstrapVerify(request, env) {
 
 async function recoveryStart(request, env) {
   const db = env.DAGA_APP_DB;
-  const required = ["DAGA_OWNER_PHONE", "DAGA_OWNER_EMAIL", "TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER", "RESEND_API_KEY", "DAGA_EMAIL_FROM", "DAGA_OTP_PEPPER"];
-  if (!db || required.some(key => !env[key])) return json(env, { error: "owner_recovery_not_configured" }, 503);
+  const required = ["DAGA_OWNER_PHONE", "DAGA_OWNER_EMAIL", "RESEND_API_KEY", "DAGA_EMAIL_FROM", "DAGA_OTP_PEPPER"];
+  const smsConfigured = Boolean(env.ESMS_API_KEY ||
+    (env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN && env.TWILIO_FROM_NUMBER));
+  if (!db || required.some(key => !env[key]) || !smsConfigured) return json(env, { error: "owner_recovery_not_configured" }, 503);
   const owner = await db.prepare("SELECT a.id FROM daga_program_owner o JOIN daga_accounts a ON a.id=o.account_id WHERE o.singleton_id=1 AND a.status='approved'").first();
   if (!owner) return json(env, { error: "owner_not_provisioned" }, 409);
   const ip = request.headers.get("CF-Connecting-IP") || "unknown";
@@ -329,6 +333,22 @@ async function rateLimit(db, env, key, limit, windowSeconds) {
 }
 
 async function sendSms(env, phone, message) {
+  // Prefer the Egypt-capable eSMS API when configured; retain Twilio as a fallback.
+  if (env.ESMS_API_KEY) {
+    const payload = { to: phone, text: message };
+    if (env.ESMS_SENDER_ID) payload.sender_id = env.ESMS_SENDER_ID;
+    const response = await fetch("https://sms.esmsafrica.io/api/messages/send", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + env.ESMS_API_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(10000)
+    });
+    if (!response.ok) throw new Error("sms_delivery_failed");
+    return;
+  }
+  if (!env.TWILIO_ACCOUNT_SID || !env.TWILIO_AUTH_TOKEN || !env.TWILIO_FROM_NUMBER) {
+    throw new Error("sms_provider_not_configured");
+  }
   const body = new URLSearchParams({ To: phone, From: env.TWILIO_FROM_NUMBER, Body: message });
   const response = await fetch("https://api.twilio.com/2010-04-01/Accounts/" + encodeURIComponent(env.TWILIO_ACCOUNT_SID) + "/Messages.json", {
     method: "POST", headers: { Authorization: "Basic " + btoa(env.TWILIO_ACCOUNT_SID + ":" + env.TWILIO_AUTH_TOKEN), "Content-Type": "application/x-www-form-urlencoded" }, body, signal: AbortSignal.timeout(10000)
