@@ -79,11 +79,13 @@ export default {
     // until the client has authenticated sessions; staging enables it for smoke tests.
     const publicLimit = (
       (url.pathname === "/liveavatar/token" && request.method === "POST") ||
+      (url.pathname === "/liveavatar/avatars" && request.method === "GET") ||
       (url.pathname === "/chat" && request.method === "POST") ||
       (url.pathname === "/tts" && request.method === "POST") ||
       (url.pathname === "/memory" && ["GET", "POST"].includes(request.method))
     ) ? ({
       "/liveavatar/token": [10, 900],
+      "/liveavatar/avatars": [30, 300],
       "/chat": [30, 300],
       "/tts": [30, 300],
       "/memory": [60, 300]
