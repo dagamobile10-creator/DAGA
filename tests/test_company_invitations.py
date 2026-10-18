@@ -245,6 +245,27 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertIn('company-login-verify-account:', handler)
         self.assertIn('companyRateLimit(db, env, "company-login-verify-account:" + account.id, 8, 900)', handler)
 
+    def test_company_authority_is_scoped_to_the_requested_store_owner_or_active_membership(self):
+        source = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
+        start = source.index("async function getAuthority(")
+        end = source.index("\n}", start) + 2
+        handler = source[start:end]
+        self.assertIn('account.role === "store_owner" && store.owner_account_id === account.id', handler)
+        self.assertIn("WHERE store_id=? AND account_id=? LIMIT 1", handler)
+        self.assertIn('membership.status !== "active"', handler)
+        self.assertIn('!["manager", "employee"].includes(membership.role)', handler)
+        self.assertIn('permissions[key] = Boolean(stored && stored[key] === true)', handler)
+
+    def test_managers_cannot_create_manager_invitations_or_escalate_permissions(self):
+        source = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
+        start = source.index("function normalizePermissions(")
+        end = source.index("\n}", start) + 2
+        handler = source[start:end]
+        self.assertIn('if (authority.role === "manager")', handler)
+        self.assertIn('if (out[key] && !authority.permissions[key]) return null;', handler)
+        self.assertIn('if (intendedRole === "manager" && authority.role !== "store_owner") return null;', handler)
+        self.assertIn('if (intendedRole === "employee" && out.inviteEmployees) return null;', handler)
+
     def test_api_guards_role_escalation_and_authentication(self):
         src = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
         self.assertIn("authenticatedAccount(request, db)", src)
