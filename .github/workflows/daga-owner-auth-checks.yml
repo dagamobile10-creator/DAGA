@@ -83,6 +83,7 @@ jobs:
           worker = open("worker.js", encoding="utf-8").read()
           assert 'error: "liveavatar_avatar_lookup_failed"' in worker
           assert 'error: "liveavatar_session_token_failed"' in worker
+          assert 'error: "liveavatar_session_token_invalid"' in worker, "Missing LiveAvatar token/session ID must fail closed"
           assert 'error: "liveavatar_lookup_failed"' in worker
           assert 'error: "liveavatar_token_failed"' in worker
           assert 'error: "memory_storage_failed"' in worker
