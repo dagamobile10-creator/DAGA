@@ -583,7 +583,7 @@ class InvitationSchemaTests(unittest.TestCase):
     def test_every_owner_admin_route_is_gated_before_route_dispatch(self):
         admin = (ROOT / "owner-admin.js").read_text(encoding="utf-8")
         handler_start = admin.index("export async function handleOwnerAdmin")
-        handler_end = admin.index("\\n}", handler_start) + 2
+        handler_end = admin.index("\n}", handler_start) + 2
         handler = admin[handler_start:handler_end]
         gate = handler.index("const owner = await authenticatedOwner(request, db)")
         denial = handler.index('return json(env, { error: "owner_session_required" }, 401)')
