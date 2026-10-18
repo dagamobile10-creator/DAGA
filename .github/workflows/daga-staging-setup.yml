@@ -86,7 +86,7 @@ jobs:
           binding = "AI"
           [vars]
           DAGA_APP_BASE_URL = "https://daga-app-staging.dagamobile10.workers.dev"
-          DAGA_ALLOWED_ORIGINS = "https://daga-app-staging.dagamobile10.workers.dev"
+          DAGA_ALLOWED_ORIGINS = "https://dagamobile10-creator.github.io"
           DAGA_MEMORY_REQUIRE_AUTH = "true"
           DAGA_PUBLIC_API_RATE_LIMITS = "true"
           [[d1_databases]]
@@ -164,10 +164,10 @@ jobs:
           jq '{ok,voiceConfigured,chatConfigured,freeChatConfigured,liveAvatarConfigured}' /tmp/health.json
           # Runtime CORS smoke test: only the configured staging origin may be authorized.
           curl -fsS -D /tmp/cors-allowed.headers -o /dev/null -X OPTIONS \
-            -H 'Origin: https://daga-app-staging.dagamobile10.workers.dev' \
+            -H 'Origin: https://dagamobile10-creator.github.io' \
             -H 'Access-Control-Request-Method: POST' \
             https://daga-app-staging.dagamobile10.workers.dev/api/company/auth/register
-          grep -qi '^access-control-allow-origin: https://daga-app-staging.dagamobile10.workers.dev' /tmp/cors-allowed.headers
+          grep -qi '^access-control-allow-origin: https://dagamobile10-creator.github.io' /tmp/cors-allowed.headers
           curl -sS -D /tmp/cors-hostile.headers -o /dev/null -X OPTIONS \
             -H 'Origin: https://untrusted.example' \
             -H 'Access-Control-Request-Method: POST' \
