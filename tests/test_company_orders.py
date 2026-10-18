@@ -250,7 +250,7 @@ class LiveClientSessionForwardingTests(unittest.TestCase):
 
     def test_legacy_client_remains_compatible_without_session(self):
         helper_start = self.client.index("function dagaAuthHeaders")
-        helper_end = self.client.index("\\n", helper_start)
+        helper_end = self.client.index("\n", helper_start)
         helper = self.client[helper_start:helper_end]
         self.assertIn("const headers={...extra}", helper)
         self.assertIn("if(token&&token.length<=4096)", helper)
