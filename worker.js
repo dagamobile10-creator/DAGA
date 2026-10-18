@@ -75,6 +75,21 @@ export default {
 
     if (request.method === "OPTIONS") return new Response(null, { headers: cors() });
 
+    // Optional staged protection for expensive public voice routes. Keep disabled
+    // until the client has authenticated sessions; staging enables it for smoke tests.
+    const publicLimit = {
+      "/liveavatar/token": [10, 900],
+      "/chat": [30, 300],
+      "/tts": [30, 300],
+      "/memory": [60, 300]
+    }[url.pathname];
+    if (publicLimit && String(env.DAGA_PUBLIC_API_RATE_LIMITS || "").toLowerCase() === "true") {
+      if (!env.DAGA_APP_DB || !env.DAGA_OTP_PEPPER) return json({ error: "public_api_rate_limit_not_configured" }, 503);
+      const ip = String(request.headers.get("CF-Connecting-IP") || "unknown").slice(0, 128);
+      const allowed = await applyPublicApiRateLimit(env.DAGA_APP_DB, env.DAGA_OTP_PEPPER, url.pathname + ":" + ip, publicLimit[0], publicLimit[1]);
+      if (!allowed) return json({ error: "rate_limited" }, 429);
+    }
+
     if (url.pathname === "/memory" && (request.method === "GET" || request.method === "POST")) {
       try {
         let body = null;
@@ -320,6 +335,21 @@ async function readBoundedJson(request, maxBytes) {
     return { ok: true, value };
   } catch (_) {
     return { ok: false, status: 400, error: "invalid_json" };
+  }
+}
+
+
+async function applyPublicApiRateLimit(db, pepper, key, limit, windowSeconds) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(String(pepper) + ":" + key));
+  const bucketKey = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
+  const now = Math.floor(Date.now() / 1000);
+  try {
+    const row = await db.prepare("INSERT INTO daga_auth_rate_limits (bucket_key,window_started_at,attempts) VALUES (?,?,1) ON CONFLICT(bucket_key) DO UPDATE SET window_started_at=CASE WHEN ? - daga_auth_rate_limits.window_started_at >= ? THEN ? ELSE daga_auth_rate_limits.window_started_at END, attempts=CASE WHEN ? - daga_auth_rate_limits.window_started_at >= ? THEN 1 ELSE daga_auth_rate_limits.attempts+1 END WHERE ? - daga_auth_rate_limits.window_started_at >= ? OR daga_auth_rate_limits.attempts < ? RETURNING attempts")
+      .bind(bucketKey, now, now, windowSeconds, now, now, windowSeconds, now, windowSeconds, limit).first();
+    return Boolean(row);
+  } catch (_) {
+    // Fail closed if rate-limit persistence is enabled but its table is unavailable.
+    return false;
   }
 }
 
