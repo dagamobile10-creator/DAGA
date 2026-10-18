@@ -596,5 +596,16 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertNotIn("url.searchParams.get(\"ownerId\")", handler)
 
 
+    def test_word_adjustment_handles_concurrent_duplicate_request_ids(self):
+        admin = (ROOT / "owner-admin.js").read_text(encoding="utf-8")
+        start = admin.index('if(path==="/owner/admin/words/adjust"&&request.method==="POST")')
+        end = admin.index('if(path==="/owner/admin/columns"&&request.method==="GET")', start)
+        handler = admin[start:end]
+        self.assertIn('SELECT id FROM daga_live_word_ledger WHERE request_id=?', handler)
+        self.assertIn('if (duplicate) return json(env, {ok:true,duplicate:true,entryId:duplicate.id})', handler)
+        self.assertIn('error:"word_adjustment_conflict"', handler)
+        self.assertIn('request_id TEXT UNIQUE', (ROOT / "migrations" / "0001_daga_core.sql").read_text(encoding="utf-8"))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
