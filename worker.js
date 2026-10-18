@@ -77,12 +77,17 @@ export default {
 
     // Optional staged protection for expensive public voice routes. Keep disabled
     // until the client has authenticated sessions; staging enables it for smoke tests.
-    const publicLimit = {
+    const publicLimit = (
+      (url.pathname === "/liveavatar/token" && request.method === "POST") ||
+      (url.pathname === "/chat" && request.method === "POST") ||
+      (url.pathname === "/tts" && request.method === "POST") ||
+      (url.pathname === "/memory" && ["GET", "POST"].includes(request.method))
+    ) ? ({
       "/liveavatar/token": [10, 900],
       "/chat": [30, 300],
       "/tts": [30, 300],
       "/memory": [60, 300]
-    }[url.pathname];
+    }[url.pathname]) : null;
     if (publicLimit && String(env.DAGA_PUBLIC_API_RATE_LIMITS || "").toLowerCase() === "true") {
       if (!env.DAGA_APP_DB || !env.DAGA_OTP_PEPPER) return json({ error: "public_api_rate_limit_not_configured" }, 503);
       const ip = String(request.headers.get("CF-Connecting-IP") || "unknown").slice(0, 128);
