@@ -602,7 +602,9 @@ class InvitationSchemaTests(unittest.TestCase):
         end = admin.index('if(path==="/owner/admin/columns"&&request.method==="GET")', start)
         handler = admin[start:end]
         self.assertIn('SELECT id FROM daga_live_word_ledger WHERE request_id=?', handler)
-        self.assertIn('if (duplicate) return json(env, {ok:true,duplicate:true,entryId:duplicate.id})', handler)
+        self.assertIn('error:"word_adjustment_request_id_conflict"', handler)
+        self.assertIn('prior.account_id===accountId&&prior.store_id===storeId', handler)
+        self.assertIn('Number(prior.words)===words&&prior.note===adjustmentNote', handler)
         self.assertIn('error:"word_adjustment_conflict"', handler)
         self.assertIn('request_id TEXT UNIQUE', (ROOT / "migrations" / "0001_daga_core.sql").read_text(encoding="utf-8"))
 
