@@ -69,6 +69,8 @@ class CompanyOrderRegressionTests(unittest.TestCase):
         self.assertIn('/api/company/payment-methods', portal)
         self.assertIn('/api/company/offers?service=', portal)
         self.assertIn("offerId:offerId||null", portal)
+        self.assertIn("function orderStatusLabel(value)", portal)
+        self.assertIn("مستني مراجعة المالك", portal)
         self.assertIn('الاشتراك مش هيتفعل قبل التأكيد', portal)
 
     def test_schema_supports_order_adjustment_and_unique_entitlement(self):
