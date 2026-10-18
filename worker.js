@@ -166,6 +166,15 @@ export default {
     }
 
     if (url.pathname === "/liveavatar/token" && request.method === "POST") {
+      // This route returns a provider session token and exits before the shared chat/TTS gate below,
+      // so enforce the staged identity requirement here as well when it is enabled.
+      if (String(env.DAGA_VOICE_REQUIRE_AUTH || "").toLowerCase() === "true") {
+        if (!env.DAGA_APP_DB) return json({ error: "authenticated_voice_not_configured" }, 503);
+        const account = await authenticatedAccount(request, env.DAGA_APP_DB);
+        if (!account || account.status !== "approved" || account.role === "program_owner") {
+          return json({ error: "authenticated_account_required" }, 401);
+        }
+      }
       if (!env.LIVEAVATAR_API_KEY) return json({ error: "LIVEAVATAR_API_KEY secret is not configured" }, 503);
       try {
         let avatarId = String(env.LIVEAVATAR_AVATAR_ID || "").trim();
