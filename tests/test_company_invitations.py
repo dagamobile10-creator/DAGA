@@ -607,5 +607,18 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertIn('request_id TEXT UNIQUE', (ROOT / "migrations" / "0001_daga_core.sql").read_text(encoding="utf-8"))
 
 
+    def test_payment_review_checks_conditional_state_transition_results(self):
+        admin = (ROOT / "owner-admin.js").read_text(encoding="utf-8")
+        start = admin.index('const reviewMatch=path.match')
+        end = admin.index('if(path==="/owner/admin/words/adjust"', start)
+        review = admin[start:end]
+        self.assertIn("const reviewResults = await db.batch(statements)", review)
+        self.assertIn('Number(reviewResults?.[0]?.meta?.changes || 0) !== 1', review)
+        self.assertIn('Number(reviewResults?.[1]?.meta?.changes || 0) !== 1', review)
+        self.assertIn('error:"payment_review_state_changed_retry"', review)
+        self.assertIn("status='pending_review'", review)
+        self.assertIn("o.status='paid_approved'", review)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
