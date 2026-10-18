@@ -4,6 +4,7 @@ import { handleCompanyInvitations } from "./company-invitations.js";
 import inviteHtml from "./invite/index.html";
 import companyPortalHtml from "./company/portal.html";
 import officialLandingHtml from "./go/index.html";
+import ownerConsoleHtml from "./owner-console.html";
 const VOICE_ID = "NG9zqiTuEbX3Nw0gjYcc"; // Previous voice ID backup: PF3gVGPrCr6Dw1WaSSiy
 
 export default {
@@ -18,6 +19,19 @@ export default {
           "Cache-Control": "public, max-age=300",
           "X-Content-Type-Options": "nosniff",
           "Content-Security-Policy": "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"
+        }
+      });
+    }
+
+    if ((url.pathname === "/owner" || url.pathname === "/owner/" || url.pathname === "/owner-console" || url.pathname === "/owner-console/") && request.method === "GET") {
+      return new Response(ownerConsoleHtml, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/html; charset=utf-8",
+          "Cache-Control": "no-store",
+          "Referrer-Policy": "no-referrer",
+          "X-Content-Type-Options": "nosniff",
+          "Content-Security-Policy": "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
         }
       });
     }
