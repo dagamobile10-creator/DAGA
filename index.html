@@ -54,12 +54,15 @@ stopListening();replying=true;state.textContent='ضجه بيجهز الرد…';
 respond(text)
 }
 function normalizeArabicInput(value){ return String(value||'').replace(/\bplus\b/gi,' زائد ').replace(/\bminus\b/gi,' ناقص ').replace(/\bequals?\b/gi,' يساوي ').replace(/\bmultipl(?:y|ied|ication)\b/gi,' ضرب ').replace(/\bdivid(?:e|ed|ing)\b/gi,' قسمة ').replace(/\bDAGA\b/gi,'ضجه').replace(/\bMH\b/gi,'المساعد').replace(/\s{2,}/g,' ').trim(); }
+// Optional authenticated session bridge. Existing LIVE DAGA remains compatible when no session is present.
+const DAGA_SESSION_KEY='daga_account_session_v1';
+function dagaAuthHeaders(extra={}){const headers={...extra};try{const token=sessionStorage.getItem(DAGA_SESSION_KEY);if(token&&token.length<=4096)headers.Authorization='Bearer '+token}catch(e){}return headers}
 const DAGA_MEMORY_KEY='daga_mh_memory_v1';
 const DAGA_PROFILE_KEY='daga_mh_long_memory_v1';
 const DAGA_SERVER_USER_KEY='daga_mh_server_user_v1';
 function dagaServerUserId(){try{let id=localStorage.getItem(DAGA_SERVER_USER_KEY);if(!id){id=crypto.randomUUID();localStorage.setItem(DAGA_SERVER_USER_KEY,id)}return id}catch(e){return ''}}
-async function loadServerMemory(){const userId=dagaServerUserId();if(!userId)return null;try{const r=await fetch('https://daga-voice.dagamobile10.workers.dev/memory?userId='+encodeURIComponent(userId),{signal:AbortSignal.timeout(2500)});if(!r.ok)return null;const d=await r.json();return d&&d.ok&&d.persistent?d.memory:null}catch(e){return null}}
-async function saveServerMemory(profile,history){const userId=dagaServerUserId();if(!userId)return false;try{const r=await fetch('https://daga-voice.dagamobile10.workers.dev/memory',{method:'POST',signal:AbortSignal.timeout(2500),headers:{'Content-Type':'application/json'},body:JSON.stringify({userId,profile,history})});return r.ok}catch(e){return false}}
+async function loadServerMemory(){const userId=dagaServerUserId();if(!userId)return null;try{const r=await fetch('https://daga-voice.dagamobile10.workers.dev/memory?userId='+encodeURIComponent(userId),{signal:AbortSignal.timeout(2500),headers:dagaAuthHeaders()});if(!r.ok)return null;const d=await r.json();return d&&d.ok&&d.persistent?d.memory:null}catch(e){return null}}
+async function saveServerMemory(profile,history){const userId=dagaServerUserId();if(!userId)return false;try{const r=await fetch('https://daga-voice.dagamobile10.workers.dev/memory',{method:'POST',signal:AbortSignal.timeout(2500),headers:dagaAuthHeaders({'Content-Type':'application/json'}),body:JSON.stringify({userId,profile,history})});return r.ok}catch(e){return false}}
 function loadDagaMemory(){
 try{
 const value=JSON.parse(localStorage.getItem(DAGA_MEMORY_KEY)||'[]');
@@ -118,7 +121,7 @@ try{
 const r=await fetch('https://daga-voice.dagamobile10.workers.dev/chat',{
 method:'POST',
 signal:AbortSignal.timeout(16000),
-headers:{'Content-Type':'application/json'},
+headers:dagaAuthHeaders({'Content-Type':'application/json'}),
 body:JSON.stringify({text:spokenText,history:workingHistory.slice(-16),memory:longMemory,businessContext:"ذاكرة المستخدم وتفضيلاته المحفوظة على هذا الجهاز (استخدم المرتبط بالسؤال فقط، وصحّحها لو المستخدم صحّحك): "+JSON.stringify(longMemory)+"\n\nسياق العمل الثابت: صاحب التطبيق يدير محل إكسسوارات موبايل ويستخدم ضجه كمساعد إداري ومحاسبي صوتي. اتكلم بالمصري فقط. استخدم زائد وناقص ويساوي بدل المصطلحات الإنجليزية. اسم التطبيق والمساعد بالعربية: ضجه. هذه معلومات عن طبيعة العمل وليست بيانات حية. أعمدة المحل: خارج واحد وخارج اتنين وخارج تلاتة، أربعة أعمدة لمكسب فودافون كاش، بند الكاش، بند فودافون كاش، الرصيد، الكروت، والإكسسوارات. أعمدة مكسب فودافون كاش ليست نقدية. لا تخترع أرقامًا ولا تدّعِ رؤية الداشبورد أو تعديل بيانات فعلية ما لم تصلك البيانات أو تنفذ أداة فعلية ذلك. بيانات الداشبورد المرسلة حاليًا (قد تكون غير موجودة أو قديمة؛ تعامل معها كمرجع للقراءة فقط ولا تنفذ أي تعديل من خلالها): "+JSON.stringify(dashboardSnapshot||{connected:false})})
 });
 const data=await r.json();
@@ -144,7 +147,7 @@ function stopLipSync(){if(avatar)avatar.classList.remove('speaking');if(window._
 stopLipSync();
 if(window.__dagaAudio){try{window.__dagaAudio.pause();window.__dagaAudio.currentTime=0}catch(e){}window.__dagaAudio=null}
 if('speechSynthesis' in window)speechSynthesis.cancel();
-fetch('https://daga-voice.dagamobile10.workers.dev/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})})
+fetch('https://daga-voice.dagamobile10.workers.dev/tts',{method:'POST',headers:dagaAuthHeaders({'Content-Type':'application/json'}),body:JSON.stringify({text})})
 .then(async r=>{if(!r.ok)throw new Error(await r.text());const blob=await r.blob();if(token!==speechToken)return;state.textContent='ضجه بيتكلم…';
 if(typeof window.__dagaAvatarSpeak==='function'){
  try{
@@ -167,7 +170,7 @@ async function playVoiceTest(){
     status.textContent='بيجهّز اختبار الصوت…';
     state.textContent='جاري توليد الكلام بالصوت المتصل بالمساعد';
     const r=await fetch('https://daga-voice.dagamobile10.workers.dev/tts',{
-      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:testText})
+      method:'POST',headers:dagaAuthHeaders({'Content-Type':'application/json'}),body:JSON.stringify({text:testText})
     });
     if(!r.ok) throw new Error(await r.text());
     const blob=await r.blob(),url=URL.createObjectURL(blob),a=new Audio(url);
@@ -192,7 +195,7 @@ async function startDagaLiveAvatar(){
  if(dagaSession&&dagaSession.state==="CONNECTED")return dagaSession;
  if(dagaSessionPromise)return dagaSessionPromise;
  dagaSessionPromise=(async()=>{
-  const response=await fetch(LIVE_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});
+  const response=await fetch(LIVE_ENDPOINT,{method:"POST",headers:dagaAuthHeaders({"Content-Type":"application/json"}),body:"{}"});
   const data=await response.json();
   if(!response.ok||!data.sessionToken)throw new Error(data.detail||data.error||"LiveAvatar session token unavailable");
   const session=new LiveAvatarSession(data.sessionToken,{autoKeepAlive:true,voiceChat:{defaultMuted:true}});
