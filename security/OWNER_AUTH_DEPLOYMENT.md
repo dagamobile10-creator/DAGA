@@ -71,7 +71,7 @@ All routes fail closed when required configuration is absent. Sessions expire af
 
 The branch also contains `company-invitations.js`, the company portal at `/company/`, invitation acceptance at `/invite/`, and the public DAGA QR landing page at `/go/`. The company portal creates role-limited invitations and locally renders their QR codes; the public QR is separate from invitation QR codes. The program owner provisions a pending company and owner account in the owner console; the owner can sign in after the company is approved.
 
-The manual/automatic-on-development staging workflow is `.github/workflows/daga-staging-setup.yml`. It uses a separate `daga-app-staging` D1 and `daga-app-staging` Worker; it never targets the production `daga-voice` Worker. It requires GitHub Actions secrets named `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `DAGA_OTP_PEPPER`, `DAGA_OWNER_BOOTSTRAP_TOKEN`, `DAGA_OWNER_PHONE`, `DAGA_OWNER_EMAIL`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`, `RESEND_API_KEY`, and `DAGA_EMAIL_FROM`. The latest staging attempt stopped before creating resources because `DAGA_OTP_PEPPER` and the Twilio/Resend secrets were absent. Add valid values through GitHub repository Actions secrets; do not put their values in chat or source control.
+The manual/automatic-on-development staging workflow is `.github/workflows/daga-staging-setup.yml`. It uses a separate `daga-app-staging` D1 and `daga-app-staging` Worker; it never targets the production `daga-voice` Worker. It requires GitHub Actions secrets named `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `DAGA_OTP_PEPPER`, `DAGA_OWNER_BOOTSTRAP_TOKEN`, `DAGA_OWNER_PHONE`, `DAGA_OWNER_EMAIL`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`, `RESEND_API_KEY`, and `DAGA_EMAIL_FROM`. The isolated staging Worker and D1 were provisioned successfully, all eight migrations applied, and runtime smoke checks passed for the health endpoint, CORS, /go/, /company/, /invite/, /owner/, /owner-console/, and unauthenticated API denial. However, the latest staging run reported DAGA_OTP_PEPPER missing and intentionally skipped configuring all owner/SMS/email delivery secrets. Therefore owner bootstrap, OTP delivery, real login, and recovery are NOT ready. Add valid values through GitHub repository Actions secrets; do not put their values in chat or source control.
 
 ## Not yet release-ready
 
@@ -84,7 +84,7 @@ The manual/automatic-on-development staging workflow is `.github/workflows/daga-
 
 ## Owner console and administration APIs
 
-After the Worker and database are configured, the Arabic RTL owner console is available at `/owner-console.html` on the GitHub Pages site. It keeps the session token in page memory rather than localStorage; refreshing the page requires signing in again.
+After the Worker and database are configured, the Arabic RTL owner console is served by the Worker at `/owner/` and `/owner-console/`; the HTML page uses a same-origin API base and keeps the session token in page memory rather than localStorage. It keeps the session token in page memory rather than localStorage; refreshing the page requires signing in again.
 
 The console currently calls these owner-session-protected endpoints:
 
