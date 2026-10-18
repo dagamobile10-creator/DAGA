@@ -7,6 +7,7 @@ on:
     paths:
       - ".github/workflows/daga-staging-setup.yml"
       - "worker.js"
+      - "owner-console.html"
       - "owner-auth.js"
       - "owner-admin.js"
       - "company-invitations.js"
