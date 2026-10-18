@@ -212,12 +212,6 @@ export async function handleOwnerAdmin(request, env, url) {
       if (Number(reviewResults?.[0]?.meta?.changes || 0) !== 1 || Number(reviewResults?.[1]?.meta?.changes || 0) !== 1) {
         return json(env, {error:"payment_review_state_changed_retry"},409);
       }
-      if (b.status === "confirmed" && Number(reviewResults?.[2]?.meta?.changes || 0) !== 1) {
-        return json(env, {error:"payment_entitlement_not_created"},409);
-      }
-      if (b.status === "confirmed" && sub.service === "live_daga" && Number(sub.word_quota) > 0 && Number(reviewResults?.[3]?.meta?.changes || 0) !== 1) {
-        return json(env, {error:"payment_word_credit_not_created"},409);
-      }
       await audit(db,owner.id,"payment_reviewed","daga_payment_submissions",sub.id,{status:b.status,orderId:sub.order_id});
       return json(env, {ok:true,status:b.status});
     }
