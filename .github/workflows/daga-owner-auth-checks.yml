@@ -20,6 +20,8 @@ jobs:
         run: node --input-type=module --check < owner-auth.js
       - name: Check company invitation module syntax
         run: node --input-type=module --check < company-invitations.js
+      - name: Check company order module syntax
+        run: node --input-type=module --check < company-orders.js
       - name: Check owner-admin module syntax
         run: node --input-type=module --check < owner-admin.js
       - name: Check owner console inline JavaScript syntax
@@ -194,6 +196,8 @@ jobs:
           PY
       - name: Run company invitation security tests
         run: python3 tests/test_company_invitations.py
+      - name: Run company order and payment security tests
+        run: python3 tests/test_company_orders.py
       - name: Apply D1 migrations to a fresh SQLite database
         run: |
           python3 - <<'PY'
