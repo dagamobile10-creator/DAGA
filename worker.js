@@ -388,7 +388,9 @@ function json(data, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: cors({ allowedOrigins: env.DAGA_ALLOWED_ORIGINS || "", "Content-Type": "application/json; charset=utf-8" }) });
 }
 function cors(extra = {}) {
-  const allowed = String(extra.allowedOrigins || "").split(",").map(x => x.trim()).filter(Boolean);
+  // JSON/audio helpers do not receive env directly, so use the deployed Pages origin as the safe default.
+  // OPTIONS and selected streaming responses can override this with the environment allowlist.
+  const allowed = String(extra.allowedOrigins || "https://dagamobile10-creator.github.io").split(",").map(x => x.trim()).filter(Boolean);
   const origin = allowed.includes("*") ? "*" : allowed.length === 1 ? allowed[0] : allowed.includes("null") ? "null" : "";
   const headers = { ...(origin ? { "Access-Control-Allow-Origin": origin } : {}), "Access-Control-Allow-Methods": "GET,POST,OPTIONS", "Access-Control-Allow-Headers": "Content-Type, Authorization", "Access-Control-Max-Age": "600", Vary: "Origin", ...extra };
   delete headers.allowedOrigins;
