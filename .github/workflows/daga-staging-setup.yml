@@ -11,6 +11,7 @@ on:
       - "owner-auth.js"
       - "owner-admin.js"
       - "company-invitations.js"
+      - "company-orders.js"
       - "wrangler.toml"
       - "migrations/**"
       - "invite/**"
