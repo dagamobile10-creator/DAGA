@@ -196,7 +196,13 @@ jobs:
           test "$code" = "401" || { echo "::error::Unauthenticated owner session endpoint returned HTTP $code"; exit 1; }
           code="$(curl -sS -o /tmp/owner-admin.json -w '%{http_code}' --max-time 15 https://daga-app-staging.dagamobile10.workers.dev/owner/admin/overview)"
           test "$code" = "401" || { echo "::error::Unauthenticated owner administration endpoint returned HTTP $code"; exit 1; }
+          for path in /api/company/plans /api/company/payment-methods /api/company/orders; do
+            code="$(curl -sS -o /tmp/company-orders.json -w '%{http_code}' --max-time 15 "https://daga-app-staging.dagamobile10.workers.dev$path")"
+            test "$code" = "401" || { echo "::error::Unauthenticated company order endpoint $path returned HTTP $code"; exit 1; }
+          done
+          code="$(curl -sS -o /tmp/order-payment.json -w '%{http_code}' --max-time 15 -H 'Content-Type: application/json' -d '{}' https://daga-app-staging.dagamobile10.workers.dev/api/company/orders/00000000-0000-4000-8000-000000000000/payment)"
+          test "$code" = "401" || { echo "::error::Unauthenticated order payment submission returned HTTP $code"; exit 1; }
           code="$(curl -sS -o /tmp/register.json -w '%{http_code}' --max-time 15 -H 'Content-Type: application/json' -d '{}' https://daga-app-staging.dagamobile10.workers.dev/api/company/auth/register)"
           test "$code" = "503" || { echo "::error::Registration must fail closed without delivery secrets; got HTTP $code"; exit 1; }
-          echo "Unauthenticated company, invitation, owner-session, and owner-admin APIs reject access; registration fails closed while delivery secrets are absent."
+          echo "Unauthenticated company, invitation, owner-session, owner-admin, plan, payment-method, order, and order-payment APIs reject access; registration fails closed while delivery secrets are absent."
           echo "Staging Worker only. Production Worker and main branch were not targeted."
