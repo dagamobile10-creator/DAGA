@@ -228,5 +228,36 @@ class VoiceIdentityGateTests(unittest.TestCase):
 
 
 
+class LiveClientSessionForwardingTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.client = (ROOT / "index.html").read_text(encoding="utf-8")
+        cls.worker = (ROOT / "worker.js").read_text(encoding="utf-8")
+
+    def test_session_bridge_uses_session_storage_and_bearer_header(self):
+        self.assertIn("const DAGA_SESSION_KEY='daga_account_session_v1'", self.client)
+        self.assertIn("sessionStorage.getItem(DAGA_SESSION_KEY)", self.client)
+        self.assertIn("headers.Authorization='Bearer '+token", self.client)
+        self.assertNotIn("localStorage.setItem(DAGA_SESSION_KEY", self.client)
+
+    def test_existing_live_api_calls_forward_optional_session(self):
+        self.assertIn("headers:dagaAuthHeaders({'Content-Type':'application/json'})", self.client)
+        self.assertIn('headers:dagaAuthHeaders({"Content-Type":"application/json"})', self.client)
+        self.assertIn("daga-voice.dagamobile10.workers.dev/chat", self.client)
+        self.assertIn("daga-voice.dagamobile10.workers.dev/tts", self.client)
+        self.assertIn("LIVE_ENDPOINT", self.client)
+        self.assertIn("headers:dagaAuthHeaders()", self.client)
+
+    def test_legacy_client_remains_compatible_without_session(self):
+        helper_start = self.client.index("function dagaAuthHeaders")
+        helper_end = self.client.index("\\n", helper_start)
+        helper = self.client[helper_start:helper_end]
+        self.assertIn("const headers={...extra}", helper)
+        self.assertIn("if(token&&token.length<=4096)", helper)
+        self.assertIn("return headers", helper)
+        self.assertIn('const voiceIdentityRequired = String(env.DAGA_VOICE_REQUIRE_AUTH || "").toLowerCase() === "true"', self.worker)
+
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
