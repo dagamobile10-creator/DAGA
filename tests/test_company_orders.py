@@ -44,7 +44,7 @@ class CompanyOrderRegressionTests(unittest.TestCase):
 
     def test_order_creation_cannot_cross_company_or_trust_client_identity(self):
         create_start = self.source.index('if (path === "/api/company/orders" && request.method === "POST")')
-        create_end = self.source.index("const paymentMatch = path.match", create_start)
+        create_end = self.source.index("if (orderPayment && request.method === \"POST\")", create_start)
         create_handler = self.source[create_start:create_end]
         self.assertIn("ownedApprovedStore(db, account.id, storeId)", create_handler)
         self.assertIn("account.id", create_handler)
