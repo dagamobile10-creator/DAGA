@@ -174,6 +174,8 @@ function json(env, data, status = 200) {
 }
 
 function cors(env, extra = {}) {
-  const origin = env.DAGA_ALLOWED_ORIGINS || "*";
-  return { "Access-Control-Allow-Origin": origin, "Vary": "Origin", "Access-Control-Allow-Methods": "GET,POST,OPTIONS", "Access-Control-Allow-Headers": "Content-Type, Authorization", ...extra };
+  const allowed = String(env.DAGA_ALLOWED_ORIGINS || "").split(",").map(value => value.trim()).filter(Boolean);
+  const requestOrigin = "";
+  const origin = allowed.includes("*") ? "*" : allowed.length === 1 ? allowed[0] : allowed.includes("null") ? "null" : "";
+  return { ...(origin ? { "Access-Control-Allow-Origin": origin } : {}), "Vary": "Origin", "Access-Control-Allow-Methods": "GET,POST,OPTIONS", "Access-Control-Allow-Headers": "Content-Type, Authorization", "Access-Control-Max-Age": "600", ...extra };
 }
