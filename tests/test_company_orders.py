@@ -116,6 +116,13 @@ class CompanyOrderRegressionTests(unittest.TestCase):
         self.assertLess(handler.index('error: "order_price_snapshot_failed"'), handler.index('status: "awaiting_payment" } }, 201'))
 
 
+    def test_staging_setup_applies_all_nine_migrations(self):
+        workflow = (ROOT / ".github" / "workflows" / "daga-staging-setup.yml").read_text(encoding="utf-8")
+        for migration in MIGRATIONS:
+            self.assertIn("migrations/" + migration, workflow, f"Staging setup omits {migration}")
+        self.assertIn('migrations_dir = "staging-migrations"', workflow)
+
+
     def test_only_one_pending_payment_submission_per_order_is_allowed(self):
         db = sqlite3.connect(":memory:")
         db.execute("PRAGMA foreign_keys=ON")
