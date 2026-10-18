@@ -580,5 +580,21 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertIn("revoked_at IS NULL", handler)
 
 
+    def test_every_owner_admin_route_is_gated_before_route_dispatch(self):
+        admin = (ROOT / "owner-admin.js").read_text(encoding="utf-8")
+        handler_start = admin.index("export async function handleOwnerAdmin")
+        handler_end = admin.index("\\n}", handler_start) + 2
+        handler = admin[handler_start:handler_end]
+        gate = handler.index("const owner = await authenticatedOwner(request, db)")
+        denial = handler.index('return json(env, { error: "owner_session_required" }, 401)')
+        dispatch = handler.index("try {")
+        self.assertLess(handler.index('if (!url.pathname.startsWith("/owner/admin/")) return null;'), gate)
+        self.assertLess(gate, denial)
+        self.assertLess(denial, dispatch)
+        self.assertIn('import { authenticatedOwner } from "./owner-auth.js";', admin)
+        self.assertNotIn("request.headers.get(\"X-Owner-Role\")", handler)
+        self.assertNotIn("url.searchParams.get(\"ownerId\")", handler)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
