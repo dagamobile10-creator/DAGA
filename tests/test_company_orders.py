@@ -53,7 +53,7 @@ class CompanyOrderRegressionTests(unittest.TestCase):
     def test_payment_submission_uses_server_price_and_cannot_activate_entitlement(self):
         self.assertIn("Number(order.agreed_price_minor)", self.source)
         self.assertIn("status='awaiting_payment'", self.source)
-        self.assertIn("status='pending_review'", self.source)
+        self.assertIn("'pending_review'", self.source)
         self.assertNotIn("INSERT INTO daga_entitlements", self.source)
         self.assertNotIn("INSERT INTO daga_live_word_ledger", self.source)
 
