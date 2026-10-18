@@ -34,6 +34,22 @@ jobs:
           open("/tmp/owner-console.js", "w", encoding="utf-8").write(scripts[0])
           PY
           node --check /tmp/owner-console.js
+      - name: Guard first-time owner setup UI and secret handling
+        run: |
+          python3 - <<'PY'
+          html = open("owner-console.html", encoding="utf-8").read()
+          checks = {
+              "first-time setup form exists": 'id="bootstrapStartForm"' in html and 'id="bootstrapVerifyForm"' in html,
+              "setup token is sent only in Authorization header": "'Authorization':'Bearer '+bootstrapTokenInMemory" in html,
+              "setup token is not persisted in browser storage": "localStorage.setItem('bootstrapToken'" not in html and "sessionStorage.setItem('bootstrapToken'" not in html,
+              "both bootstrap steps call same-origin owner endpoints": "API+'/owner/bootstrap/start'" in html and "API+'/owner/bootstrap/verify'" in html,
+              "OTP, strong password, and recovery code are collected": 'id="bootstrapPhoneCode"' in html and 'id="bootstrapEmailCode"' in html and 'id="bootstrapPassword"' in html and 'id="bootstrapRecoveryCode"' in html,
+              "cancel clears setup fields and in-memory token": "bootstrapTokenInMemory='';$('bootstrapToken').value=''" in html,
+          }
+          for name, ok in checks.items():
+              print(("PASS" if ok else "FAIL") + ": " + name)
+          assert all(checks.values()), "First-time owner setup UI security guard failed"
+          PY
       - name: Check company portal inline JavaScript syntax
         run: |
           python3 - <<'PY'
