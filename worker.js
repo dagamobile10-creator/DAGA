@@ -231,8 +231,8 @@ export default {
               reply = normalizeArabicReply(reply, userText);
               if (reply) return json({ reply, provider: "groq" });
               failures.push("Groq returned an empty reply");
-            } else failures.push("Groq: " + (data?.error?.message || "request failed"));
-          } catch (error) { failures.push("Groq: " + String(error)); }
+            } else failures.push("Groq request failed");
+          } catch (_) { failures.push("Groq request failed"); }
         }
 
         if (env.AI) {
@@ -246,9 +246,9 @@ export default {
               const cloudflareText = extractModelText(result);
               let reply = normalizeArabicReply(cloudflareText, userText);
               if (reply) return json({ reply, provider: "cloudflare-ai", model });
-              failures.push("Cloudflare AI (" + model + ") returned an empty reply");
+              failures.push("Cloudflare AI returned an empty reply");
             } catch (error) {
-              failures.push("Cloudflare AI (" + model + "): " + String(error?.message || error));
+              failures.push("Cloudflare AI request failed");
             }
           }
         }
@@ -266,13 +266,13 @@ export default {
               reply = normalizeArabicReply(reply, userText);
               if (reply) return json({ reply, provider: "openai" });
               failures.push("OpenAI returned an empty reply");
-            } else failures.push("OpenAI: " + (data?.error?.message || "request failed"));
-          } catch (error) { failures.push("OpenAI: " + String(error)); }
+            } else failures.push("OpenAI request failed");
+          } catch (_) { failures.push("OpenAI request failed"); }
         }
 
         if (!env.OPENAI_API_KEY && !env.GROQ_API_KEY && !env.AI) return json({ error: "No chat provider configured", detail: "Enable the AI binding in Cloudflare Workers, or configure GROQ_API_KEY / OPENAI_API_KEY." }, 503);
-        return json({ error: "All configured chat providers failed", detail: failures.join(" | ") }, 502);
-      } catch (error) { return json({ error: "Chat failure", detail: String(error) }, 500); }
+        return json({ error: "All configured chat providers failed" }, 502);
+      } catch (_) { return json({ error: "Chat failure" }, 500); }
     }
 
     if (url.pathname !== "/tts" || request.method !== "POST") return json({ error: "Not found" }, 404);
@@ -297,9 +297,9 @@ export default {
         headers: { "xi-api-key": env.ELEVENLABS_API_KEY, "Content-Type": "application/json", "Accept": "audio/mpeg" },
         body: JSON.stringify({ text, model_id: "eleven_flash_v2_5", language_code: "ar", voice_settings: { stability: 0.32, similarity_boost: 0.80, style: 0.22, speed: 0.88, use_speaker_boost: true } })
       });
-      if (!response.ok) return new Response(await response.text(), { status: response.status, headers: cors({ "Content-Type": "application/json" }) });
+      if (!response.ok) return json({ error: "tts_provider_request_failed", status: response.status }, response.status >= 400 && response.status <= 599 ? response.status : 502);
       return new Response(response.body, { headers: cors({ "Content-Type": response.headers.get("content-type") || "audio/mpeg", "Cache-Control": "no-store" }) });
-    } catch (error) { return json({ error: "Worker failure", detail: String(error) }, 500); }
+    } catch (_) { return json({ error: "tts_request_failed" }, 500); }
   }
 };
 
