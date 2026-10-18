@@ -42,6 +42,12 @@ jobs:
                   "authenticatedOwner(request, db)" in admin,
               "legacy memory endpoint remains identified as a separate authorization gate":
                   'url.pathname === "/memory"' in worker,
+              "memory auth mode derives ownership from a verified account session":
+                  'env.DAGA_MEMORY_REQUIRE_AUTH' in worker and 'authenticatedAccount(request, env.DAGA_APP_DB)' in worker,
+              "authenticated memory mode rejects unapproved or owner-only sessions":
+                  'account.status !== "approved" || account.role === "program_owner"' in worker,
+              "authenticated memory mode does not use caller-supplied userId":
+                  'userId = String(account.id || "").trim()' in worker,
           }
 
           for name, passed in checks.items():
