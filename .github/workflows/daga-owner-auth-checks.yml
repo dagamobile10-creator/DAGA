@@ -274,5 +274,5 @@ jobs:
           # Invitations are single-use; revocation and expiry are explicit states.
           invite_sql = db.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='daga_store_invitations'").fetchone()[0]
           assert "max_uses = 1" in invite_sql and "use_count BETWEEN 0 AND max_uses" in invite_sql
-          print("All eight migrations applied; company/account identity, invitation and auth challenge schemas, and uniqueness constraints exist.")
+          print("All nine migrations applied; company/account identity, invitation and auth challenge schemas, pending-payment uniqueness, and grant uniqueness constraints exist.")
           PY
