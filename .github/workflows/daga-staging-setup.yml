@@ -124,14 +124,19 @@ jobs:
           TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
           TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
           TWILIO_FROM_NUMBER: ${{ secrets.TWILIO_FROM_NUMBER }}
+          ESMS_API_KEY: ${{ secrets.ESMS_API_KEY }}
+          ESMS_SENDER_ID: ${{ secrets.ESMS_SENDER_ID }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           DAGA_EMAIL_FROM: ${{ secrets.DAGA_EMAIL_FROM }}
         run: |
           set -euo pipefail
           missing=()
-          for name in DAGA_OTP_PEPPER DAGA_OWNER_BOOTSTRAP_TOKEN DAGA_OWNER_PHONE DAGA_OWNER_EMAIL TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN TWILIO_FROM_NUMBER RESEND_API_KEY DAGA_EMAIL_FROM; do
+          for name in DAGA_OTP_PEPPER DAGA_OWNER_BOOTSTRAP_TOKEN DAGA_OWNER_PHONE DAGA_OWNER_EMAIL RESEND_API_KEY DAGA_EMAIL_FROM; do
             if [ -z "${!name:-}" ]; then missing+=("$name"); fi
           done
+          if [ -z "${ESMS_API_KEY:-}" ] && { [ -z "${TWILIO_ACCOUNT_SID:-}" ] || [ -z "${TWILIO_AUTH_TOKEN:-}" ] || [ -z "${TWILIO_FROM_NUMBER:-}" ]; }; then
+            missing+=("SMS_PROVIDER (set ESMS_API_KEY or all three TWILIO_* secrets)")
+          fi
           if [ "${#missing[@]}" -gt 0 ]; then
             missing_csv="$(IFS=', '; echo "${missing[*]}")"
             echo "::warning::Missing required staging auth/delivery secrets: $missing_csv"
@@ -145,8 +150,10 @@ jobs:
             } >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          for name in DAGA_OTP_PEPPER DAGA_OWNER_BOOTSTRAP_TOKEN DAGA_OWNER_PHONE DAGA_OWNER_EMAIL TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN TWILIO_FROM_NUMBER RESEND_API_KEY DAGA_EMAIL_FROM; do
-            printf '%s' "${!name}" | npx --yes wrangler@3 secret put "$name" --name daga-app-staging
+          for name in DAGA_OTP_PEPPER DAGA_OWNER_BOOTSTRAP_TOKEN DAGA_OWNER_PHONE DAGA_OWNER_EMAIL RESEND_API_KEY DAGA_EMAIL_FROM ESMS_API_KEY ESMS_SENDER_ID TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN TWILIO_FROM_NUMBER; do
+            if [ -n "${!name:-}" ]; then
+              printf '%s' "${!name}" | npx --yes wrangler@3 secret put "$name" --name daga-app-staging
+            fi
           done
           {
             echo "## DAGA staging readiness"
