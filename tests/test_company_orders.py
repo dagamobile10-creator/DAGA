@@ -286,8 +286,7 @@ class LiveDagaLoginFlowTests(unittest.TestCase):
 
     def test_login_verify_issues_a_hashed_server_session(self):
         verify = self.auth[self.auth.index("async function companyLoginVerify"):self.auth.index("async function registerStart")]
-        self.assertIn("const sessionToken = companyRandomToken(32)", verify)
-        self.assertIn("const sessionHash = await sha256(sessionToken)", verify)
+        self.assertIn("const sessionToken = companyRandomToken(32), sessionHash = await sha256(sessionToken)", verify)
         self.assertIn("INSERT INTO daga_auth_sessions", verify)
         self.assertIn("return json(env, { ok: true, account:", verify)
         self.assertIn("sessionToken, expiresAt", verify)
