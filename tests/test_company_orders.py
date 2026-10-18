@@ -300,5 +300,34 @@ class LiveDagaLoginFlowTests(unittest.TestCase):
 
 
 
+class AuthenticatedMemoryIsolationTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.worker = (ROOT / "worker.js").read_text(encoding="utf-8")
+        cls.client = (ROOT / "index.html").read_text(encoding="utf-8")
+
+    def test_authenticated_memory_uses_server_account_id_not_client_user_id(self):
+        route = self.worker[self.worker.index('if (url.pathname === "/memory"'):self.worker.index('if (url.pathname === "/liveavatar/avatars"')]
+        auth_branch = route[route.index('if (String(env.DAGA_MEMORY_REQUIRE_AUTH'):route.index('} else {')]
+        self.assertIn('authenticatedAccount(request, env.DAGA_APP_DB)', auth_branch)
+        self.assertIn('userId = String(account.id || "").trim()', auth_branch)
+        self.assertNotIn('body?.userId', auth_branch)
+        self.assertNotIn('url.searchParams.get("userId")', auth_branch)
+
+    def test_legacy_memory_identity_is_not_mistaken_for_authenticated_identity(self):
+        route = self.worker[self.worker.index('if (url.pathname === "/memory"'):self.worker.index('if (url.pathname === "/liveavatar/avatars"')]
+        self.assertIn('Temporary compatibility mode for the existing anonymous LIVE DAGA client', route)
+        self.assertIn('DAGA_MEMORY_REQUIRE_AUTH', route)
+        self.assertIn("dagaServerUserId()", self.client)
+        self.assertIn("dagaAuthHeaders()", self.client)
+
+    def test_voice_and_memory_auth_remain_separately_gated(self):
+        self.assertIn('DAGA_VOICE_REQUIRE_AUTH', self.worker)
+        self.assertIn('DAGA_MEMORY_REQUIRE_AUTH', self.worker)
+        self.assertIn('voiceIdentityRequired && ["/chat", "/tts", "/liveavatar/token"].includes(url.pathname)', self.worker)
+
+
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
