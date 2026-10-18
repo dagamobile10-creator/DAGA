@@ -147,8 +147,17 @@ The user-facing business entity is **Company** (Arabic: الشركة), not shop/
 
 ## Follow-up verification — 2026-10-18 (optional public API rate limiting)
 
-- Added an opt-in D1-backed rate limit gate for `/liveavatar/token`, `/chat`, `/tts`, and `/memory`. Defaults remain disabled unless `DAGA_PUBLIC_API_RATE_LIMITS=true`, to avoid unexpectedly breaking the existing anonymous LIVE DAGA client before account/session integration.
-- When enabled, each route uses a hashed IP/path bucket and the existing `daga_auth_rate_limits` table: LiveAvatar token 10 per 15 minutes; chat 30 per 5 minutes; TTS 30 per 5 minutes; memory 60 per 5 minutes. A missing D1 binding/pepper returns a configuration error; database failures fail closed with HTTP 429.
+- Added an opt-in D1-backed rate limit gate for `/liveavatar/token`, `/liveavatar/avatars`, `/chat`, `/tts`, and `/memory`. Defaults remain disabled unless `DAGA_PUBLIC_API_RATE_LIMITS=true`, to avoid unexpectedly breaking the existing anonymous LIVE DAGA client before account/session integration.
+- When enabled, each route uses a hashed IP/path bucket and the existing `daga_auth_rate_limits` table: LiveAvatar token 10 per 15 minutes; LiveAvatar metadata 30 per 5 minutes; chat 30 per 5 minutes; TTS 30 per 5 minutes; memory 60 per 5 minutes. A missing D1 binding/pepper returns a configuration error; database failures fail closed with HTTP 429.
 - Staging workflow now enables `DAGA_PUBLIC_API_RATE_LIMITS=true` alongside authenticated memory mode. This is a staging configuration change only; no production deployment was triggered.
 - CI guards were added for the configured route limits, feature flag, and D1 atomic rate-limit claim. The latest changes are committed to the draft PR branch; the latest CI result must be checked before treating the new guard as verified.
 - Release caveat: this is IP-based defense-in-depth, not authenticated user/tenant quotas. It is not production-enabled by default, and production must not enable it until the D1 table and `DAGA_OTP_PEPPER` are configured and voice-client compatibility is verified.
+
+
+## Follow-up verification — 2026-10-18 (owner review and duplicate-credit hardening)
+
+- Added conditional-state result checks to owner payment review so stale/concurrent review attempts return a conflict instead of reporting success when the payment/order transition did not occur.
+- Made owner word-credit adjustment retries idempotent under concurrent requests and bound the idempotency key to the original account, resolved company, credit amount, event type, and note. Reusing a request ID with different values returns a conflict; company scope is derived from the verified account when omitted.
+- Added regression checks for conditional payment review transitions, payload-bound word-credit idempotency, and optional rate limiting on the public LiveAvatar metadata route.
+- At commit `35c42e3ce92b341e79f628138f2eaad7208336bb`, owner-auth syntax/schema and invitation/order/payment regression tests passed (run 39089829991), session-security checks passed (run 39089829983), and source validation passed while deployment was skipped (run 39089829995). These checks validate code and schema invariants, not provider delivery or end-to-end staging payment review.
+- The public LiveAvatar metadata route is covered by the optional rate-limit guard; this change is not enabled in production by default. PR #7 remains a draft and unmerged. Production `main` and `daga-voice` were not deployed.
