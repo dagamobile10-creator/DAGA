@@ -334,7 +334,7 @@ async function rateLimit(db, env, key, limit, windowSeconds) {
 
 async function sendSms(env, phone, message) {
   // Prefer the Egypt-capable eSMS API when configured; retain Twilio as a fallback.
-  if (env.ESMS_API_KEY) {
+  if (env.ESMS_API_KEY && !String(env.ESMS_API_KEY).startsWith("esms_test_")) {
     const payload = { to: phone, text: message };
     if (env.ESMS_SENDER_ID) payload.sender_id = env.ESMS_SENDER_ID;
     const response = await fetch("https://sms.esmsafrica.io/api/messages/send", {
