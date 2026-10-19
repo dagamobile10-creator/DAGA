@@ -134,8 +134,12 @@ jobs:
           for name in DAGA_OTP_PEPPER DAGA_OWNER_BOOTSTRAP_TOKEN DAGA_OWNER_PHONE DAGA_OWNER_EMAIL RESEND_API_KEY DAGA_EMAIL_FROM; do
             if [ -z "${!name:-}" ]; then missing+=("$name"); fi
           done
-          if [ -z "${ESMS_API_KEY:-}" ] && { [ -z "${TWILIO_ACCOUNT_SID:-}" ] || [ -z "${TWILIO_AUTH_TOKEN:-}" ] || [ -z "${TWILIO_FROM_NUMBER:-}" ]; }; then
-            missing+=("SMS_PROVIDER (set ESMS_API_KEY or all three TWILIO_* secrets)")
+          if { [ -z "${ESMS_API_KEY:-}" ] || [[ "${ESMS_API_KEY}" == esms_test_* ]]; } && { [ -z "${TWILIO_ACCOUNT_SID:-}" ] || [ -z "${TWILIO_AUTH_TOKEN:-}" ] || [ -z "${TWILIO_FROM_NUMBER:-}" ]; }; then
+            if [[ "${ESMS_API_KEY:-}" == esms_test_* ]]; then
+              missing+=("LIVE_SMS_PROVIDER (esms_test_* is sandbox-only and cannot deliver real SMS)")
+            else
+              missing+=("SMS_PROVIDER (set a live ESMS_API_KEY or all three TWILIO_* secrets)")
+            fi
           fi
           if [ "${#missing[@]}" -gt 0 ]; then
             missing_csv="$(IFS=', '; echo "${missing[*]}")"
@@ -157,8 +161,13 @@ jobs:
           done
           {
             echo "## DAGA staging readiness"
-            echo "- Required owner-auth and SMS/email delivery secrets: present and configured on the isolated staging Worker."
-            echo "- Owner bootstrap and real OTP delivery still require end-to-end verification with the designated owner."
+            if [[ "${ESMS_API_KEY:-}" == esms_test_* ]]; then
+              echo "- eSMS key status: SANDBOX ONLY (esms_test_* does not deliver real SMS)."
+              echo "- Owner authentication / real SMS OTP delivery: BLOCKED until a live SMS provider is configured."
+            else
+              echo "- Required owner-auth and SMS/email delivery secrets: present and configured on the isolated staging Worker."
+              echo "- Owner bootstrap and real OTP delivery still require end-to-end verification with the designated owner."
+            fi
             echo "- Production Worker and main branch were not targeted."
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Verify staging health without printing secrets
