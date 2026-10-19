@@ -27,7 +27,7 @@ Set these server-side in Cloudflare Worker settings (never in GitHub files or br
 - `DAGA_OWNER_EMAIL`: the owner's verified email address.
 - `DAGA_OTP_PEPPER`: a separate high-entropy random secret used to hash verification codes and recovery codes.
 - `DAGA_APP_BASE_URL`: trusted HTTPS origin of the Worker serving `/go/`, `/company/`, and `/invite/`; do not derive it from the incoming Host header.
-- `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`: valid Twilio SMS configuration.
+- SMS provider: either a **live** `ESMS_API_KEY` (optionally `ESMS_SENDER_ID`) or all three `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `TWILIO_FROM_NUMBER`. Keys prefixed `esms_test_` are sandbox-only and do not count as live SMS delivery.
 - `RESEND_API_KEY`, `DAGA_EMAIL_FROM`: valid Resend email configuration; sender must be verified.
 
 Optionally set `DAGA_ALLOWED_ORIGINS` to the exact deployed frontend origin(s); do not use `*` in production. The phone and email values must be configured out-of-band. Never copy passwords, OTPs, recovery codes, provider keys, or bootstrap tokens into chat or source control.
@@ -44,13 +44,15 @@ curl -X POST "https://YOUR-WORKER/owner/bootstrap/start" \
 
 The owner receives separate SMS and email codes. Choose a new, unique password of 14–128 characters containing uppercase, lowercase, and a number, plus a new recovery code of at least 20 characters. Do not reuse credentials previously shared in chat.
 
-Then submit the codes and newly chosen credentials from the trusted terminal. Use environment variables or an interactive local prompt; do not put secrets into shell history:
+Then submit the codes and newly chosen credentials from the trusted terminal. The JSON body must be constructed with a JSON encoder; single-quoted JSON does not expand shell variables. Use environment variables populated through a secure prompt and avoid putting secrets directly into shell history:
 
 ```sh
+jq -n --arg phoneCode "$PHONE_CODE" --arg emailCode "$EMAIL_CODE" \
+  --arg password "$NEW_PASSWORD" --arg recoveryCode "$NEW_RECOVERY_CODE" \
+  '{phoneCode:$phoneCode,emailCode:$emailCode,password:$password,recoveryCode:$recoveryCode}' |
 curl -X POST "https://YOUR-WORKER/owner/bootstrap/verify" \
   -H "Authorization: Bearer $DAGA_OWNER_BOOTSTRAP_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"phoneCode":"$PHONE_CODE","emailCode":"$EMAIL_CODE","password":"$NEW_PASSWORD","recoveryCode":"$NEW_RECOVERY_CODE"}'
+  -H "Content-Type: application/json" --data-binary @-
 ```
 
 The recovery code must be a new, unique secret of at least 20 characters. The response contains a session token; keep it private. After the owner is provisioned, rotate/delete `DAGA_OWNER_BOOTSTRAP_TOKEN` in Worker secrets.
@@ -72,7 +74,7 @@ All routes fail closed when required configuration is absent. Sessions expire af
 
 The branch also contains `company-invitations.js`, the company portal at `/company/`, invitation acceptance at `/invite/`, and the public DAGA QR landing page at `/go/`. The company portal creates role-limited invitations and locally renders their QR codes; the public QR is separate from invitation QR codes. The program owner provisions a pending company and owner account in the owner console; the owner can sign in after the company is approved.
 
-The manual/automatic-on-development staging workflow is `.github/workflows/daga-staging-setup.yml`. It uses a separate `daga-app-staging` D1 and `daga-app-staging` Worker; it never targets the production `daga-voice` Worker. It requires GitHub Actions secrets named `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `DAGA_OTP_PEPPER`, `DAGA_OWNER_BOOTSTRAP_TOKEN`, `DAGA_OWNER_PHONE`, `DAGA_OWNER_EMAIL`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`, `RESEND_API_KEY`, and `DAGA_EMAIL_FROM`. The isolated staging Worker and D1 were provisioned successfully, all nine migrations applied, and runtime smoke checks passed for the health endpoint, CORS, /go/, /company/, /invite/, /owner/, /owner-console/, and unauthenticated API denial. However, the latest staging run reported DAGA_OTP_PEPPER missing and intentionally skipped configuring all owner/SMS/email delivery secrets. Therefore owner bootstrap, OTP delivery, real login, and recovery are NOT ready. Add valid values through GitHub repository Actions secrets; do not put their values in chat or source control.
+The manual/automatic-on-development staging workflow is `.github/workflows/daga-staging-setup.yml`. It uses a separate `daga-app-staging` D1 and `daga-app-staging` Worker; it never targets the production `daga-voice` Worker. It requires GitHub Actions secrets named `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `DAGA_OTP_PEPPER`, `DAGA_OWNER_BOOTSTRAP_TOKEN`, `DAGA_OWNER_PHONE`, `DAGA_OWNER_EMAIL`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`, `RESEND_API_KEY`, and `DAGA_EMAIL_FROM`. The isolated staging Worker and D1 were provisioned successfully, all nine migrations applied, and runtime smoke checks passed for the health endpoint, CORS, /go/, /company/, /invite/, /owner/, /owner-console/, and unauthenticated API denial. The staging workflow now explicitly marks `esms_test_*` as sandbox-only and blocks the owner-auth readiness status unless a live SMS provider is configured (or complete live Twilio credentials are present). The last verified staging run completed before the latest sandbox-key guard commit; owner bootstrap, real SMS OTP delivery, login, and recovery still require a fresh staging run and end-to-end verification. Do not put secret values in chat or source control.
 
 ## Not yet release-ready
 
