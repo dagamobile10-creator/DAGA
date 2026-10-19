@@ -26,7 +26,7 @@ async function bootstrapStart(request, env) {
   if (!db) return json(env, { error: "owner_auth_database_not_configured" }, 503);
   const required = ["DAGA_OWNER_BOOTSTRAP_TOKEN", "DAGA_OWNER_PHONE", "DAGA_OWNER_EMAIL",
     "RESEND_API_KEY", "DAGA_EMAIL_FROM", "DAGA_OTP_PEPPER"];
-  const smsConfigured = Boolean(env.ESMS_API_KEY ||
+  const smsConfigured = Boolean((env.ESMS_API_KEY && !String(env.ESMS_API_KEY).startsWith("esms_test_")) ||
     (env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN && env.TWILIO_FROM_NUMBER));
   if (required.some(key => !env[key]) || !smsConfigured) return json(env, { error: "owner_auth_not_configured" }, 503);
   const auth = request.headers.get("Authorization") || "";
@@ -131,7 +131,7 @@ async function bootstrapVerify(request, env) {
 async function recoveryStart(request, env) {
   const db = env.DAGA_APP_DB;
   const required = ["DAGA_OWNER_PHONE", "DAGA_OWNER_EMAIL", "RESEND_API_KEY", "DAGA_EMAIL_FROM", "DAGA_OTP_PEPPER"];
-  const smsConfigured = Boolean(env.ESMS_API_KEY ||
+  const smsConfigured = Boolean((env.ESMS_API_KEY && !String(env.ESMS_API_KEY).startsWith("esms_test_")) ||
     (env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN && env.TWILIO_FROM_NUMBER));
   if (!db || required.some(key => !env[key]) || !smsConfigured) return json(env, { error: "owner_recovery_not_configured" }, 503);
   const owner = await db.prepare("SELECT a.id FROM daga_program_owner o JOIN daga_accounts a ON a.id=o.account_id WHERE o.singleton_id=1 AND a.status='approved'").first();
