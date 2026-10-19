@@ -34,6 +34,17 @@ jobs:
           open("/tmp/owner-console.js", "w", encoding="utf-8").write(scripts[0])
           PY
           node --check /tmp/owner-console.js
+      - name: Guard sandbox SMS keys cannot pass real OTP readiness
+        run: |
+          python3 - <<'PY'
+          auth = open("owner-auth.js", encoding="utf-8").read()
+          assert '!String(env.ESMS_API_KEY).startsWith("esms_test_")' in auth, "Sandbox eSMS key must not count as a live provider"
+          sms = auth[auth.index("async function sendSms("):auth.index("async function sendEmail(")]
+          assert 'env.ESMS_API_KEY && !String(env.ESMS_API_KEY).startsWith("esms_test_")' in sms, "Sandbox eSMS key must not be used for live SMS sends"
+          assert "sms_provider_not_configured" in sms, "Missing live provider must fail closed"
+          assert 'startsWith("esms_test_")' in auth, "Sandbox-key distinction must remain explicit"
+          print("Sandbox eSMS keys cannot be treated as real SMS delivery credentials.")
+          PY
       - name: Guard first-time owner setup UI and secret handling
         run: |
           python3 - <<'PY'
