@@ -3,10 +3,11 @@ name: DAGA isolated staging setup
 on:
   workflow_dispatch:
   push:
-    branches: [daga-v30-implementation]
+    branches: [daga-v30-implementation, daga-email-only-auth]
     paths:
       - ".github/workflows/daga-staging-setup.yml"
       - "worker.js"
+      - "index.html"
       - "owner-console.html"
       - "owner-auth.js"
       - "owner-admin.js"
@@ -88,6 +89,9 @@ jobs:
           DAGA_APP_BASE_URL = "https://daga-app-staging.dagamobile10.workers.dev"
           DAGA_ALLOWED_ORIGINS = "https://dagamobile10-creator.github.io"
           DAGA_MEMORY_REQUIRE_AUTH = "true"
+          # Keep voice auth explicitly off until the browser client sends verified sessions.
+          # Staging smoke tests below exercise anonymous chat/TTS compatibility only.
+          DAGA_VOICE_REQUIRE_AUTH = "false"
           DAGA_PUBLIC_API_RATE_LIMITS = "true"
           [[d1_databases]]
           binding = "DAGA_APP_DB"
@@ -102,7 +106,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p staging-migrations
-          for file in migrations/0001_daga_core.sql migrations/0002_daga_owner_auth.sql migrations/0003_daga_owner_credentials.sql migrations/0004_daga_offers.sql migrations/0005_daga_store_identity_invitations.sql migrations/0006_daga_public_identity_ids.sql migrations/0007_daga_company_registration_challenges.sql migrations/0008_daga_company_login_challenges.sql migrations/0009_daga_payment_submission_uniqueness.sql; do
+          for file in migrations/0001_daga_core.sql migrations/0002_daga_owner_auth.sql migrations/0003_daga_owner_credentials.sql migrations/0004_daga_offers.sql migrations/0005_daga_store_identity_invitations.sql migrations/0006_daga_public_identity_ids.sql migrations/0007_daga_company_registration_challenges.sql migrations/0008_daga_company_login_challenges.sql migrations/0009_daga_payment_submission_uniqueness.sql migrations/0010_email_only_auth.sql; do
             clean="staging-migrations/$(basename "$file")"
             grep -v '^[[:space:]]*PRAGMA foreign_keys' "$file" > "$clean"
           done
@@ -114,18 +118,12 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: deploy --config wrangler.staging.toml
       - name: Configure staging-only auth and delivery secrets
+        id: configure-secrets
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           DAGA_OTP_PEPPER: ${{ secrets.DAGA_OTP_PEPPER }}
           DAGA_OWNER_BOOTSTRAP_TOKEN: ${{ secrets.DAGA_OWNER_BOOTSTRAP_TOKEN }}
-          DAGA_OWNER_PHONE: ${{ secrets.DAGA_OWNER_PHONE }}
-          DAGA_OWNER_EMAIL: ${{ secrets.DAGA_OWNER_EMAIL }}
-          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
-          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
-          TWILIO_FROM_NUMBER: ${{ secrets.TWILIO_FROM_NUMBER }}
-          ESMS_API_KEY: ${{ secrets.ESMS_API_KEY }}
-          ESMS_SENDER_ID: ${{ secrets.ESMS_SENDER_ID }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           DAGA_EMAIL_FROM: ${{ secrets.DAGA_EMAIL_FROM }}
           ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
@@ -146,16 +144,9 @@ jobs:
             fi
           done
           missing=()
-          for name in DAGA_OTP_PEPPER DAGA_OWNER_BOOTSTRAP_TOKEN DAGA_OWNER_PHONE DAGA_OWNER_EMAIL RESEND_API_KEY DAGA_EMAIL_FROM; do
+          for name in DAGA_OTP_PEPPER DAGA_OWNER_BOOTSTRAP_TOKEN RESEND_API_KEY DAGA_EMAIL_FROM; do
             if [ -z "${!name:-}" ]; then missing+=("$name"); fi
           done
-          if { [ -z "${ESMS_API_KEY:-}" ] || [[ "${ESMS_API_KEY}" == esms_test_* ]]; } && { [ -z "${TWILIO_ACCOUNT_SID:-}" ] || [ -z "${TWILIO_AUTH_TOKEN:-}" ] || [ -z "${TWILIO_FROM_NUMBER:-}" ]; }; then
-            if [[ "${ESMS_API_KEY:-}" == esms_test_* ]]; then
-              missing+=("LIVE_SMS_PROVIDER (esms_test_* is sandbox-only and cannot deliver real SMS)")
-            else
-              missing+=("SMS_PROVIDER (set a live ESMS_API_KEY or all three TWILIO_* secrets)")
-            fi
-          fi
           if [ "${#missing[@]}" -gt 0 ]; then
             missing_csv="$(IFS=', '; echo "${missing[*]}")"
             echo "::warning::Missing required staging auth/delivery secrets: $missing_csv"
@@ -163,27 +154,26 @@ jobs:
               echo "## DAGA staging readiness"
               echo "- Infrastructure: deployed; schema migrations and runtime smoke checks are verified separately below."
               echo "- Owner authentication / OTP delivery: **BLOCKED**."
+            echo "- Voice/chat/TTS are explicitly in legacy compatibility mode; this does not establish tenant-secure voice identity."
               echo "- Missing GitHub Actions repository secrets: $missing_csv."
               echo "- Add the missing secrets under Settings → Secrets and variables → Actions, then rerun this workflow."
               echo "- Optional voice secrets missing: ${voice_missing[*]:-none}."
               echo "- Production Worker and main branch were not targeted."
             } >> "$GITHUB_STEP_SUMMARY"
+            echo "auth_ready=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          for name in DAGA_OTP_PEPPER DAGA_OWNER_BOOTSTRAP_TOKEN DAGA_OWNER_PHONE DAGA_OWNER_EMAIL RESEND_API_KEY DAGA_EMAIL_FROM ESMS_API_KEY ESMS_SENDER_ID TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN TWILIO_FROM_NUMBER; do
+          for name in DAGA_OTP_PEPPER DAGA_OWNER_BOOTSTRAP_TOKEN RESEND_API_KEY DAGA_EMAIL_FROM; do
             if [ -n "${!name:-}" ]; then
               printf '%s' "${!name}" | npx --yes wrangler@3 secret put "$name" --name daga-app-staging
             fi
           done
+          echo "auth_ready=true" >> "$GITHUB_OUTPUT"
           {
             echo "## DAGA staging readiness"
-            if [[ "${ESMS_API_KEY:-}" == esms_test_* ]]; then
-              echo "- eSMS key status: SANDBOX ONLY (esms_test_* does not deliver real SMS)."
-              echo "- Owner authentication / real SMS OTP delivery: BLOCKED until a live SMS provider is configured."
-            else
-              echo "- Required owner-auth and SMS/email delivery secrets: present and configured on the isolated staging Worker."
-              echo "- Owner bootstrap and real OTP delivery still require end-to-end verification with the designated owner."
-            fi
+            echo "- Email-only owner authentication and email OTP delivery secrets: present and configured on the isolated staging Worker."
+            echo "- Owner bootstrap and real email delivery still require end-to-end verification with the designated owner."
+            echo "- Voice/chat/TTS remain explicitly in legacy compatibility mode until the client sends verified sessions; do not treat these smoke tests as authenticated voice validation."
             echo "- Production Worker and main branch were not targeted."
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Verify staging health without printing secrets
@@ -271,6 +261,22 @@ jobs:
           code="$(curl -sS -o /tmp/order-payment.json -w '%{http_code}' --max-time 15 -H 'Content-Type: application/json' -d '{}' https://daga-app-staging.dagamobile10.workers.dev/api/company/orders/00000000-0000-4000-8000-000000000000/payment)"
           test "$code" = "401" || { echo "::error::Unauthenticated order payment submission returned HTTP $code"; exit 1; }
           code="$(curl -sS -o /tmp/register.json -w '%{http_code}' --max-time 15 -H 'Content-Type: application/json' -d '{}' https://daga-app-staging.dagamobile10.workers.dev/api/company/auth/register)"
-          test "$code" = "503" || { echo "::error::Registration must fail closed without delivery secrets; got HTTP $code"; exit 1; }
-          echo "Unauthenticated company, invitation, owner-session, owner-admin, plan, payment-method, offer, order, and order-payment APIs reject access; registration fails closed while delivery secrets are absent."
+          test "$code" = "400" || { echo "::error::Registration must reject an empty invalid request; got HTTP $code"; exit 1; }
+          echo "Unauthenticated company, invitation, owner-session, owner-admin, plan, payment-method, offer, order, and order-payment APIs reject access; registration rejects malformed requests."
           echo "Staging Worker only. Production Worker and main branch were not targeted."
+      - name: Require owner-auth secrets for a green staging run
+        if: always()
+        env:
+          AUTH_READY: ${{ steps.configure-secrets.outputs.auth_ready }}
+          SMOKE_OUTCOME: ${{ steps.configure-secrets.outcome }}
+        run: |
+          set -euo pipefail
+          if [ "$SMOKE_OUTCOME" != "success" ]; then
+            echo "::error::Staging auth-secret configuration step did not complete successfully."
+            exit 1
+          fi
+          if [ "$AUTH_READY" != "true" ]; then
+            echo "::error::Staging infrastructure may be deployed, but owner authentication/email delivery secrets are missing. This run must not be reported as staging-ready."
+            exit 1
+          fi
+          echo "Staging owner-auth secret readiness gate passed."

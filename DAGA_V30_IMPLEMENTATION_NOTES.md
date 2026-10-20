@@ -2,6 +2,8 @@
 
 This branch is a protected development track based on the existing main branch. The live index.html, existing LIVE DAGA behavior, and original V30 dashboard are not replaced by this migration.
 
+**Current authentication baseline (`daga-email-only-auth`, 2026-10-20):** account access is email-only. Historical notes below may describe the earlier phone/SMS design; that design is superseded. Do not configure or require phone numbers, SMS providers, or phone OTPs for the current flow.
+
 ## First implementation artifact
 
 migrations/0001_daga_core.sql defines the proposed D1 data model for:
@@ -22,7 +24,7 @@ migrations/0001_daga_core.sql defines the proposed D1 data model for:
 - `company/portal.html` provides the company login and invitation-management portal. `invite/index.html` provides the invitation acceptance flow. The Worker serves both from its own origin so invite links do not depend on GitHub Pages copying nested files.
 - Manager invitations are limited to employees; a manager must have the invite-employees permission and can only revoke their own employee invitations. Owner-only actions remain behind the program-owner session.
 - `.github/workflows/daga-staging-setup.yml` is a manual-only workflow that provisions/reuses a separate `daga-app-staging` D1 database, applies tracked migrations, deploys a separate `daga-app-staging` Worker, and installs staging secrets. Pushes only validate the workflow; they do not provision or deploy staging resources.
-- CI syntax and SQLite schema/security regression checks pass on the current development branch. This does not prove real SMS/email delivery, Cloudflare D1 runtime behavior, invitation acceptance across two devices, or deployment configuration.
+- CI syntax and SQLite schema/security regression checks pass on the current development branch. This does not prove real email delivery, Cloudflare D1 runtime behavior, invitation acceptance across two devices, or deployment configuration.
 
 ## Legacy voice/API hardening update — 2026-10-18
 
@@ -80,14 +82,14 @@ The current branch includes implemented owner-auth groundwork and company invita
 
 ## Owner authentication implementation progress
 
-- Added `owner-auth.js` with one-time bootstrap start/verify, SMS + email OTP delivery adapters (Twilio and Resend), PBKDF2 password hashing, one-owner-only provisioning, hashed bearer sessions, login, logout, and dual-channel recovery with recovery-code rotation.
+- Added `owner-auth.js` with one-time bootstrap start/verify, email OTP delivery (Resend; the earlier SMS adapter is no longer part of account authentication), PBKDF2 password hashing, one-owner-only provisioning, hashed bearer sessions, login, logout, and dual-channel recovery with recovery-code rotation.
 - Wired the owner-auth handler into `worker.js` without replacing the existing chat/TTS/LiveAvatar implementation.
 - Added migrations `0002_daga_owner_auth.sql` and `0003_daga_owner_credentials.sql`, plus `.github/workflows/daga-owner-auth-checks.yml` for syntax and fresh-SQLite migration checks.
 - Added `security/OWNER_AUTH_DEPLOYMENT.md` with the required environment configuration and staging-only bootstrap steps.
 
 ## Current release status
 
-The development branch now has working code paths for company invitation creation, revocation, acceptance, invitation-bound registration, phone+email OTP login, company memberships, and the public/company/invitation HTML pages. Registration now claims a verified single-use invitation and creates the account, membership, session, and audit event in one D1 batch; accepting an invite for an existing membership is blocked before token consumption. Company login OTP verification is rate-limited by both IP and account. Registration input validation was also corrected so email addresses and six-digit OTPs are checked with proper JavaScript regexes; regression coverage now guards against double-escaped patterns and confirms company approval/rejection/suspension updates the owner account in the same D1 batch. CI passed the current syntax, security-regression, and fresh-SQLite-migration checks in run [38996021940](https://github.com/dagamobile10-creator/DAGA/actions/runs/38996021940). The isolated staging workflow completed successfully in run [38996019065](https://github.com/dagamobile10-creator/DAGA/actions/runs/38996019065): it created/reused a separate staging D1, applied migrations 0001–0008, deployed a separate staging Worker, and passed HTTP smoke tests for `/go/`, `/company/`, `/invite/`, unauthenticated company/invitation endpoints, and registration failing closed while delivery secrets are absent. This is staging validation, not production deployment or proof of real SMS/email delivery.
+The development branch now has working code paths for company invitation creation, revocation, acceptance, invitation-bound registration, email + password login, company memberships, and the public/company/invitation HTML pages. Registration now claims a verified single-use invitation and creates the account, membership, session, and audit event in one D1 batch; accepting an invite for an existing membership is blocked before token consumption. Company login OTP verification is rate-limited by both IP and account. Registration input validation was also corrected so email addresses and six-digit OTPs are checked with proper JavaScript regexes; regression coverage now guards against double-escaped patterns and confirms company approval/rejection/suspension updates the owner account in the same D1 batch. CI passed the current syntax, security-regression, and fresh-SQLite-migration checks in run [38996021940](https://github.com/dagamobile10-creator/DAGA/actions/runs/38996021940). The isolated staging workflow completed successfully in run [38996019065](https://github.com/dagamobile10-creator/DAGA/actions/runs/38996019065): it created/reused a separate staging D1, applied migrations 0001–0008, deployed a separate staging Worker, and passed HTTP smoke tests for `/go/`, `/company/`, `/invite/`, unauthenticated company/invitation endpoints, and registration failing closed while delivery secrets are absent. This is staging validation, not production deployment or proof of real email delivery.
 
 ## Owner admin API and console progress
 
@@ -110,7 +112,7 @@ The user-facing business entity is **Company** (Arabic: الشركة), not shop/
 - Added CI regression guards for singleton program-owner identity, bootstrap bearer-token protection, refusal to provision a second program owner, and the rule that password verification alone cannot issue a session before both phone and email OTPs pass.
 - Latest owner-auth CI run: [39059823015](https://github.com/dagamobile10-creator/DAGA/actions/runs/39059823015) — passed at commit `c1c8eaaa20be4167553c7b8659f490e21d389222`. Validation includes JavaScript syntax, security regression guards, company invitation tests, and all eight migrations against fresh SQLite.
 - Latest Pages workflow validation at the same commit: [39059825512](https://github.com/dagamobile10-creator/DAGA/actions/runs/39059825512) — passed. On a pull-request event this workflow validates the source; it does not publish GitHub Pages.
-- Owner phone/email and SMS/email delivery secrets intentionally remain the final setup step, as requested. Without those secrets, staging cannot complete real owner bootstrap/login/recovery or prove real OTP delivery.
+- Only email delivery configuration remains required for authentication. Phone numbers and SMS provider secrets are not used by the current email-only flow.
 - Still release-blocking: end-to-end testing with configured staging delivery, manager/employee permission and cross-company isolation tests, and authenticated identity integration for the legacy `/memory`, `/chat`, `/tts`, and LiveAvatar routes. These are explicitly not marked complete. PR #7 remains open; no merge or production Worker deployment was performed.
 
 ## Follow-up verification — 2026-10-18 (stage-six security pass)
@@ -122,7 +124,7 @@ The user-facing business entity is **Company** (Arabic: الشركة), not shop/
 - PR #7 is still a draft and unmerged. No production Worker, production D1, or `main` branch was changed.
 - **Stage-six is in progress, not complete.** The passing checks are code/schema/regression checks; they do not prove real authentication delivery or complete runtime authorization.
 - Confirmed release blockers still include the unauthenticated legacy `/memory` route accepting a caller-selected `userId`, unauthenticated `/chat` and `/tts`, and LiveAvatar token issuance without a company/role identity check. These routes must be integrated with authenticated identity without breaking the existing LIVE DAGA UI/voice flow. Until then, this branch is not safe to merge into production.
-- The staging environment still needs the intentionally deferred owner contact and SMS/email provider secrets before real OTP bootstrap/login/recovery can be verified. After those are supplied through repository/Cloudflare secret settings, run the full staging checklist in `tests/OWNER_AUTH_STAGING_CHECKLIST.md`, then resolve any failures before considering a production release.
+- The staging environment needs the bootstrap token, OTP pepper, and verified email sender to test real email OTP delivery. Phone and SMS settings are not required. Run the full staging checklist in `tests/OWNER_AUTH_STAGING_CHECKLIST.md` before considering a production release.
 
 
 ## Follow-up verification — 2026-10-18 (isolated staging and owner-console routing)
@@ -166,3 +168,15 @@ The user-facing business entity is **Company** (Arabic: الشركة), not shop/
 
 
 - Follow-up payment hardening: migration `0009_daga_payment_submission_uniqueness.sql` enforces at most one `pending_review` payment submission per order using a partial unique index. The payment API returns a 409 conflict when a concurrent/duplicate pending submission already exists. The owner-auth workflow applies all nine migrations to fresh SQLite and checks the index; the order regression suite tests the database uniqueness and conflict response.
+
+## Email-only authentication update — 2026-10-20
+
+This section supersedes earlier references in this file to phone+email or dual-channel OTP for the active implementation branch `daga-email-only-auth`.
+
+- Program-owner login now uses verified email + password; one-time email OTP is used for initial provisioning and recovery, not on every login.
+- Company owners, managers, and employees use email + password. First-time password setup for approved admin-provisioned company accounts and password recovery use email OTP; recovery rotates the recovery code and revokes existing sessions.
+- Invitation registration remains invitation-bound and single-use, verifies email only, and creates the account credentials, membership, session, and audit event atomically.
+- Owner console, company portal, and invitation UI no longer ask for phone numbers or SMS codes. Existing black/gold styling, RTL layout, business dashboard sections, company approval, and invitation permissions are retained.
+- Migration `0010_email_only_auth.sql` creates the account-credentials table and removes legacy phone data and the `phone_e164` / `phone_verified_at` columns. Apply it only to the intended staging database after backup and review.
+- Automated checks and the fresh-SQLite migration suite are being rerun on this branch. Real email delivery and end-to-end staging authentication remain unverified until staging secrets/provider configuration are present.
+- No production D1 migration, production Worker deployment, merge to `main`, or change to the LIVE DAGA voice flow is authorized by this work.

@@ -20,70 +20,62 @@ Bind that database to the Worker as `DAGA_APP_DB`. Keep the existing `DAGA_MEMOR
 
 ## Required Worker secrets / variables
 
-Set these server-side in Cloudflare Worker settings (never in GitHub files or browser HTML):
+Set these server-side in the isolated staging Worker (never in GitHub files or browser HTML):
 
-- `DAGA_OWNER_BOOTSTRAP_TOKEN`: one-time high-entropy random secret, at least 32 random bytes.
-- `DAGA_OWNER_PHONE`: the owner's verified phone in international format, e.g. `+201xxxxxxxxx`.
-- `DAGA_OWNER_EMAIL`: the owner's verified email address.
-- `DAGA_OTP_PEPPER`: a separate high-entropy random secret used to hash verification codes and recovery codes.
-- `DAGA_APP_BASE_URL`: trusted HTTPS origin of the Worker serving `/go/`, `/company/`, and `/invite/`; do not derive it from the incoming Host header.
-- SMS provider: either a **live** `ESMS_API_KEY` (optionally `ESMS_SENDER_ID`) or all three `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `TWILIO_FROM_NUMBER`. Keys prefixed `esms_test_` are sandbox-only and do not count as live SMS delivery.
-- `RESEND_API_KEY`, `DAGA_EMAIL_FROM`: valid Resend email configuration; sender must be verified.
+- \`DAGA_OWNER_BOOTSTRAP_TOKEN\`: one-time high-entropy secret, at least 32 random bytes; used only for first-time program-owner provisioning.
+- \`DAGA_OTP_PEPPER\`: separate high-entropy secret used to hash OTPs and recovery codes.
+- \`RESEND_API_KEY\` and \`DAGA_EMAIL_FROM\`: valid Resend configuration with a verified sender.
+- \`DAGA_APP_BASE_URL\`: trusted HTTPS origin for company/invitation URLs; never derive it from the incoming Host header.
+- \`DAGA_ALLOWED_ORIGINS\`: exact deployed frontend origin(s); do not use \`*\` in production.
 
-Optionally set `DAGA_ALLOWED_ORIGINS` to the exact deployed frontend origin(s); do not use `*` in production. The phone and email values must be configured out-of-band. Never copy passwords, OTPs, recovery codes, provider keys, or bootstrap tokens into chat or source control.
+The email-only flow has no phone-number field, SMS provider, or phone OTP. The program owner's email is entered during one-time bootstrap and stored after successful verification. Never copy passwords, OTPs, recovery codes, provider keys, or bootstrap tokens into chat or source control.
 
-## One-time bootstrap
+## One-time program-owner bootstrap
 
-Only after all three migrations and providers are configured, call the bootstrap start endpoint from a trusted terminal (not from a public browser):
+Only run this against the isolated staging Worker after migration 0010 and email delivery are configured. The bootstrap token must be supplied out-of-band and must not be committed.
 
-```sh
-curl -X POST "https://YOUR-WORKER/owner/bootstrap/start" \
-  -H "Authorization: Bearer $DAGA_OWNER_BOOTSTRAP_TOKEN" \
-  -H "Content-Type: application/json" -d '{}'
-```
+Start by submitting the chosen owner email:
 
-The owner receives separate SMS and email codes. Choose a new, unique password of 14–128 characters containing uppercase, lowercase, and a number, plus a new recovery code of at least 20 characters. Do not reuse credentials previously shared in chat.
-
-Then submit the codes and newly chosen credentials from the trusted terminal. The JSON body must be constructed with a JSON encoder; single-quoted JSON does not expand shell variables. Use environment variables populated through a secure prompt and avoid putting secrets directly into shell history:
-
-```sh
-jq -n --arg phoneCode "$PHONE_CODE" --arg emailCode "$EMAIL_CODE" \
-  --arg password "$NEW_PASSWORD" --arg recoveryCode "$NEW_RECOVERY_CODE" \
-  '{phoneCode:$phoneCode,emailCode:$emailCode,password:$password,recoveryCode:$recoveryCode}' |
-curl -X POST "https://YOUR-WORKER/owner/bootstrap/verify" \
+\`\`\`sh
+jq -n --arg email "$OWNER_EMAIL" '{email:$email}' |
+curl -X POST "https://YOUR-STAGING-WORKER/owner/bootstrap/start" \
   -H "Authorization: Bearer $DAGA_OWNER_BOOTSTRAP_TOKEN" \
   -H "Content-Type: application/json" --data-binary @-
-```
+\`\`\`
 
-The recovery code must be a new, unique secret of at least 20 characters. The response contains a session token; keep it private. After the owner is provisioned, rotate/delete `DAGA_OWNER_BOOTSTRAP_TOKEN` in Worker secrets.
+The owner receives one six-digit email verification code. Choose a unique password of 14–128 characters with uppercase, lowercase, and a number, and a unique recovery code of at least 20 characters. Then submit:
 
-## Routes implemented in this branch
+\`\`\`sh
+jq -n --arg email "$OWNER_EMAIL" --arg emailCode "$EMAIL_CODE" \
+  --arg password "$NEW_PASSWORD" --arg recoveryCode "$NEW_RECOVERY_CODE" \
+  '{email:$email,emailCode:$emailCode,password:$password,recoveryCode:$recoveryCode}' |
+curl -X POST "https://YOUR-STAGING-WORKER/owner/bootstrap/verify" \
+  -H "Authorization: Bearer $DAGA_OWNER_BOOTSTRAP_TOKEN" \
+  -H "Content-Type: application/json" --data-binary @-
+\`\`\`
 
-- `POST /owner/bootstrap/start`: sends independent phone/email OTPs; requires bootstrap bearer token.
-- `POST /owner/bootstrap/verify`: verifies both OTPs and creates the single program owner; requires bootstrap bearer token.
-- `POST /owner/auth/login`: body `{"identifier":"owner email or phone","password":"..." }`; validates the password and sends separate SMS and email OTPs; does not issue a session yet.
-- `POST /owner/auth/login/verify`: body `{"phoneCode":"123456","emailCode":"123456"}`; only after both codes verify does it issue an opaque bearer session.
-- `GET /owner/auth/me`: validates the bearer session and returns masked owner contact details.
-- `POST /owner/auth/logout`: revokes the bearer session.
-- `POST /owner/recovery/start`: sends recovery OTPs to the configured owner phone and email.
-- `POST /owner/recovery/complete`: requires both OTPs, the current recovery code, a new password, and a new recovery code; revokes all sessions and rotates the recovery code.
+Use secure prompts or a secrets manager for values rather than placing secrets in shell history. The recovery code is never shown again; store it offline. After successful provisioning, rotate or remove \`DAGA_OWNER_BOOTSTRAP_TOKEN\`.
 
-All routes fail closed when required configuration is absent. Sessions expire after eight hours. Passwords use PBKDF2-HMAC-SHA256 with 310,000 iterations and a per-password random salt; OTPs and session tokens are stored as hashes.
+## Email-only authentication routes
 
-## Company onboarding and staging
+- \`POST /owner/bootstrap/start\`: accepts the email to be verified and sends one email OTP; requires the one-time bootstrap bearer token.
+- \`POST /owner/bootstrap/verify\`: verifies the email OTP and creates the one program-owner account; requires the bootstrap token.
+- \`POST /owner/auth/login\`: body \`{"email":"owner@example.com","password":"..."}\`; verifies email + password and issues a session without an OTP on every login.
+- \`POST /owner/recovery/start\`: sends a temporary code to the program owner's registered email.
+- \`POST /owner/recovery/complete\`: requires the email OTP, current recovery code, new password, and new recovery code; rotates credentials and revokes old sessions.
+- \`POST /api/company/auth/register\` and \`/register/verify\`: invitation-bound registration with one email OTP, password, and recovery code. The invitation remains single-use and role/permission checks are unchanged.
+- \`POST /api/company/auth/login\`: company owner, manager, and employee sign-in with email + password.
+- \`POST /api/company/auth/setup/start\` and \`/setup/verify\`: approved existing accounts without credentials can verify email and create a password.
+- \`POST /api/company/auth/recovery/start\` and \`/recovery/complete\`: email OTP + current recovery code; successful recovery rotates the recovery code and revokes existing sessions.
+- \`GET /api/company/auth/me\` and \`POST /api/company/auth/logout\`: inspect and revoke the current session.
 
-The branch also contains `company-invitations.js`, the company portal at `/company/`, invitation acceptance at `/invite/`, and the public DAGA QR landing page at `/go/`. The company portal creates role-limited invitations and locally renders their QR codes; the public QR is separate from invitation QR codes. The program owner provisions a pending company and owner account in the owner console; the owner can sign in after the company is approved.
+Migration \`0010_email_only_auth.sql\` creates company credential storage and removes the legacy phone columns. Apply it only to the intended staging database after backup and review.
 
-The manual/automatic-on-development staging workflow is `.github/workflows/daga-staging-setup.yml`. It uses a separate `daga-app-staging` D1 and `daga-app-staging` Worker; it never targets the production `daga-voice` Worker. It requires GitHub Actions secrets named `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `DAGA_OTP_PEPPER`, `DAGA_OWNER_BOOTSTRAP_TOKEN`, `DAGA_OWNER_PHONE`, `DAGA_OWNER_EMAIL`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`, `RESEND_API_KEY`, and `DAGA_EMAIL_FROM`. The isolated staging Worker and D1 were provisioned successfully, all nine migrations applied, and runtime smoke checks passed for the health endpoint, CORS, /go/, /company/, /invite/, /owner/, /owner-console/, and unauthenticated API denial. The staging workflow now explicitly marks `esms_test_*` as sandbox-only and blocks the owner-auth readiness status unless a live SMS provider is configured (or complete live Twilio credentials are present). The last verified staging run completed before the latest sandbox-key guard commit; owner bootstrap, real SMS OTP delivery, login, and recovery still require a fresh staging run and end-to-end verification. Do not put secret values in chat or source control.
+## Staging status and release gates
 
-## Not yet release-ready
+The staging workflow is \`.github/workflows/daga-staging-setup.yml\`; it uses the separate \`daga-app-staging\` D1 database and Worker and does not deploy the production \`daga-voice\` Worker. The owner-auth CI and isolated staging setup passed for commit \`7ee89f7152dc01242bcd15cbf4911f87d73aad5c\`. These results verify the workflow's static/schema checks and staging job, not actual mailbox delivery or full owner/company end-to-end authentication.
 
-- These routes do not by themselves provide a finished owner dashboard or authorization for every existing business/payment/store endpoint.
-- The existing `/memory`, `/chat`, `/tts`, and LiveAvatar routes have not been comprehensively integrated with authenticated user/store context.
-- The owner endpoints need automated unit/integration tests and a staging deployment before production. Owner password login now requires both SMS and email OTP verification before a session is issued.
-- Restrict CORS to the real production origins, verify provider delivery, verify D1 migrations, and run `tests/OWNER_AUTH_STAGING_CHECKLIST.md` before release.
-- Do not claim production owner security is enabled until the staging checks pass and the Worker deployment is verified.
-
+Before production release, manually verify email delivery, owner bootstrap/login/recovery, company owner approval and password setup, two-device invitation registration, role/permission enforcement, expired/replayed/concurrent invitations, session revocation, and cross-company isolation. Existing \`/memory\`, \`/chat\`, \`/tts\`, and LiveAvatar routes are not comprehensively integrated with authenticated company identity. Do not merge to \`main\` or deploy the production Worker until the release gates are complete and explicitly approved.
 
 ## Owner console and administration APIs
 
