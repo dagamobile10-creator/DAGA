@@ -4,13 +4,13 @@ Do not use production data, real customer accounts, or real payment records duri
 
 ## Prerequisites
 - [ ] Dedicated D1 database is created and bound as `DAGA_APP_DB`.
-- [ ] Migrations 0001–0009 are applied in order, including stable identities, invitations, registration OTPs, company-login OTPs, and the partial unique index that prevents duplicate pending payment submissions.
-- [ ] Worker secrets are set in Cloudflare: bootstrap token, OTP pepper, owner phone/email, Twilio credentials/sender, Resend API key, verified sender.
+- [ ] Migrations 0001–0010 are applied in order, including stable identities, invitations, registration OTPs, company-login OTPs, and the partial unique index that prevents duplicate pending payment submissions.
+- [ ] Worker secrets are set in Cloudflare: bootstrap token, OTP pepper, Resend API key, verified sender.
 - [ ] `DAGA_ALLOWED_ORIGINS` is set to the exact staging frontend origin.
 - [ ] `DAGA_APP_BASE_URL` is set to the trusted HTTPS staging frontend origin/path used to create invitation links; it is never derived from the request Host header.
 - [ ] Invitation page at `/invite/?token=...` is served over HTTPS and calls the staging Worker URL, not the production voice Worker until the application D1 binding is verified.
-- [ ] `POST /api/company/auth/register` and `/register/verify` send and verify SMS/email OTPs; OTP challenges are hashed, expire, have bounded attempts, and use unique atomic claim IDs.
-- [ ] `POST /api/company/auth/login` and `/login/verify` renew company sessions with both verified channels; verify replay/race tests.
+- [ ] `POST /api/company/auth/register` and `/register/verify` send and verify email OTPs; OTP challenges are hashed, expire, have bounded attempts, and use unique atomic claim IDs.
+- [ ] `POST /api/company/auth/login` and `/login/verify` create company sessions with email + password; verify replay/race tests.
 - [ ] `GET /api/company/auth/me` returns only approved companies and active memberships; `POST /api/company/auth/logout` revokes the current bearer session.
 - [ ] Provider test delivery succeeds; do not expose codes in logs.
 - [ ] Bootstrap token is generated out-of-band and not committed.
@@ -18,7 +18,7 @@ Do not use production data, real customer accounts, or real payment records duri
 ## Bootstrap and owner protection
 - [ ] Bootstrap start without bearer token returns 401.
 - [ ] Wrong bootstrap token returns 401.
-- [ ] Valid bootstrap start sends separate SMS and email codes.
+- [ ] Valid bootstrap start sends one email verification code to the email supplied for the owner.
 - [ ] Wrong, expired, consumed, and five-times-attempted OTPs fail.
 - [ ] Password below policy is rejected.
 - [ ] Successful verification creates exactly one `program_owner` and one owner singleton.
@@ -31,8 +31,8 @@ Do not use production data, real customer accounts, or real payment records duri
 - [ ] Repeated login attempts hit rate limits.
 - [ ] Valid login returns a session; `/owner/auth/me` succeeds only with it.
 - [ ] Logout revokes the session; replaying it fails.
-- [ ] Recovery sends codes only to configured owner contacts.
-- [ ] Recovery fails if either OTP, current recovery code, or password policy is wrong.
+- [ ] Recovery sends a temporary code only to the verified owner email.
+- [ ] Recovery fails if the email OTP, current recovery code, or password policy is wrong.
 - [ ] Successful recovery rotates the recovery code and revokes all prior sessions.
 - [ ] Recovery is rate-limited; OTPs/recovery codes never appear in logs.
 
@@ -91,3 +91,15 @@ Do not use production data, real customer accounts, or real payment records duri
 - [ ] Editing a company display name does not change its public ID.
 - [ ] Public ID / identity QR alone never authenticates or grants access.
 - [ ] Company terminology is used in user-facing copy; internal legacy SQL names are not renamed without a separate compatibility migration.
+
+
+## Email-only authentication migration
+- [ ] Migration 0010 is applied only to the intended staging D1 database after review and backup.
+- [ ] Owner login uses verified email and password and never requires an OTP on every login.
+- [ ] First-time owner bootstrap verifies the supplied email before creating the singleton program-owner account.
+- [ ] Company owner created from the admin dashboard can set a password after approval using a single-use email OTP.
+- [ ] Invitation registration keeps its single-use invitation check, verifies email, and creates password/recovery code and membership atomically.
+- [ ] Company login, setup, and recovery are rate-limited; recovery rotates recovery code and revokes prior sessions.
+- [ ] Existing approved accounts without credentials can set a password through email verification.
+- [ ] Migration 0010 clears stored phone values; no authentication endpoint requires phone fields or SMS secrets.
+- [ ] Passwords/recovery codes are never stored in plaintext; OTPs are hashed, expire, have bounded attempts, and are single-use.
