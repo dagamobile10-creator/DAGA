@@ -48,6 +48,14 @@ jobs:
                   'account.status !== "approved" || account.role === "program_owner"' in worker,
               "authenticated memory mode does not use caller-supplied userId":
                   'userId = String(account.id || "").trim()' in worker,
+              "voice identity gate covers chat, TTS, and LiveAvatar token routes":
+                  'const voiceIdentityRequired = String(env.DAGA_VOICE_REQUIRE_AUTH || "").toLowerCase() === "true"' in worker and 'if (voiceIdentityRequired && ["/chat", "/tts", "/liveavatar/token"].includes(url.pathname))' in worker,
+              "LiveAvatar token route has an early auth gate before provider calls":
+                  'if (String(env.DAGA_VOICE_REQUIRE_AUTH || "").toLowerCase() === "true")' in worker and 'if (!account || account.status !== "approved" || account.role === "program_owner")' in worker and worker.indexOf('if (String(env.DAGA_VOICE_REQUIRE_AUTH || "").toLowerCase() === "true")') < worker.indexOf('if (!env.LIVEAVATAR_API_KEY)', worker.indexOf('if (url.pathname === "/liveavatar/token"')),
+              "voice identity gate fails closed when app database is missing":
+                  'if (!env.DAGA_APP_DB) return json({ error: "authenticated_voice_not_configured" }, 503)' in worker,
+              "voice identity gate rejects unapproved and program-owner sessions":
+                  'if (!voiceAccount || voiceAccount.status !== "approved" || voiceAccount.role === "program_owner")' in worker,
           }
 
           for name, passed in checks.items():
