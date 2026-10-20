@@ -271,7 +271,8 @@ jobs:
           missing = required - names
           assert not missing, f"Missing tables: {sorted(missing)}"
           assert "daga_account_credentials" in names, "Email-only company account credentials table is missing"
-          assert db.execute("SELECT COUNT(*) FROM daga_accounts WHERE phone_e164 IS NOT NULL OR phone_verified_at IS NOT NULL").fetchone()[0] == 0, "Migration 0010 must clear legacy phone authentication values"
+          account_columns = {row[1] for row in db.execute("PRAGMA table_info(daga_accounts)")}
+          assert "phone_e164" not in account_columns and "phone_verified_at" not in account_columns, "Migration 0010 must remove legacy phone authentication columns"
           for table, column in (("daga_entitlements", "order_id"), ("daga_live_word_ledger", "request_id"), ("daga_stores", "public_id"), ("daga_accounts", "public_id"), ("daga_store_invitations", "token_hash")):
               indexes = db.execute("PRAGMA index_list(" + table + ")").fetchall()
               unique_columns = []
