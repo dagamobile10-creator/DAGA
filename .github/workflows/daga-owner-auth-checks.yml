@@ -27,6 +27,7 @@ jobs:
               "configured auth secrets mark readiness true": 'echo "auth_ready=true" >> "$GITHUB_OUTPUT"' in workflow,
               "missing secrets cannot yield a green staging run": 'Require owner-auth secrets for a green staging run' in workflow and 'if [ "$AUTH_READY" != "true" ]; then' in workflow,
               "production worker is not the staging target": 'name = "daga-voice"' not in workflow,
+              "production deploy workflow is main-only": "if: github.ref == 'refs/heads/main'" in open(".github/workflows/deploy-worker.yml", encoding="utf-8").read(),
           }
           for name, ok in checks.items():
               print(("PASS" if ok else "FAIL") + ": " + name)
