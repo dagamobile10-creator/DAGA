@@ -50,6 +50,8 @@ jobs:
                   "constantTimeEqual(oldHash,owner.recovery_code_hash)" in section(auth, "async function recoveryComplete", "async function ownerLogin") and "recovery_code_hash=?,updated_at=?" in section(auth, "async function recoveryComplete", "async function ownerLogin"),
               "invalid owner recovery code does not consume the email OTP":
                   section(auth, "async function recoveryComplete", "async function ownerLogin").index("if(!owner.recovery_code_hash||!constantTimeEqual(oldHash,owner.recovery_code_hash))") < section(auth, "async function recoveryComplete", "async function ownerLogin").index('consumeChallenge(db,env,"password_reset"'),
+              "company recovery validates both codes before consuming the challenge":
+                  (lambda src: src.index("if(!codeValid||!account.recovery_code_hash") < src.index("results=await db.batch([") and src.index("results=await db.batch([") < src.index("UPDATE daga_company_login_challenges SET consumed_at=?,claim_id=?"))(open("company-invitations.js", encoding="utf-8").read()[open("company-invitations.js", encoding="utf-8").read().index("async function companyRecoveryComplete"):open("company-invitations.js", encoding="utf-8").read().index("async function registerStart")]),
               "owner admin routes require an authenticated owner":
                   "authenticatedOwner(request, db)" in admin,
               "legacy memory endpoint remains identified as a separate authorization gate":
