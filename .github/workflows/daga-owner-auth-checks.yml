@@ -199,6 +199,12 @@ jobs:
           assert "ps.reviewed_by=?" in block and "ps.reviewed_at=?" in block, "Side effects must match the exact review claim"
           assert "o.status='paid_approved'" in block, "Side effects must require approved order"
           assert "AND undefined" not in block, "Incomplete payment review SQL predicate"
+          review = admin[admin.index('const reviewMatch='):admin.index('if(path==="/owner/admin/words/adjust"')]
+          assert 'Number(sub.claimed_amount_minor)!==Number(sub.agreed_price_minor)' in review, "Payment approval must verify claimed amount equals the order snapshot"
+          assert 'Number(reviewResults?.[0]?.meta?.changes || 0) !== 1' in review, "Review must fail unless exactly one pending submission is claimed"
+          assert 'Number(reviewResults?.[1]?.meta?.changes || 0) !== 1' in review, "Order transition must fail unless exactly one order is changed"
+          assert 'if(b.status==="confirmed")' in review, "Entitlement/word-credit statements must only be added for confirmation"
+          assert 'status:"paid_approved"' not in review, "Never return a paid state as a hardcoded successful response"
           print("Payment review conditional guards are present.")
           PY
       - name: Guard owner identity, email-only login, and admin authorization
