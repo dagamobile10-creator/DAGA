@@ -42,15 +42,33 @@ Use short, explicit sections. Mark uncertain or temporary information clearly.
 - Never invent current shop balances, sales, orders, or inventory.
 - Treat examples and policy descriptions as guidance, not as live operational data.
 
-## Safe update process
+## Owner dashboard editor
 
-1. Add only facts confirmed by the owner.
-2. Keep core identity, privacy, security, and anti-fabrication rules in the Worker code; do not override them with knowledge entries.
-3. Configure `DAGA_KNOWLEDGE_BASE` in a non-production Worker environment first.
-4. Test normal conversation, Egyptian Arabic, memory/recall, and refusal to invent live shop figures.
-5. Review the diff and deployment configuration before promoting to production.
-6. Do not deploy this feature to the production `daga-voice` Worker without explicit approval.
+The app-owner dashboard now includes a **معرفة ضجه** section. After the Worker branch is deployed to a test environment and the owner dashboard is served by that same Worker, an authenticated program owner can:
+- Add entries with a title, category, and content.
+- Review up to 200 saved entries.
+- Edit entries and enable/disable them.
+- See changes recorded in the admin audit log.
 
-## Future improvement
+The API uses `/owner/admin/knowledge` and is protected by the existing authenticated-owner gate. The Worker creates the knowledge table/index on the first authenticated knowledge API request, so a separate manual schema migration is not required for this draft.
 
-A proper owner-only knowledge editor backed by the app database would allow approved entries to be added, edited, disabled, and audited without redeploying the Worker. That requires a separate authenticated API, database schema/migration, and UI; this draft does not claim to implement that editor.
+Active database entries are appended to chat context, newest first, with at most 30 entries and a combined total capped at 8,000 characters. The optional `DAGA_KNOWLEDGE_BASE` environment value is still supported and is combined with database entries.
+
+## Safe test and release process
+
+1. Merge/deploy nothing to production yet; this change is still a draft.
+2. Create a non-production Worker environment with the existing required database bindings and secrets.
+3. Open the owner console on that same Worker origin and authenticate as the program owner.
+4. Add a harmless test fact such as “Demo fact: the test shop name is Cedar.” Ask LIVE DAGA about it and verify the answer, then disable the entry and verify it is no longer supplied in new chat requests.
+5. Test editing, empty fields, overlong content, unauthenticated API calls, and audit-log entries.
+6. Verify the existing chat, TTS, LiveAvatar and account flows still work.
+7. Review the final diff and deployment settings before considering production release.
+
+Do not put passwords, API keys, customer personal data, or private account/financial records in the knowledge entries. Knowledge entries provide context, not authorization or live operational data. The assistant must still never invent balances, orders, sales, inventory, or claim actions that were not performed.
+
+## Current release status
+
+- Code and owner UI are committed to the feature branch.
+- This draft has not been merged or deployed.
+- Live runtime tests have not yet been performed.
+- The production `daga-voice` Worker and `main` branch have not been changed.
