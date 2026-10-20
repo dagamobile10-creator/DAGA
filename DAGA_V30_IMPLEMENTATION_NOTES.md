@@ -166,3 +166,15 @@ The user-facing business entity is **Company** (Arabic: الشركة), not shop/
 
 
 - Follow-up payment hardening: migration `0009_daga_payment_submission_uniqueness.sql` enforces at most one `pending_review` payment submission per order using a partial unique index. The payment API returns a 409 conflict when a concurrent/duplicate pending submission already exists. The owner-auth workflow applies all nine migrations to fresh SQLite and checks the index; the order regression suite tests the database uniqueness and conflict response.
+
+## Email-only authentication update — 2026-10-20
+
+This section supersedes earlier references in this file to phone+email or dual-channel OTP for the active implementation branch `daga-email-only-auth`.
+
+- Program-owner login now uses verified email + password; one-time email OTP is used for initial provisioning and recovery, not on every login.
+- Company owners, managers, and employees use email + password. First-time password setup for approved admin-provisioned company accounts and password recovery use email OTP; recovery rotates the recovery code and revokes existing sessions.
+- Invitation registration remains invitation-bound and single-use, verifies email only, and creates the account credentials, membership, session, and audit event atomically.
+- Owner console, company portal, and invitation UI no longer ask for phone numbers or SMS codes. Existing black/gold styling, RTL layout, business dashboard sections, company approval, and invitation permissions are retained.
+- Migration `0010_email_only_auth.sql` creates the account-credentials table and removes legacy phone data and the `phone_e164` / `phone_verified_at` columns. Apply it only to the intended staging database after backup and review.
+- Automated checks and the fresh-SQLite migration suite are being rerun on this branch. Real email delivery and end-to-end staging authentication remain unverified until staging secrets/provider configuration are present.
+- No production D1 migration, production Worker deployment, merge to `main`, or change to the LIVE DAGA voice flow is authorized by this work.
