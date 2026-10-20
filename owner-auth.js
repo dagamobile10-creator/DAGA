@@ -71,8 +71,10 @@ const code=String(body.emailCode||"").trim(),oldRecovery=String(body.recoveryCod
 if(!/^\d{6}$/.test(code)||oldRecovery.length<20||oldRecovery.length>128||newRecovery.length<20||newRecovery.length>128||!validPassword(password))return json(env,{error:"valid_recovery_fields_required"},400);
 const owner=await db.prepare("SELECT a.id,a.email,c.recovery_code_hash FROM daga_program_owner o JOIN daga_accounts a ON a.id=o.account_id JOIN daga_owner_credentials c ON c.account_id=a.id WHERE o.singleton_id=1 AND a.status='approved'").first();if(!owner)return json(env,{error:"owner_not_provisioned"},409);
 if(!await rateLimit(db,env,"recovery-complete:"+(request.headers.get("CF-Connecting-IP")||"unknown"),5,3600))return json(env,{error:"rate_limited"},429);
-const [verified,oldHash]=await Promise.all([consumeChallenge(db,env,"password_reset",await sha256("email:"+String(owner.email).toLowerCase()),code),sha256(oldRecovery+":"+env.DAGA_OTP_PEPPER)]);
-if(!verified||!owner.recovery_code_hash||!constantTimeEqual(oldHash,owner.recovery_code_hash))return json(env,{error:"invalid_expired_or_used_recovery_credentials"},400);
+const oldHash=await sha256(oldRecovery+":"+env.DAGA_OTP_PEPPER);
+if(!owner.recovery_code_hash||!constantTimeEqual(oldHash,owner.recovery_code_hash))return json(env,{error:"invalid_expired_or_used_recovery_credentials"},400);
+const verified=await consumeChallenge(db,env,"password_reset",await sha256("email:"+String(owner.email).toLowerCase()),code);
+if(!verified)return json(env,{error:"invalid_expired_or_used_recovery_credentials"},400);
 const salt=randomToken(24),hash=await derivePassword(password,salt,PBKDF2_ITERATIONS),newHash=await sha256(newRecovery+":"+env.DAGA_OTP_PEPPER),now=new Date().toISOString();
 await db.batch([db.prepare("UPDATE daga_owner_credentials SET password_hash=?,password_salt=?,password_iterations=?,recovery_code_hash=?,updated_at=? WHERE account_id=?").bind(hash,salt,PBKDF2_ITERATIONS,newHash,now,owner.id),db.prepare("UPDATE daga_auth_sessions SET revoked_at=? WHERE account_id=? AND revoked_at IS NULL").bind(now,owner.id),db.prepare("UPDATE daga_auth_challenges SET consumed_at=? WHERE account_id=? AND purpose='password_reset' AND consumed_at IS NULL").bind(now,owner.id)]);
 return json(env,{ok:true,message:"Password reset. Log in again with the new password."});
