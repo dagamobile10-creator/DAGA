@@ -116,7 +116,7 @@ class CompanyOrderRegressionTests(unittest.TestCase):
         self.assertLess(handler.index('error: "order_price_snapshot_failed"'), handler.index('status: "awaiting_payment" } }, 201'))
 
 
-    def test_staging_setup_applies_all_nine_migrations(self):
+    def test_staging_setup_applies_all_ten_migrations(self):
         workflow = (ROOT / ".github" / "workflows" / "daga-staging-setup.yml").read_text(encoding="utf-8")
         for migration in MIGRATIONS:
             self.assertIn("migrations/" + migration, workflow, f"Staging setup omits {migration}")
@@ -266,14 +266,17 @@ class LiveDagaLoginFlowTests(unittest.TestCase):
         cls.worker = (ROOT / "worker.js").read_text(encoding="utf-8")
         cls.auth = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
 
-    def test_live_page_has_two_channel_login_and_session_verification(self):
-        for element_id in ("dagaAuthIdentifier", "dagaAuthPhoneCode", "dagaAuthEmailCode", "dagaAuthSend", "dagaAuthVerify", "dagaAuthLogout"):
+    def test_live_page_has_email_password_login_and_session_verification(self):
+        for element_id in ("dagaAuthIdentifier", "dagaAuthPassword", "dagaAuthSend", "dagaAuthLogout"):
             self.assertIn('id="' + element_id + '"', self.client)
+        self.assertNotIn('id="dagaAuthPhoneCode"', self.client)
+        self.assertNotIn('id="dagaAuthEmailCode"', self.client)
         self.assertIn("'/api/company/auth/login'", self.client)
-        self.assertIn("'/api/company/auth/login/verify'", self.client)
+        self.assertNotIn("'/api/company/auth/login/verify'", self.client)
         self.assertIn("sessionStorage.setItem('daga_account_session_v1',data.sessionToken)", self.client)
         self.assertIn("'/api/company/auth/me'", self.client)
         self.assertIn("'/api/company/auth/logout'", self.client)
+
 
     def test_session_is_forwarded_to_chat_tts_memory_and_liveavatar(self):
         self.assertIn("headers.Authorization='Bearer '+token", self.client)
@@ -284,12 +287,14 @@ class LiveDagaLoginFlowTests(unittest.TestCase):
     def test_worker_cors_allows_authorization_header(self):
         self.assertIn('"Access-Control-Allow-Headers": "Content-Type, Authorization"', self.worker)
 
-    def test_login_verify_issues_a_hashed_server_session(self):
-        verify = self.auth[self.auth.index("async function companyLoginVerify"):self.auth.index("async function registerStart")]
-        self.assertIn("const sessionToken = companyRandomToken(32), sessionHash = await sha256(sessionToken)", verify)
-        self.assertIn("INSERT INTO daga_auth_sessions", verify)
-        self.assertIn("return json(env, { ok: true, account:", verify)
-        self.assertIn("sessionToken, expiresAt", verify)
+    def test_email_password_login_issues_a_hashed_server_session(self):
+        login = self.auth[self.auth.index("async function companyLoginStart"):self.auth.index("async function companySetupStart")]
+        self.assertIn("companyRandomToken(32)", login)
+        self.assertIn("await sha256(token)", login)
+        self.assertIn("INSERT INTO daga_auth_sessions", login)
+        self.assertIn("return json(env,{ok:true,account:", login)
+        self.assertIn("sessionToken:token,expiresAt:expires", login)
+
 
     def test_optional_voice_gate_and_memory_gate_use_server_verified_identity(self):
         self.assertIn('voiceIdentityRequired && ["/chat", "/tts", "/liveavatar/token"].includes(url.pathname)', self.worker)
