@@ -79,7 +79,7 @@ Do not use production data, real customer accounts, or real payment records duri
 
 ## Release gates
 - [ ] CI syntax/schema workflow passes on the exact intended commit.
-- [ ] SMS/email delivery and end-to-end staging tests are verified by a human.
+- [ ] Email delivery and end-to-end staging tests are verified by a human.
 - [ ] Existing chat/TTS/LiveAvatar routes are tested after Worker changes.
 - [ ] Existing user-facing endpoints have role and tenant authorization; protecting owner routes alone is insufficient.
 - [ ] Production deployment is intentionally approved, then the actual Worker version and endpoint responses are verified.
