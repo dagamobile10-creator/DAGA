@@ -1,6 +1,18 @@
 name: DAGA V30 navigation checks
 
 on:
+  push:
+    branches:
+      - fix-daga-v30-navigation-flow
+    paths:
+      - "index.html"
+      - "go/index.html"
+      - "owner-console.html"
+      - "company/portal.html"
+      - "invite/index.html"
+      - "worker.js"
+      - "tests/test_navigation_routes.py"
+      - ".github/workflows/navigation-checks.yml"
   pull_request:
     branches:
       - daga-v30-implementation
