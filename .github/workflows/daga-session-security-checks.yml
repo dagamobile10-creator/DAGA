@@ -48,6 +48,8 @@ jobs:
                   "UPDATE daga_auth_challenges SET attempts=attempts+1 WHERE id=? AND consumed_at IS NULL AND attempts<5 AND expires_at>? RETURNING attempts" in section(auth, "async function consumeChallenge", "async function rateLimit") and "SET consumed_at=? WHERE id=? AND consumed_at IS NULL" in section(auth, "async function consumeChallenge", "async function rateLimit"),
               "owner recovery requires the current recovery code and rotates it":
                   "constantTimeEqual(oldHash,owner.recovery_code_hash)" in section(auth, "async function recoveryComplete", "async function ownerLogin") and "recovery_code_hash=?,updated_at=?" in section(auth, "async function recoveryComplete", "async function ownerLogin"),
+              "invalid owner recovery code does not consume the email OTP":
+                  section(auth, "async function recoveryComplete", "async function ownerLogin").index("if(!owner.recovery_code_hash||!constantTimeEqual(oldHash,owner.recovery_code_hash))") < section(auth, "async function recoveryComplete", "async function ownerLogin").index('consumeChallenge(db,env,"password_reset"'),
               "owner admin routes require an authenticated owner":
                   "authenticatedOwner(request, db)" in admin,
               "legacy memory endpoint remains identified as a separate authorization gate":
