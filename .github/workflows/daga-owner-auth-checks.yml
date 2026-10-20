@@ -2,9 +2,9 @@ name: DAGA V30 owner-auth checks
 
 on:
   push:
-    branches: [daga-v30-implementation]
+    branches: [daga-v30-implementation, daga-email-only-auth]
   pull_request:
-    branches: [main, daga-v30-implementation]
+    branches: [main, daga-v30-implementation, daga-email-only-auth]
 
 jobs:
   syntax-and-schema:
@@ -257,6 +257,7 @@ jobs:
               "migrations/0007_daga_company_registration_challenges.sql",
               "migrations/0008_daga_company_login_challenges.sql",
               "migrations/0009_daga_payment_submission_uniqueness.sql",
+              "migrations/0010_email_only_auth.sql",
           ):
               with open(path, encoding="utf-8") as f:
                   db.executescript(f.read())
@@ -269,6 +270,8 @@ jobs:
           }
           missing = required - names
           assert not missing, f"Missing tables: {sorted(missing)}"
+          assert "daga_account_credentials" in names, "Email-only company account credentials table is missing"
+          assert db.execute("SELECT COUNT(*) FROM daga_accounts WHERE phone_e164 IS NOT NULL OR phone_verified_at IS NOT NULL").fetchone()[0] == 0, "Migration 0010 must clear legacy phone authentication values"
           for table, column in (("daga_entitlements", "order_id"), ("daga_live_word_ledger", "request_id"), ("daga_stores", "public_id"), ("daga_accounts", "public_id"), ("daga_store_invitations", "token_hash")):
               indexes = db.execute("PRAGMA index_list(" + table + ")").fetchall()
               unique_columns = []
@@ -291,5 +294,5 @@ jobs:
           # Invitations are single-use; revocation and expiry are explicit states.
           invite_sql = db.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='daga_store_invitations'").fetchone()[0]
           assert "max_uses = 1" in invite_sql and "use_count BETWEEN 0 AND max_uses" in invite_sql
-          print("All nine migrations applied; company/account identity, invitation and auth challenge schemas, pending-payment uniqueness, and grant uniqueness constraints exist.")
+          print("All ten migrations applied; email-only credentials, company/account identity, invitation and auth challenge schemas, pending-payment uniqueness, and grant uniqueness constraints exist.")
           PY
