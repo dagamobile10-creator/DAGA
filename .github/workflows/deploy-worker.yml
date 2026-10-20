@@ -12,6 +12,8 @@ on:
 
 jobs:
   deploy-worker:
+    # Production Worker may only be deployed from the protected main branch, including manual dispatches.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
