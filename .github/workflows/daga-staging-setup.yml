@@ -177,6 +177,7 @@ jobs:
             if curl -fsS --max-time 15 https://daga-app-staging.dagamobile10.workers.dev/health -o /tmp/health.json; then break; fi
             sleep 5
           done
+          jq -e '.ok == true' /tmp/health.json >/dev/null || { echo "::error::Staging health endpoint did not report ok=true"; cat /tmp/health.json; exit 1; }
           jq '{ok,voiceConfigured,chatConfigured,freeChatConfigured,liveAvatarConfigured}' /tmp/health.json
           # Runtime CORS smoke test: only the configured staging origin may be authorized.
           curl -fsS -D /tmp/cors-allowed.headers -o /dev/null -X OPTIONS \
