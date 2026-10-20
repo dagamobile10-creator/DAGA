@@ -278,7 +278,7 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertIn('u.protocol !== "https:"', src)
         self.assertIn("await sha256(token)", src)
         self.assertIn('"/api/company/auth/register/verify"', src)
-        self.assertIn('"/api/company/auth/login/verify"', src)
+        self.assertIn('"/api/company/auth/login"', src)
         self.assertIn("claim_id=?", src)
         self.assertIn("SET consumed_at=?,claim_id=?", src)
         self.assertIn("export async function authenticatedAccount", (ROOT / "owner-auth.js").read_text(encoding="utf-8"))
