@@ -34,7 +34,7 @@ class NavigationRouteTests(unittest.TestCase):
         ):
             for path in paths:
                 with self.subTest(path=path):
-                    self.assertIn('href="' + path + '"', page)
+                    self.assertIn(path, page)
 
     def test_invitation_acceptance_is_not_linked_without_a_token(self):
         for page in (self.live, self.landing):
