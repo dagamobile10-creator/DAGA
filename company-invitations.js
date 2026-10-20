@@ -141,7 +141,7 @@ const aid=crypto.randomUUID(),publicId="DAGA-USER-"+aid.replace(/-/g,"").toUpper
 let results;try{results=await db.batch([
 db.prepare("UPDATE daga_company_registration_challenges SET consumed_at=?,claim_id=? WHERE id=? AND consumed_at IS NULL AND claim_id IS NULL AND attempts<=5 AND expires_at>?").bind(now,claim,ch.id,now),
 db.prepare("UPDATE daga_store_invitations SET status='accepted',use_count=1,accepted_by_account_id=?,accepted_at=? WHERE id=? AND token_hash=? AND status='pending' AND use_count=0 AND max_uses=1 AND expires_at>? AND EXISTS (SELECT 1 FROM daga_stores WHERE id=daga_store_invitations.store_id AND status='approved') AND EXISTS (SELECT 1 FROM daga_company_registration_challenges WHERE id=? AND claim_id=? AND channel='email') RETURNING id").bind(aid,now,invite.id,th,now,ch.id,claim),
-db.prepare("INSERT INTO daga_accounts (id,public_id,phone_e164,email,display_name,role,status,store_id,phone_verified_at,email_verified_at,created_at,updated_at) SELECT ?,?,NULL,?,?,?,'approved',?,NULL,?,?,? WHERE EXISTS (SELECT 1 FROM daga_store_invitations WHERE id=? AND status='accepted' AND accepted_by_account_id=? AND use_count=1)").bind(aid,publicId,email,name,invite.intended_role,invite.store_id,now,now,now,invite.id,aid),
+db.prepare("INSERT INTO daga_accounts (id,public_id,email,display_name,role,status,store_id,email_verified_at,created_at,updated_at) SELECT ?,?,?,?,?,?,'approved',?,?,? WHERE EXISTS (SELECT 1 FROM daga_store_invitations WHERE id=? AND status='accepted' AND accepted_by_account_id=? AND use_count=1)").bind(aid,publicId,email,name,invite.intended_role,invite.store_id,now,now,now,invite.id,aid),
 db.prepare("INSERT INTO daga_account_credentials (account_id,password_hash,password_salt,password_iterations,recovery_code_hash,created_at,updated_at) SELECT ?,?,?,310000,?,?,? WHERE EXISTS (SELECT 1 FROM daga_accounts WHERE id=?)").bind(aid,passwordHash,salt,rh,now,now,aid),
 db.prepare("INSERT INTO daga_store_memberships (id,store_id,account_id,role,status,permissions_json,invited_by_account_id,created_at,updated_at) SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM daga_accounts WHERE id=?) AND EXISTS (SELECT 1 FROM daga_store_invitations WHERE id=? AND status='accepted' AND accepted_by_account_id=? AND use_count=1)").bind(mid,invite.store_id,aid,invite.intended_role,"active",invite.permissions_json||"{}",invite.inviter_account_id,now,now,aid,invite.id,aid),
 db.prepare("INSERT INTO daga_auth_sessions (id,account_id,token_hash,created_at,expires_at,last_seen_at) SELECT ?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM daga_store_memberships WHERE id=? AND account_id=?)").bind(sid,aid,sessionHash,now,expiry,now,mid,aid),
@@ -170,12 +170,6 @@ async function companySendEmail(env, email, subject, html) {
 }
 function companyDigits() { return String(crypto.getRandomValues(new Uint32Array(1))[0] % 1000000).padStart(6, "0"); }
 function companyRandomToken(size) { const bytes = crypto.getRandomValues(new Uint8Array(size)); return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, ""); }
-function normalizeCompanyPhone(value) {
-  const digits = String(value || "").replace(/[^\d+]/g, "");
-  if (/^01\d{9}$/.test(digits)) return "+20" + digits.slice(1);
-  if (/^\+?20\d{10}$/.test(digits)) return digits.startsWith("+") ? digits : "+" + digits;
-  return /^\+[1-9]\d{7,14}$/.test(digits) ? digits : "";
-}
 function maskCompanyEmail(value) { const [u, d] = String(value || "").split("@"); return u && d ? u.slice(0, 2) + "•••@" + d : "••••"; }
 function constantTimeEqualCompany(a, b) { const x = String(a), y = String(b); let diff = x.length ^ y.length; const n = Math.max(x.length, y.length); for (let i = 0; i < n; i++) diff |= (x.charCodeAt(i % (x.length || 1)) || 0) ^ (y.charCodeAt(i % (y.length || 1)) || 0); return diff === 0; }
 
