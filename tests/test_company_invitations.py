@@ -213,9 +213,9 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertIn("INSERT INTO daga_store_memberships", handler)
         self.assertIn("await db.batch([", handler)
         self.assertIn("WHERE EXISTS (SELECT 1 FROM daga_store_invitations WHERE id=? AND status='accepted' AND accepted_by_account_id=? AND use_count=1)", handler)
-        self.assertIn("Number(results?.[2]?.meta?.changes || 0) !== 1", handler)
-        self.assertIn("Number(results?.[3]?.meta?.changes || 0) !== 1", handler)
-        self.assertIn("Number(results?.[4]?.meta?.changes || 0) !== 1", handler)
+        self.assertIn("Number(results?.[2]?.meta?.changes||0)!==1", handler)
+        self.assertIn("Number(results?.[3]?.meta?.changes||0)!==1", handler)
+        self.assertIn("Number(results?.[4]?.meta?.changes||0)!==1", handler)
 
     def test_registration_validation_regexes_are_not_double_escaped(self):
         source = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
