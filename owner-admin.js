@@ -132,27 +132,16 @@ export async function handleOwnerAdmin(request, env, url) {
 
     if(path==="/owner/admin/stores"&&request.method==="POST"){
       const b=await readJson(request);if(!b)return json(env,{error:"invalid_json"},400);
-      const displayName=String(b.displayName||"").trim().slice(0,120);
-      const legalIdentity=String(b.legalIdentity||"").trim().slice(0,120);
-      const ownerName=String(b.ownerName||"").trim().slice(0,100);
-      const email=String(b.email||"").trim().toLowerCase();
-      const rawPhone=String(b.phone||"").trim();
-      const phoneDigits=rawPhone.replace(/[^\d+]/g,"");
-      const phone=/^01\d{9}$/.test(phoneDigits)?"+20"+phoneDigits.slice(1):/^20\d{10}$/.test(phoneDigits)?"+"+phoneDigits:/^\+?[1-9]\d{7,14}$/.test(phoneDigits)?(phoneDigits.startsWith("+")?phoneDigits:"+"+phoneDigits):"";
-      if(displayName.length<2||legalIdentity.length<3||ownerName.length<2||!phone||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return json(env,{error:"valid_company_owner_fields_required"},400);
-      const duplicate=await db.prepare("SELECT id FROM daga_accounts WHERE phone_e164=? OR lower(email)=? LIMIT 1").bind(phone,email).first();
-      if(duplicate)return json(env,{error:"account_phone_or_email_already_exists"},409);
-      const id=crypto.randomUUID(),storeId=crypto.randomUUID(),now=new Date().toISOString();
-      const publicId="DAGA-USER-"+id.replace(/-/g,"").toUpperCase();
-      const companyPublicId="DAGA-COMPANY-"+storeId.replace(/-/g,"").toUpperCase();
-      try{
-        await db.batch([
-          db.prepare("INSERT INTO daga_accounts (id,public_id,phone_e164,email,display_name,role,status,store_id,created_at,updated_at) VALUES (?,?,?,?,?,'store_owner','pending',?,?,?)").bind(id,publicId,phone,email,ownerName,storeId,now,now),
-          db.prepare("INSERT INTO daga_stores (id,public_id,owner_account_id,legal_identity,display_name,status,created_at,updated_at) VALUES (?,?,?,?,?,'pending',?,?)").bind(storeId,companyPublicId,id,legalIdentity,displayName,now,now)
-        ]);
-      }catch(_){return json(env,{error:"company_owner_creation_conflict"},409);}
+      const displayName=String(b.displayName||"").trim().slice(0,120),legalIdentity=String(b.legalIdentity||"").trim().slice(0,120),ownerName=String(b.ownerName||"").trim().slice(0,100),email=String(b.email||"").trim().toLowerCase();
+      if(displayName.length<2||legalIdentity.length<3||ownerName.length<2||email.length>254||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return json(env,{error:"valid_company_owner_name_and_email_required"},400);
+      if(await db.prepare("SELECT id FROM daga_accounts WHERE lower(email)=? LIMIT 1").bind(email).first())return json(env,{error:"account_email_already_exists"},409);
+      const id=crypto.randomUUID(),storeId=crypto.randomUUID(),now=new Date().toISOString(),publicId="DAGA-USER-"+id.replace(/-/g,"").toUpperCase(),companyPublicId="DAGA-COMPANY-"+storeId.replace(/-/g,"").toUpperCase();
+      try{await db.batch([
+        db.prepare("INSERT INTO daga_accounts (id,public_id,phone_e164,email,display_name,role,status,store_id,phone_verified_at,email_verified_at,created_at,updated_at) VALUES (?,?,NULL,?,?,'store_owner','pending',?,NULL,NULL,?,?)").bind(id,publicId,email,ownerName,storeId,now,now),
+        db.prepare("INSERT INTO daga_stores (id,public_id,owner_account_id,legal_identity,display_name,status,created_at,updated_at) VALUES (?,?,?,?,?,'pending',?,?)").bind(storeId,companyPublicId,id,legalIdentity,displayName,now,now)
+      ]);}catch(_){return json(env,{error:"company_owner_creation_conflict"},409);}
       await audit(db,owner.id,"company_owner_provisioned","daga_stores",storeId,{companyPublicId,ownerPublicId:publicId});
-      return json(env,{ok:true,store:{id:storeId,publicId:companyPublicId,displayName,status:"pending"},owner:{id,publicId,displayName:ownerName,phoneMasked:phone.slice(0,4)+"••••"+phone.slice(-2),emailMasked:email.slice(0,2)+"•••@"+email.split("@")[1]},nextStep:"approve_company_then_owner_signs_in_with_phone_and_email_otp"},201);
+      return json(env,{ok:true,store:{id:storeId,publicId:companyPublicId,displayName,status:"pending"},owner:{id,publicId,displayName:ownerName,emailMasked:email.slice(0,2)+"•••@"+email.split("@")[1]},nextStep:"approve_company_then_owner_sets_password_using_email_code"},201);
     }
 
     if(path==="/owner/admin/stores"&&request.method==="GET"){
