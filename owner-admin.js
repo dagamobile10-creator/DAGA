@@ -22,6 +22,46 @@ export async function handleOwnerAdmin(request, env, url) {
       return json(env, { ok: true, stores: stores.results || [], accounts: pendingAccounts.results || [], activePlans: plans.results || [], pendingPaymentReviews: pendingPayments?.count || 0, activeEntitlements: activeEntitlements.results || [], liveWordsOutstanding: wordBalance?.remaining || 0 });
     }
 
+    if (path === "/owner/admin/knowledge" && request.method === "GET") {
+      await ensureKnowledgeTable(db);
+      const rows = await db.prepare("SELECT id,title,category,content,is_active,created_at,updated_at FROM daga_knowledge_entries ORDER BY updated_at DESC LIMIT 200").all();
+      return json(env, { ok: true, entries: rows.results || [] });
+    }
+    if (path === "/owner/admin/knowledge" && request.method === "POST") {
+      await ensureKnowledgeTable(db);
+      const b = await readJson(request); if (!b) return json(env, { error: "invalid_json" }, 400);
+      const title = String(b.title || "").trim().slice(0, 100);
+      const category = String(b.category || "عام").trim().slice(0, 40);
+      const content = String(b.content || "").trim();
+      if (!title || !content) return json(env, { error: "knowledge_title_and_content_required" }, 400);
+      if (content.length > 4000) return json(env, { error: "knowledge_content_too_long", maxLength: 4000 }, 413);
+      const count = await db.prepare("SELECT COUNT(*) AS count FROM daga_knowledge_entries").first();
+      if (Number(count?.count || 0) >= 200) return json(env, { error: "knowledge_entry_limit_reached", maxEntries: 200 }, 409);
+      const id = crypto.randomUUID(), now = new Date().toISOString();
+      await db.prepare("INSERT INTO daga_knowledge_entries (id,title,category,content,is_active,created_by,updated_by,created_at,updated_at) VALUES (?,?,?,?,1,?,?,?,?)")
+        .bind(id,title,category,content,owner.id,owner.id,now,now).run();
+      await audit(db,owner.id,"knowledge_entry_created","daga_knowledge_entries",id,{title,category});
+      return json(env,{ok:true,id},201);
+    }
+    const knowledgeMatch = path.match(/^\/owner\/admin\/knowledge\/([a-f0-9-]{36})$/i);
+    if (knowledgeMatch && request.method === "PATCH") {
+      await ensureKnowledgeTable(db);
+      const b = await readJson(request); if (!b) return json(env, { error: "invalid_json" }, 400);
+      const old = await db.prepare("SELECT id,title,category,content,is_active FROM daga_knowledge_entries WHERE id=?").bind(knowledgeMatch[1]).first();
+      if (!old) return json(env,{error:"knowledge_entry_not_found"},404);
+      const title = b.title === undefined ? old.title : String(b.title).trim().slice(0,100);
+      const category = b.category === undefined ? old.category : String(b.category).trim().slice(0,40);
+      const content = b.content === undefined ? old.content : String(b.content).trim();
+      const active = b.isActive === undefined ? old.is_active : (b.isActive ? 1 : 0);
+      if (!title || !category || !content) return json(env,{error:"knowledge_title_category_content_required"},400);
+      if (content.length > 4000) return json(env,{error:"knowledge_content_too_long",maxLength:4000},413);
+      const now = new Date().toISOString();
+      await db.prepare("UPDATE daga_knowledge_entries SET title=?,category=?,content=?,is_active=?,updated_by=?,updated_at=? WHERE id=?")
+        .bind(title,category,content,active,owner.id,now,knowledgeMatch[1]).run();
+      await audit(db,owner.id,"knowledge_entry_updated","daga_knowledge_entries",knowledgeMatch[1],{title,category,isActive:!!active});
+      return json(env,{ok:true});
+    }
+
     if(path==="/owner/admin/audit-log"&&request.method==="GET"){
       const limit=Math.min(200,Math.max(1,Number(url.searchParams.get("limit")||100)));
       const rows=await db.prepare("SELECT id,actor_account_id,action,target_type,target_id,details_json,created_at FROM daga_audit_log ORDER BY created_at DESC,id DESC LIMIT ?").bind(limit).all();
@@ -286,3 +326,8 @@ async function audit(db,actor,action,targetType,targetId,details){
 }
 function json(env,data,status=200){return new Response(JSON.stringify(data),{status,headers:cors(env,{"Content-Type":"application/json; charset=utf-8","Cache-Control":"no-store"})})}
 function cors(env,extra={}){const allowed=String(env.DAGA_ALLOWED_ORIGINS||"").split(",").map(x=>x.trim()).filter(Boolean);const origin=allowed.includes("*")?"*":allowed.length===1?allowed[0]:"";return {...(origin?{"Access-Control-Allow-Origin":origin}:{}),"Access-Control-Allow-Methods":"GET,POST,PATCH,OPTIONS","Access-Control-Allow-Headers":"Content-Type,Authorization","Access-Control-Max-Age":"600","Vary":"Origin",...extra}}
+
+async function ensureKnowledgeTable(db) {
+  await db.prepare("CREATE TABLE IF NOT EXISTS daga_knowledge_entries (id TEXT PRIMARY KEY, title TEXT NOT NULL, category TEXT NOT NULL, content TEXT NOT NULL, is_active INTEGER NOT NULL DEFAULT 1, created_by TEXT NOT NULL, updated_by TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)").run();
+  await db.prepare("CREATE INDEX IF NOT EXISTS idx_daga_knowledge_active_updated ON daga_knowledge_entries (is_active, updated_at)").run();
+}
