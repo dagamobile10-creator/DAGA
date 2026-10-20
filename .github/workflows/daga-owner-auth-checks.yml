@@ -164,9 +164,9 @@ jobs:
           python3 - <<'PY'
           auth = open("owner-auth.js", encoding="utf-8").read()
           assert r'/^\d{6}$/.test(emailCode)' in auth, "Email OTP validation regex missing or over-escaped"
-          assert r'/\d/.test(newPassword)' in auth, "Password digit validation regex missing or over-escaped"
+          assert r'/\d/.test(password)' in auth, "Password digit validation regex missing or over-escaped"
           assert r'/^\\d{6}$/.test(emailCode)' not in auth, "Found over-escaped OTP regex"
-          print("OTP and password digit validation patterns are correctly escaped.")
+          print("Email OTP and password digit validation patterns are correctly escaped.")
           PY
       - name: Guard payment-review idempotency predicates
         run: |
