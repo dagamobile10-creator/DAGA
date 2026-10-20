@@ -103,4 +103,7 @@ Do not use production data, real customer accounts, or real payment records duri
 - [ ] Confirm the real mailbox receives owner bootstrap, company setup, invitation-registration, and recovery messages.
 - [ ] Complete authenticated end-to-end checkout and owner payment-review tests.
 - [ ] Verify identity/tenant authorization for legacy memory/chat/TTS/LiveAvatar endpoints.
+- [ ] Confirm `DAGA_MEMORY_REQUIRE_AUTH` and `DAGA_VOICE_REQUIRE_AUTH` are explicitly configured per environment; both are staged identity gates and must not be enabled for the existing anonymous LIVE DAGA client until its supported sign-in/session flow is integrated and tested.
+- [ ] With auth gates disabled for compatibility, document that `/memory` still accepts a caller-supplied legacy `userId`; do not treat that compatibility mode as tenant-secure or expose sensitive account data through it.
+- [ ] With auth gates enabled in staging, verify unauthenticated `/memory`, `/chat`, `/tts`, and `/liveavatar/token` requests fail closed, while valid approved company sessions succeed.
 - [ ] Test manager/employee cross-company isolation and invite permission boundaries.
