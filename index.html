@@ -160,7 +160,13 @@ fetch('https://daga-voice.dagamobile10.workers.dev/tts',{method:'POST',headers:d
 if(typeof window.__dagaAvatarSpeak==='function'){
  try{
   const result=await window.__dagaAvatarSpeak(blob,text);
-  if(result&&result.played){avatar.classList.add('speaking');return}
+  if(result&&result.played){
+  if(avatar)avatar.classList.remove('speaking');
+  replying=false;
+  if(live&&!muted){state.textContent='مستعد أسمعك';setTimeout(()=>{if(live&&!muted&&!replying&&!rec)startListening()},100)}
+  else{singleMode=false;mic.textContent='🎙️';status.textContent='جاهز';state.textContent='خلصنا الأمر. اضغط المايك لو عندك أمر تاني'}
+  return
+}
  }catch(e){console.warn('Live avatar unavailable; using voice fallback',e)}
 }
 const url=URL.createObjectURL(blob);if(token!==speechToken){URL.revokeObjectURL(url);return}const a=new Audio(url);window.__dagaAudio=a;
