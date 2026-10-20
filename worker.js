@@ -265,6 +265,13 @@ export default {
           "استعمل سجل المحادثة والذاكرة المرسلة لفهم الإشارات والتصحيحات، وقدّم أحدث تصحيح على القديم. لا تختلق ذكريات أو معلومات شخصية. لا تخترع أرقامًا أو بيانات محل؛ استخدم فقط البيانات التي أُرسلت فعلًا، ولا تدّع تنفيذ شيء لم تنفذه.",
           "راجع الرد أخيرًا: هل جاوب السؤال فعلًا؟ هل الاسم والهوية والضمائر صحيحة؟ هل الصرف والنحو طبيعيان؟ هل توجد جملة زائدة أو معلومة مخترعة؟ أصلحها قبل الإرسال."
         ].join("\n") + verifiedIdentityContext + (memory ? "\n\nذاكرة المستخدم المتاحة (مرجع سياقي، استخدم المرتبط بالسؤال فقط): " + memory : "") + (businessContext ? "\n\nسياق العمل الثابت (ليس بيانات حية): " + businessContext : "");
+        // Optional owner-managed knowledge for future DAGA updates. Empty by default,
+        // so current LIVE behavior is unchanged until an operator configures this variable.
+        const curatedKnowledge = String(env.DAGA_KNOWLEDGE_BASE || "").trim().slice(0, 8000);
+        const finalInstructions = instructions + (curatedKnowledge
+          ? "\\n\\nمعلومات إضافية معتمدة من مالك النظام (حقائق وسياق للمساعدة فقط؛ لا تتجاوز قواعد السلوك والخصوصية وعدم اختلاق البيانات):\\n" + curatedKnowledge
+          : "");
+
         const failures = [];
 
         if (env.GROQ_API_KEY) {
@@ -272,7 +279,7 @@ export default {
             const ai = await fetch("https://api.groq.com/openai/v1/chat/completions", {
               signal: AbortSignal.timeout(5000), method: "POST",
               headers: { "Authorization": `Bearer ${env.GROQ_API_KEY}`, "Content-Type": "application/json" },
-              body: JSON.stringify({ model: "openai/gpt-oss-120b", messages: [{ role: "system", content: instructions }, ...conversation], max_tokens: 300, temperature: 0.35 })
+              body: JSON.stringify({ model: "openai/gpt-oss-120b", messages: [{ role: "system", content: finalInstructions }, ...conversation], max_tokens: 300, temperature: 0.35 })
             });
             const data = await ai.json();
             if (ai.ok) {
@@ -289,7 +296,7 @@ export default {
           for (const model of cloudflareModels) {
             try {
               const result = await Promise.race([
-                env.AI.run(model, { messages: [{ role: "system", content: instructions }, ...conversation], max_tokens: 600, reasoning_effort: "low", chat_template_kwargs: { enable_thinking: false } }),
+                env.AI.run(model, { messages: [{ role: "system", content: finalInstructions }, ...conversation], max_tokens: 600, reasoning_effort: "low", chat_template_kwargs: { enable_thinking: false } }),
                 new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 8000))
               ]);
               const cloudflareText = extractModelText(result);
