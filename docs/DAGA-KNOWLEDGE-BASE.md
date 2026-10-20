@@ -9,7 +9,7 @@ This is the preparation guide for adding owner-approved facts and operating rule
 - The Worker appends the variable's contents to the chat instructions when the variable is non-empty.
 - The value is capped at 8,000 characters by the Worker.
 - If the variable is unset or empty, this feature contributes no extra text and the existing prompt path remains in place.
-- The same extra context is passed to the configured Groq and Cloudflare AI chat paths.
+- The same extra context is passed to the configured Groq, Cloudflare AI, and OpenAI fallback chat paths.
 - This feature is not yet live: the change is on a draft feature branch and has not been merged or deployed.
 - Do not put passwords, API keys, customer personal data, or private account/financial records in this knowledge field.
 
@@ -70,5 +70,6 @@ Do not put passwords, API keys, customer personal data, or private account/finan
 
 - Code and owner UI are committed to the feature branch.
 - This draft has not been merged or deployed.
+- Static review found and fixed an OpenAI fallback path that initially did not receive the curated knowledge context.
 - Live runtime tests have not yet been performed.
 - The production `daga-voice` Worker and `main` branch have not been changed.
