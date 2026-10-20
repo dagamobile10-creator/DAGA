@@ -195,6 +195,28 @@ jobs:
           done
           jq -e '.ok == true' /tmp/health.json >/dev/null || { echo "::error::Staging health endpoint did not report ok=true"; cat /tmp/health.json; exit 1; }
           jq '{ok,voiceConfigured,chatConfigured,freeChatConfigured,liveAvatarConfigured}' /tmp/health.json
+          # Exercise the staging chat provider with a tiny request; no user data is sent.
+          if jq -e '.freeChatConfigured == true or .chatConfigured == true' /tmp/health.json >/dev/null; then
+            chat_code="$(curl -sS -o /tmp/chat-smoke.json -w '%{http_code}' --max-time 20 \
+              -H 'Content-Type: application/json' -d '{"text":"رد بكلمة اختبار فقط."}' \
+              https://daga-app-staging.dagamobile10.workers.dev/chat)"
+            test "$chat_code" = "200" || { echo "::error::Staging chat smoke test returned HTTP $chat_code"; cat /tmp/chat-smoke.json; exit 1; }
+            jq -e '.reply | type == "string" and length > 0' /tmp/chat-smoke.json >/dev/null || { echo "::error::Staging chat returned no reply"; cat /tmp/chat-smoke.json; exit 1; }
+            echo "Staging chat smoke test passed."
+          else
+            echo "::warning::Staging chat smoke test skipped: no chat provider is configured."
+          fi
+          # Test TTS only when a provider is configured; never send secrets to logs.
+          if jq -e '.voiceConfigured == true' /tmp/health.json >/dev/null; then
+            tts_code="$(curl -sS -o /tmp/tts-smoke.bin -w '%{http_code}' --max-time 20 \
+              -H 'Content-Type: application/json' -d '{"text":"اختبار الصوت."}' \
+              https://daga-app-staging.dagamobile10.workers.dev/tts)"
+            test "$tts_code" = "200" || { echo "::error::Staging TTS smoke test returned HTTP $tts_code"; exit 1; }
+            test -s /tmp/tts-smoke.bin || { echo "::error::Staging TTS returned empty audio"; exit 1; }
+            echo "Staging TTS smoke test passed."
+          else
+            echo "::warning::Staging TTS smoke test skipped: ELEVENLABS_API_KEY is not configured."
+          fi
           # Runtime CORS smoke test: only the configured staging origin may be authorized.
           curl -fsS -D /tmp/cors-allowed.headers -o /dev/null -X OPTIONS \
             -H 'Origin: https://dagamobile10-creator.github.io' \
