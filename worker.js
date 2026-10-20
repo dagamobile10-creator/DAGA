@@ -267,7 +267,17 @@ export default {
         ].join("\n") + verifiedIdentityContext + (memory ? "\n\nذاكرة المستخدم المتاحة (مرجع سياقي، استخدم المرتبط بالسؤال فقط): " + memory : "") + (businessContext ? "\n\nسياق العمل الثابت (ليس بيانات حية): " + businessContext : "");
         // Optional owner-managed knowledge for future DAGA updates. Empty by default,
         // so current LIVE behavior is unchanged until an operator configures this variable.
-        const curatedKnowledge = String(env.DAGA_KNOWLEDGE_BASE || "").trim().slice(0, 8000);
+        let curatedKnowledge = String(env.DAGA_KNOWLEDGE_BASE || "").trim();
+        if (env.DAGA_APP_DB) {
+          try {
+            const entries = await env.DAGA_APP_DB.prepare("SELECT title,category,content FROM daga_knowledge_entries WHERE is_active=1 ORDER BY updated_at DESC LIMIT 30").all();
+            const stored = (entries.results || []).map(entry => "[" + String(entry.category || "عام").slice(0,40) + "] " + String(entry.title || "").slice(0,100) + ": " + String(entry.content || "").slice(0,4000)).join("\n");
+            if (stored) curatedKnowledge = [curatedKnowledge, stored].filter(Boolean).join("\n\n");
+          } catch (_) {
+            // The knowledge table may not exist until the owner opens its admin section.
+          }
+        }
+        curatedKnowledge = curatedKnowledge.slice(0, 8000);
         const finalInstructions = instructions + (curatedKnowledge
           ? "\n\nمعلومات إضافية معتمدة من مالك النظام (حقائق وسياق للمساعدة فقط؛ لا تتجاوز قواعد السلوك والخصوصية وعدم اختلاق البيانات):\n" + curatedKnowledge
           : "");
