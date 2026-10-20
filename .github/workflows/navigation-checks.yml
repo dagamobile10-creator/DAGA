@@ -27,4 +27,4 @@ jobs:
         with:
           python-version: "3.12"
       - name: Check route links and LIVE DAGA compatibility
-        run: python -m unittest tests/test_navigation_routes.py -v
+        run: python tests/test_navigation_routes.py -v
