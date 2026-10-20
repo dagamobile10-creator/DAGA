@@ -38,6 +38,16 @@ jobs:
                   "await sha256(token)" in section(auth, "async function createSession", "async function consumeChallenge"),
               "recovery revokes prior sessions":
                   "UPDATE daga_auth_sessions SET revoked_at" in section(auth, "async function recoveryComplete", "async function ownerLogin"),
+              "bootstrap requires the out-of-band bearer token":
+                  'constantTimeEqual(auth,"Bearer "+env.DAGA_OWNER_BOOTSTRAP_TOKEN)' in section(auth, "async function bootstrapStart", "async function bootstrapVerify") and 'constantTimeEqual(auth,"Bearer "+env.DAGA_OWNER_BOOTSTRAP_TOKEN)' in section(auth, "async function bootstrapVerify", "async function recoveryStart"),
+              "bootstrap provisions a singleton owner atomically":
+                  'INSERT INTO daga_program_owner (singleton_id,account_id) VALUES (1,?)' in section(auth, "async function bootstrapVerify", "async function recoveryStart") and 'INSERT INTO daga_owner_bootstrap_state (singleton_id,consumed_at,consumed_account_id)' in section(auth, "async function bootstrapVerify", "async function recoveryStart"),
+              "OTP challenge attempts are bounded and expiry checked":
+                  "attempts<5 AND expires_at>?" in section(auth, "async function consumeChallenge", "async function rateLimit") and "consumed_at IS NULL" in section(auth, "async function consumeChallenge", "async function rateLimit"),
+              "OTP verification claims a challenge once before validating code":
+                  "UPDATE daga_auth_challenges SET attempts=attempts+1 WHERE id=? AND consumed_at IS NULL AND attempts<5 AND expires_at>? RETURNING attempts" in section(auth, "async function consumeChallenge", "async function rateLimit") and "SET consumed_at=? WHERE id=? AND consumed_at IS NULL" in section(auth, "async function consumeChallenge", "async function rateLimit"),
+              "owner recovery requires the current recovery code and rotates it":
+                  "constantTimeEqual(oldHash,owner.recovery_code_hash)" in section(auth, "async function recoveryComplete", "async function ownerLogin") and "recovery_code_hash=?,updated_at=?" in section(auth, "async function recoveryComplete", "async function ownerLogin"),
               "owner admin routes require an authenticated owner":
                   "authenticatedOwner(request, db)" in admin,
               "legacy memory endpoint remains identified as a separate authorization gate":
