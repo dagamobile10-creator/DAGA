@@ -112,7 +112,7 @@ export async function authenticatedAccount(request, db) {
   const token = bearer(request);
   if (!token) return null;
   const tokenHash = await sha256(token);
-  const row = await db.prepare("SELECT a.id,a.public_id,a.display_name,a.role,a.status,a.phone_e164,a.email,a.store_id,s.expires_at FROM daga_auth_sessions s JOIN daga_accounts a ON a.id=s.account_id WHERE s.token_hash=? AND s.revoked_at IS NULL AND s.expires_at>? AND a.status='approved' LIMIT 1")
+  const row = await db.prepare("SELECT a.id,a.public_id,a.display_name,a.role,a.status,a.email,a.store_id,s.expires_at FROM daga_auth_sessions s JOIN daga_accounts a ON a.id=s.account_id WHERE s.token_hash=? AND s.revoked_at IS NULL AND s.expires_at>? AND a.status='approved' LIMIT 1")
     .bind(tokenHash, new Date().toISOString()).first();
   if (!row) return null;
   await db.prepare("UPDATE daga_auth_sessions SET last_seen_at=? WHERE token_hash=? AND revoked_at IS NULL").bind(new Date().toISOString(), tokenHash).run();
@@ -122,7 +122,7 @@ export async function authenticatedAccount(request, db) {
 export async function authenticatedOwner(request, db) {
   const token = bearer(request);
   if (!token) return null;
-  const row = await db.prepare("SELECT a.id,a.role,a.status,a.phone_e164,a.email,s.expires_at FROM daga_auth_sessions s JOIN daga_accounts a ON a.id=s.account_id JOIN daga_program_owner o ON o.account_id=a.id WHERE s.token_hash=? AND s.revoked_at IS NULL AND s.expires_at>? AND a.role='program_owner' AND a.status='approved' AND o.singleton_id=1 LIMIT 1")
+  const row = await db.prepare("SELECT a.id,a.role,a.status,a.email,s.expires_at FROM daga_auth_sessions s JOIN daga_accounts a ON a.id=s.account_id JOIN daga_program_owner o ON o.account_id=a.id WHERE s.token_hash=? AND s.revoked_at IS NULL AND s.expires_at>? AND a.role='program_owner' AND a.status='approved' AND o.singleton_id=1 LIMIT 1")
     .bind(await sha256(token), new Date().toISOString()).first();
   if (!row) return null;
   await db.prepare("UPDATE daga_auth_sessions SET last_seen_at=? WHERE token_hash=?").bind(new Date().toISOString(), await sha256(token)).run();
