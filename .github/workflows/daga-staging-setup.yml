@@ -3,10 +3,11 @@ name: DAGA isolated staging setup
 on:
   workflow_dispatch:
   push:
-    branches: [daga-v30-implementation]
+    branches: [daga-v30-implementation, daga-email-only-auth]
     paths:
       - ".github/workflows/daga-staging-setup.yml"
       - "worker.js"
+      - "index.html"
       - "owner-console.html"
       - "owner-auth.js"
       - "owner-admin.js"
@@ -102,7 +103,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p staging-migrations
-          for file in migrations/0001_daga_core.sql migrations/0002_daga_owner_auth.sql migrations/0003_daga_owner_credentials.sql migrations/0004_daga_offers.sql migrations/0005_daga_store_identity_invitations.sql migrations/0006_daga_public_identity_ids.sql migrations/0007_daga_company_registration_challenges.sql migrations/0008_daga_company_login_challenges.sql migrations/0009_daga_payment_submission_uniqueness.sql; do
+          for file in migrations/0001_daga_core.sql migrations/0002_daga_owner_auth.sql migrations/0003_daga_owner_credentials.sql migrations/0004_daga_offers.sql migrations/0005_daga_store_identity_invitations.sql migrations/0006_daga_public_identity_ids.sql migrations/0007_daga_company_registration_challenges.sql migrations/0008_daga_company_login_challenges.sql migrations/0009_daga_payment_submission_uniqueness.sql migrations/0010_email_only_auth.sql; do
             clean="staging-migrations/$(basename "$file")"
             grep -v '^[[:space:]]*PRAGMA foreign_keys' "$file" > "$clean"
           done
@@ -119,13 +120,6 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           DAGA_OTP_PEPPER: ${{ secrets.DAGA_OTP_PEPPER }}
           DAGA_OWNER_BOOTSTRAP_TOKEN: ${{ secrets.DAGA_OWNER_BOOTSTRAP_TOKEN }}
-          DAGA_OWNER_PHONE: ${{ secrets.DAGA_OWNER_PHONE }}
-          DAGA_OWNER_EMAIL: ${{ secrets.DAGA_OWNER_EMAIL }}
-          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
-          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
-          TWILIO_FROM_NUMBER: ${{ secrets.TWILIO_FROM_NUMBER }}
-          ESMS_API_KEY: ${{ secrets.ESMS_API_KEY }}
-          ESMS_SENDER_ID: ${{ secrets.ESMS_SENDER_ID }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           DAGA_EMAIL_FROM: ${{ secrets.DAGA_EMAIL_FROM }}
           ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
@@ -146,16 +140,9 @@ jobs:
             fi
           done
           missing=()
-          for name in DAGA_OTP_PEPPER DAGA_OWNER_BOOTSTRAP_TOKEN DAGA_OWNER_PHONE DAGA_OWNER_EMAIL RESEND_API_KEY DAGA_EMAIL_FROM; do
+          for name in DAGA_OTP_PEPPER DAGA_OWNER_BOOTSTRAP_TOKEN RESEND_API_KEY DAGA_EMAIL_FROM; do
             if [ -z "${!name:-}" ]; then missing+=("$name"); fi
           done
-          if { [ -z "${ESMS_API_KEY:-}" ] || [[ "${ESMS_API_KEY}" == esms_test_* ]]; } && { [ -z "${TWILIO_ACCOUNT_SID:-}" ] || [ -z "${TWILIO_AUTH_TOKEN:-}" ] || [ -z "${TWILIO_FROM_NUMBER:-}" ]; }; then
-            if [[ "${ESMS_API_KEY:-}" == esms_test_* ]]; then
-              missing+=("LIVE_SMS_PROVIDER (esms_test_* is sandbox-only and cannot deliver real SMS)")
-            else
-              missing+=("SMS_PROVIDER (set a live ESMS_API_KEY or all three TWILIO_* secrets)")
-            fi
-          fi
           if [ "${#missing[@]}" -gt 0 ]; then
             missing_csv="$(IFS=', '; echo "${missing[*]}")"
             echo "::warning::Missing required staging auth/delivery secrets: $missing_csv"
@@ -170,20 +157,15 @@ jobs:
             } >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          for name in DAGA_OTP_PEPPER DAGA_OWNER_BOOTSTRAP_TOKEN DAGA_OWNER_PHONE DAGA_OWNER_EMAIL RESEND_API_KEY DAGA_EMAIL_FROM ESMS_API_KEY ESMS_SENDER_ID TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN TWILIO_FROM_NUMBER; do
+          for name in DAGA_OTP_PEPPER DAGA_OWNER_BOOTSTRAP_TOKEN RESEND_API_KEY DAGA_EMAIL_FROM; do
             if [ -n "${!name:-}" ]; then
               printf '%s' "${!name}" | npx --yes wrangler@3 secret put "$name" --name daga-app-staging
             fi
           done
           {
             echo "## DAGA staging readiness"
-            if [[ "${ESMS_API_KEY:-}" == esms_test_* ]]; then
-              echo "- eSMS key status: SANDBOX ONLY (esms_test_* does not deliver real SMS)."
-              echo "- Owner authentication / real SMS OTP delivery: BLOCKED until a live SMS provider is configured."
-            else
-              echo "- Required owner-auth and SMS/email delivery secrets: present and configured on the isolated staging Worker."
-              echo "- Owner bootstrap and real OTP delivery still require end-to-end verification with the designated owner."
-            fi
+            echo "- Email-only owner authentication and email OTP delivery secrets: present and configured on the isolated staging Worker."
+            echo "- Owner bootstrap and real email delivery still require end-to-end verification with the designated owner."
             echo "- Production Worker and main branch were not targeted."
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Verify staging health without printing secrets
