@@ -50,7 +50,7 @@ async function companyAccountMe(env, db, account) {
     for (const key of ["inviteEmployees","manageInventory","viewReports"]) safe[key] = permissions[key] === true;
     return { id: row.id, publicId: row.public_id || null, displayName: row.display_name, status: row.status, role: row.role, permissions: safe };
   })];
-  return json(env, { ok: true, account: { id: account.id, publicId: account.public_id || null, displayName: account.display_name, role: account.role, status: account.status, phoneMasked: maskCompanyPhone(account.phone_e164), emailMasked: maskCompanyEmail(account.email) }, companies });
+  return json(env, { ok: true, account: { id: account.id, publicId: account.public_id || null, displayName: account.display_name, role: account.role, status: account.status, emailMasked: maskCompanyEmail(account.email) }, companies });
 }
 async function companyAccountLogout(request, env, db) {
   const header = request.headers.get("Authorization") || "";
