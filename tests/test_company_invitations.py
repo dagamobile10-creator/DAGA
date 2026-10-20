@@ -12,6 +12,8 @@ MIGRATIONS = [
     "0006_daga_public_identity_ids.sql",
     "0007_daga_company_registration_challenges.sql",
     "0008_daga_company_login_challenges.sql",
+    "0009_daga_payment_submission_uniqueness.sql",
+    "0010_email_only_auth.sql",
 ]
 
 
@@ -150,7 +152,7 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertNotIn("sessionStorage", page)
         self.assertIn("/api/company/invitations/accept", page)
         self.assertIn("/api/company/auth/register/verify", page)
-        self.assertIn("/api/company/auth/login/verify", page)
+        self.assertIn("/api/company/auth/login", page)
 
     def test_company_owner_provisioning_is_program_owner_only(self):
         admin = (ROOT / "owner-admin.js").read_text(encoding="utf-8")
@@ -173,7 +175,7 @@ class InvitationSchemaTests(unittest.TestCase):
 
     def test_company_portal_supports_invite_creation_and_revocation(self):
         portal = (ROOT / "company" / "portal.html").read_text(encoding="utf-8")
-        self.assertIn("/api/company/auth/login/verify", portal)
+        self.assertIn("/api/company/auth/login", portal)
         self.assertIn("/api/company/auth/me", portal)
         self.assertIn("/api/company/invitations", portal)
         self.assertIn("/revoke", portal)
@@ -221,8 +223,8 @@ class InvitationSchemaTests(unittest.TestCase):
         end = source.index("\nasync function companyRateLimit", start)
         handler = source[start:end]
         self.assertIn(r"/^[^\s@]+@[^\s@]+\.[^\s@]+$/", handler)
-        self.assertIn(r"!/^\d{6}$/.test(phoneCode)", handler)
-        self.assertIn(r"!/^\d{6}$/.test(emailCode)", handler)
+        self.assertNotIn("phoneCode", handler)
+        self.assertIn(r"!/^\d{6}$/.test(code)", handler)
         self.assertNotIn(r"\\s", handler)
         self.assertNotIn(r"\\d", handler)
 
@@ -236,14 +238,16 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertIn('companyRateLimit(db, env, "company-invite-create-account:" + account.id, 30, 3600)', handler)
         self.assertIn('companyRateLimit(db, env, "company-invite-create-ip:" + ip, 60, 3600)', handler)
 
-    def test_company_login_otp_verification_is_rate_limited(self):
+    def test_company_password_login_is_rate_limited_by_email_and_ip(self):
         source = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
-        start = source.index("async function companyLoginVerify(")
-        end = source.index("\nasync function registerStart", start)
+        start = source.index("async function companyLoginStart(")
+        end = source.index("\nasync function companySetupStart", start)
         handler = source[start:end]
-        self.assertIn('company-login-verify-ip:', handler)
-        self.assertIn('company-login-verify-account:', handler)
-        self.assertIn('companyRateLimit(db, env, "company-login-verify-account:" + account.id, 8, 900)', handler)
+        self.assertIn("company-login-ip:", handler)
+        self.assertIn("company-login-email:", handler)
+        self.assertIn("companyDerivePassword(password", handler)
+        self.assertNotIn("companySendSms", handler)
+
 
     def test_company_authority_is_scoped_to_the_requested_store_owner_or_active_membership(self):
         source = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
@@ -319,16 +323,17 @@ class InvitationSchemaTests(unittest.TestCase):
 
 
 
-    def test_company_login_verification_requires_both_channels_and_single_use_claim(self):
+    def test_company_password_login_requires_email_and_password_not_phone_otp(self):
         source = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
-        start = source.index("async function companyLoginVerify(")
-        end = source.index("\n}", start) + 2
+        start = source.index("async function companyLoginStart(")
+        end = source.index("\nasync function companySetupStart", start)
         handler = source[start:end]
-        self.assertIn("channel='phone'", handler)
-        self.assertIn("channel='email'", handler)
-        self.assertIn("claim_id IS NULL", handler)
-        self.assertIn("WHERE EXISTS (SELECT 1 FROM daga_company_login_challenges WHERE id=? AND claim_id=? AND channel='phone')", handler)
-        self.assertIn("AND EXISTS (SELECT 1 FROM daga_company_login_challenges WHERE id=? AND claim_id=? AND channel='email')", handler)
+        self.assertIn("lower(a.email)=?", handler)
+        self.assertIn("companyDerivePassword(password", handler)
+        self.assertIn("create_at", handler) if "create_at" in handler else self.assertIn("created_at", handler)
+        self.assertNotIn("channel='phone'", handler)
+        self.assertNotIn("companySendSms", handler)
+
 
     def test_company_logout_revokes_exact_session_once(self):
         source = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
