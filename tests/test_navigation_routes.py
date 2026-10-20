@@ -40,6 +40,43 @@ class NavigationRouteTests(unittest.TestCase):
         for page in (self.live, self.landing):
             self.assertNotIn('href="/invite/"', page)
 
+    def test_company_portal_api_paths_have_server_handlers(self):
+        portal = (ROOT / "company" / "portal.html").read_text(encoding="utf-8")
+        invitations = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
+        orders = (ROOT / "company-orders.js").read_text(encoding="utf-8")
+        for path in (
+            "/api/company/auth/me",
+            "/api/company/auth/login",
+            "/api/company/auth/login/verify",
+            "/api/company/auth/logout",
+            "/api/company/invitations",
+            "/api/company/orders",
+            "/api/company/plans",
+            "/api/company/payment-methods",
+            "/api/company/offers",
+        ):
+            with self.subTest(path=path):
+                self.assertIn(path, portal)
+                self.assertTrue(path in invitations or path in orders or path in self.worker)
+
+    def test_owner_console_admin_endpoints_have_server_handlers(self):
+        admin = (ROOT / "owner-admin.js").read_text(encoding="utf-8")
+        for path in (
+            "/owner/admin/overview",
+            "/owner/admin/plans",
+            "/owner/admin/payment-methods",
+            "/owner/admin/offers",
+            "/owner/admin/payments",
+            "/owner/admin/stores",
+            "/owner/admin/accounts",
+            "/owner/admin/columns",
+            "/owner/admin/words/adjust",
+        ):
+            with self.subTest(path=path):
+                self.assertIn(path, self.owner)
+                self.assertIn(path, admin)
+        self.assertIn("authenticatedOwner(request, db)", admin)
+
     def test_navigation_does_not_remove_live_voice_contract_markers(self):
         for marker in ("workers.dev/chat", "workers.dev/tts", "playVoiceTest", "daga_mh_memory_v1"):
             with self.subTest(marker=marker):
