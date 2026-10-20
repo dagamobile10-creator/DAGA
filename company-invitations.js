@@ -161,13 +161,6 @@ async function companyRateLimit(db, env, key, limit, windowSeconds) {
     .bind(hashed, now, now, windowSeconds, now, now, windowSeconds, now, windowSeconds, limit).first();
   return Boolean(row);
 }
-async function companySendSms(env, phone, message) {
-  const body = new URLSearchParams({ To: phone, From: env.TWILIO_FROM_NUMBER, Body: message });
-  const response = await fetch("https://api.twilio.com/2010-04-01/Accounts/" + encodeURIComponent(env.TWILIO_ACCOUNT_SID) + "/Messages.json", {
-    method: "POST", headers: { Authorization: "Basic " + btoa(env.TWILIO_ACCOUNT_SID + ":" + env.TWILIO_AUTH_TOKEN), "Content-Type": "application/x-www-form-urlencoded" }, body, signal: AbortSignal.timeout(10000)
-  });
-  if (!response.ok) throw new Error("sms_delivery_failed");
-}
 async function companySendEmail(env, email, subject, html) {
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST", headers: { Authorization: "Bearer " + env.RESEND_API_KEY, "Content-Type": "application/json" },
@@ -183,7 +176,6 @@ function normalizeCompanyPhone(value) {
   if (/^\+?20\d{10}$/.test(digits)) return digits.startsWith("+") ? digits : "+" + digits;
   return /^\+[1-9]\d{7,14}$/.test(digits) ? digits : "";
 }
-function maskCompanyPhone(value) { const s = String(value || ""); return s.length > 5 ? s.slice(0, 4) + "••••" + s.slice(-2) : "••••"; }
 function maskCompanyEmail(value) { const [u, d] = String(value || "").split("@"); return u && d ? u.slice(0, 2) + "•••@" + d : "••••"; }
 function constantTimeEqualCompany(a, b) { const x = String(a), y = String(b); let diff = x.length ^ y.length; const n = Math.max(x.length, y.length); for (let i = 0; i < n; i++) diff |= (x.charCodeAt(i % (x.length || 1)) || 0) ^ (y.charCodeAt(i % (y.length || 1)) || 0); return diff === 0; }
 
