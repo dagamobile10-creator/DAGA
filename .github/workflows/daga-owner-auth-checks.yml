@@ -34,32 +34,23 @@ jobs:
           open("/tmp/owner-console.js", "w", encoding="utf-8").write(scripts[0])
           PY
           node --check /tmp/owner-console.js
-      - name: Guard sandbox SMS keys cannot pass real OTP readiness
-        run: |
-          python3 - <<'PY'
-          auth = open("owner-auth.js", encoding="utf-8").read()
-          assert '!String(env.ESMS_API_KEY).startsWith("esms_test_")' in auth, "Sandbox eSMS key must not count as a live provider"
-          sms = auth[auth.index("async function sendSms("):auth.index("async function sendEmail(")]
-          assert 'env.ESMS_API_KEY && !String(env.ESMS_API_KEY).startsWith("esms_test_")' in sms, "Sandbox eSMS key must not be used for live SMS sends"
-          assert "sms_provider_not_configured" in sms, "Missing live provider must fail closed"
-          assert 'startsWith("esms_test_")' in auth, "Sandbox-key distinction must remain explicit"
-          print("Sandbox eSMS keys cannot be treated as real SMS delivery credentials.")
-          PY
-      - name: Guard first-time owner setup UI and secret handling
+      - name: Guard email-only owner setup UI and secret handling
         run: |
           python3 - <<'PY'
           html = open("owner-console.html", encoding="utf-8").read()
+          auth = open("owner-auth.js", encoding="utf-8").read()
           checks = {
               "first-time setup form exists": 'id="bootstrapStartForm"' in html and 'id="bootstrapVerifyForm"' in html,
               "setup token is sent only in Authorization header": "'Authorization':'Bearer '+bootstrapTokenInMemory" in html,
               "setup token is not persisted in browser storage": "localStorage.setItem('bootstrapToken'" not in html and "sessionStorage.setItem('bootstrapToken'" not in html,
-              "both bootstrap steps call same-origin owner endpoints": "API+'/owner/bootstrap/start'" in html and "API+'/owner/bootstrap/verify'" in html,
-              "OTP, strong password, and recovery code are collected": 'id="bootstrapPhoneCode"' in html and 'id="bootstrapEmailCode"' in html and 'id="bootstrapPassword"' in html and 'id="bootstrapRecoveryCode"' in html,
+              "bootstrap uses email verification only": 'id="bootstrapEmailCode"' in html and 'id="bootstrapPhoneCode"' not in html and "owner_bootstrap_email" in auth,
+              "strong password and recovery code are collected": 'id="bootstrapPassword"' in html and 'id="bootstrapRecoveryCode"' in html,
+              "login is email and password without SMS": 'id="loginVerifyForm"' not in html and 'id="loginPhoneCode"' not in html and "function validPassword" in auth,
               "cancel clears setup fields and in-memory token": "bootstrapTokenInMemory='';$('bootstrapToken').value=''" in html,
           }
           for name, ok in checks.items():
               print(("PASS" if ok else "FAIL") + ": " + name)
-          assert all(checks.values()), "First-time owner setup UI security guard failed"
+          assert all(checks.values()), "Email-only owner setup UI security guard failed"
           PY
       - name: Check company portal inline JavaScript syntax
         run: |
@@ -172,9 +163,9 @@ jobs:
         run: |
           python3 - <<'PY'
           auth = open("owner-auth.js", encoding="utf-8").read()
-          assert r'/^\d{6}$/.test(phoneCode)' in auth, "OTP validation regex missing or over-escaped"
+          assert r'/^\d{6}$/.test(emailCode)' in auth, "Email OTP validation regex missing or over-escaped"
           assert r'/\d/.test(newPassword)' in auth, "Password digit validation regex missing or over-escaped"
-          assert r'/^\\d{6}$/.test(phoneCode)' not in auth, "Found over-escaped OTP regex"
+          assert r'/^\\d{6}$/.test(emailCode)' not in auth, "Found over-escaped OTP regex"
           print("OTP and password digit validation patterns are correctly escaped.")
           PY
       - name: Guard payment-review idempotency predicates
@@ -191,27 +182,26 @@ jobs:
           assert "AND undefined" not in block, "Incomplete payment review SQL predicate"
           print("Payment review conditional guards are present.")
           PY
-      - name: Guard owner identity, dual-channel login, and admin authorization
+      - name: Guard owner identity, email-only login, and admin authorization
         run: |
           python3 - <<'PY'
           auth = open("owner-auth.js", encoding="utf-8").read()
           admin = open("owner-admin.js", encoding="utf-8").read()
           worker = open("worker.js", encoding="utf-8").read()
-          login = auth[auth.index("async function ownerLogin("):auth.index("async function ownerLoginVerify(")]
-          verify = auth[auth.index("async function ownerLoginVerify("):auth.index("async function ownerMe(")]
+          login = auth[auth.index("async function ownerLogin("):auth.index("function validPassword(")]
           bootstrap = auth[auth.index("async function bootstrapStart("):auth.index("async function bootstrapVerify(")]
           checks = {
-              "owner login looks up the singleton program-owner record": "JOIN daga_program_owner o ON o.account_id=a.id" in login and "o.singleton_id=1" in login,
-              "owner login does not issue a session before OTP verification": "createSession(" not in login and "requiresVerification:true" in login,
-              "owner login requires both phone and email codes": 'consumeChallenge(db,env,"login_phone"' in verify and 'consumeChallenge(db,env,"login_email"' in verify and "if(!p||!e)" in verify,
-              "owner bootstrap requires an out-of-band bearer token": 'Authorization' in bootstrap and "DAGA_OWNER_BOOTSTRAP_TOKEN" in bootstrap and "constantTimeEqual" in bootstrap,
+              "owner login looks up singleton program-owner record": "JOIN daga_program_owner o ON o.account_id=a.id" in login and "o.singleton_id=1" in login,
+              "owner login verifies email and password and creates session": "lower(a.email)=?" in login and "derivePassword(password" in login and "createSession(db,account.id)" in login,
+              "owner login has no phone or SMS dependency": "phone_e164" not in login and "sendSms" not in login,
+              "owner bootstrap verifies supplied email": "DAGA_OWNER_BOOTSTRAP_TOKEN" in bootstrap and "body.email" in bootstrap and "sendEmail" in bootstrap and "sendSms" not in bootstrap,
               "owner bootstrap refuses a second owner": "owner_already_provisioned" in bootstrap and "daga_program_owner WHERE singleton_id=1" in bootstrap,
               "owner admin delegates authorization to authenticatedOwner": "authenticatedOwner(request, db)" in admin,
-              "legacy memory route is explicitly present for separate review": 'url.pathname === "/memory"' in worker,
+              "legacy memory route remains present": 'url.pathname === "/memory"' in worker,
           }
           for name, ok in checks.items():
               print(("PASS" if ok else "FAIL") + ": " + name)
-          assert all(checks.values()), "Owner-auth security regression guard failed"
+          assert all(checks.values()), "Email-only owner-auth security regression guard failed"
           PY
       - name: Guard OTP consumption against concurrent attempts
         run: |
