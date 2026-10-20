@@ -10,5 +10,8 @@ CREATE TABLE IF NOT EXISTS daga_account_credentials (
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
--- Phone numbers are no longer authentication identifiers or verification channels.
+-- Remove the old phone-authentication data and columns entirely after all application routes stop using them.
 UPDATE daga_accounts SET phone_e164=NULL, phone_verified_at=NULL;
+DROP INDEX IF EXISTS daga_accounts_phone_unique;
+ALTER TABLE daga_accounts DROP COLUMN phone_e164;
+ALTER TABLE daga_accounts DROP COLUMN phone_verified_at;
