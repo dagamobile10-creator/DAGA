@@ -54,6 +54,10 @@ The API uses `/owner/admin/knowledge` and is protected by the existing authentic
 
 Active database entries are appended to chat context, newest first, with at most 30 entries and a combined total capped at 8,000 characters. The optional `DAGA_KNOWLEDGE_BASE` environment value is still supported and is combined with database entries.
 
+## CI scope note
+
+The repository's `.github/workflows/pages.yml` validates the root Pages `index.html` and its voice/memory assets, and deploys Pages only for non-PR events. Its pull-request trigger is limited to PRs targeting `main`, so it does not validate this knowledge-base PR while its base is `daga-v30-implementation`. A green Cloudflare integration check is not evidence that the knowledge API or database behavior was runtime-tested. Keep the separate non-production runtime test as a release requirement.
+
 ## Safe test and release process
 
 1. Merge/deploy nothing to production yet; this change is still a draft.
