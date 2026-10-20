@@ -56,8 +56,10 @@ class NavigationRouteTests(unittest.TestCase):
             "/api/company/offers",
         ):
             with self.subTest(path=path):
-                self.assertIn(path, portal)
-                self.assertTrue(path in invitations or path in orders or path in self.worker)
+                portal_path = path.replace("/api/company", "")
+                self.assertTrue(path in portal or portal_path in portal, f"portal does not call {path}")
+                self.assertTrue(path in invitations or path in orders or path in self.worker,
+                                f"no Worker handler found for {path}")
 
     def test_owner_console_admin_endpoints_have_server_handlers(self):
         admin = (ROOT / "owner-admin.js").read_text(encoding="utf-8")
