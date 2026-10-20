@@ -47,7 +47,7 @@ if(await db.prepare("SELECT id FROM daga_accounts WHERE lower(email)=? LIMIT 1")
 if(!await consumeChallenge(db,env,"owner_bootstrap_email",await sha256("email:"+email),code))return json(env,{error:"invalid_expired_or_used_verification_code"},400);
 const id=crypto.randomUUID(),salt=randomToken(24),passwordHash=await derivePassword(password,salt,PBKDF2_ITERATIONS),recoveryHash=await sha256(recovery+":"+env.DAGA_OTP_PEPPER),now=new Date().toISOString();
 try{await db.batch([
-db.prepare("INSERT INTO daga_accounts (id,phone_e164,email,display_name,role,status,phone_verified_at,email_verified_at,created_at,updated_at) VALUES (?,NULL,?,?,?,'approved',NULL,?,?,?)").bind(id,email,"DAGA Program Owner",OWNER_ROLE,now,now,now),
+db.prepare("INSERT INTO daga_accounts (id,email,display_name,role,status,email_verified_at,created_at,updated_at) VALUES (?,?,?,?,'approved',?,?,?)").bind(id,email,"DAGA Program Owner",OWNER_ROLE,now,now,now),
 db.prepare("INSERT INTO daga_program_owner (singleton_id,account_id) VALUES (1,?)").bind(id),
 db.prepare("INSERT INTO daga_owner_credentials (account_id,password_hash,password_salt,password_iterations,recovery_code_hash,created_at,updated_at) VALUES (?,?,?,?,?,?,?)").bind(id,passwordHash,salt,PBKDF2_ITERATIONS,recoveryHash,now,now),
 db.prepare("INSERT INTO daga_owner_bootstrap_state (singleton_id,consumed_at,consumed_account_id) VALUES (1,?,?)").bind(now,id)
@@ -96,7 +96,7 @@ async function ownerMe(request, env) {
   if (!db) return json(env, { error: "owner_auth_not_configured" }, 503);
   const account = await authenticatedOwner(request, db);
   if (!account) return json(env, { error: "unauthorized" }, 401);
-  return json(env, { ok: true, account: { id: account.id, role: account.role, phoneMasked: maskPhone(account.phone_e164), emailMasked: maskEmail(account.email) } });
+  return json(env, { ok: true, account: { id: account.id, role: account.role, emailMasked: maskEmail(account.email) } });
 }
 
 async function ownerLogout(request, env) {
@@ -160,30 +160,6 @@ async function rateLimit(db, env, key, limit, windowSeconds) {
   return Boolean(row);
 }
 
-async function sendSms(env, phone, message) {
-  // Prefer the Egypt-capable eSMS API when configured; retain Twilio as a fallback.
-  if (env.ESMS_API_KEY && !String(env.ESMS_API_KEY).startsWith("esms_test_")) {
-    const payload = { to: phone, text: message };
-    if (env.ESMS_SENDER_ID) payload.sender_id = env.ESMS_SENDER_ID;
-    const response = await fetch("https://sms.esmsafrica.io/api/messages/send", {
-      method: "POST",
-      headers: { Authorization: "Bearer " + env.ESMS_API_KEY, "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(10000)
-    });
-    if (!response.ok) throw new Error("sms_delivery_failed");
-    return;
-  }
-  if (!env.TWILIO_ACCOUNT_SID || !env.TWILIO_AUTH_TOKEN || !env.TWILIO_FROM_NUMBER) {
-    throw new Error("sms_provider_not_configured");
-  }
-  const body = new URLSearchParams({ To: phone, From: env.TWILIO_FROM_NUMBER, Body: message });
-  const response = await fetch("https://api.twilio.com/2010-04-01/Accounts/" + encodeURIComponent(env.TWILIO_ACCOUNT_SID) + "/Messages.json", {
-    method: "POST", headers: { Authorization: "Basic " + btoa(env.TWILIO_ACCOUNT_SID + ":" + env.TWILIO_AUTH_TOKEN), "Content-Type": "application/x-www-form-urlencoded" }, body, signal: AbortSignal.timeout(10000)
-  });
-  if (!response.ok) throw new Error("sms_delivery_failed");
-}
-
 async function sendEmail(env, email, subject, html) {
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST", headers: { Authorization: "Bearer " + env.RESEND_API_KEY, "Content-Type": "application/json" },
@@ -210,8 +186,6 @@ function bytesToHex(bytes) { return [...bytes].map(b => b.toString(16).padStart(
 function randomDigits() { return String(crypto.getRandomValues(new Uint32Array(1))[0] % 1000000).padStart(6, "0"); }
 function randomToken(size) { const bytes = crypto.getRandomValues(new Uint8Array(size)); return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, ""); }
 function bearer(request) { const value = request.headers.get("Authorization") || ""; return value.startsWith("Bearer ") ? value.slice(7).trim() : ""; }
-function normalizePhone(value) { const digits = String(value || "").replace(/[^\d+]/g, ""); if (/^01\d{9}$/.test(digits)) return "+20" + digits.slice(1); if (/^\+?20\d{10}$/.test(digits)) return digits.startsWith("+") ? digits : "+" + digits; return /^\+[1-9]\d{7,14}$/.test(digits) ? digits : ""; }
-function maskPhone(value) { const s = String(value || ""); return s.length > 5 ? s.slice(0, 4) + "••••" + s.slice(-2) : "••••"; }
 function maskEmail(value) { const [u, d] = String(value || "").split("@"); return u && d ? u.slice(0, 2) + "•••@" + d : "••••"; }
 function constantTimeEqual(a, b) { const x = String(a), y = String(b); let diff = x.length ^ y.length; const n = Math.max(x.length, y.length); for (let i = 0; i < n; i++) diff |= (x.charCodeAt(i % (x.length || 1)) || 0) ^ (y.charCodeAt(i % (y.length || 1)) || 0); return diff === 0; }
 async function safeJson(request) { try { return await request.json(); } catch (_) { return null; } }
