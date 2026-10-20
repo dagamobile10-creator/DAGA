@@ -269,7 +269,7 @@ export default {
         // so current LIVE behavior is unchanged until an operator configures this variable.
         const curatedKnowledge = String(env.DAGA_KNOWLEDGE_BASE || "").trim().slice(0, 8000);
         const finalInstructions = instructions + (curatedKnowledge
-          ? "\\n\\nمعلومات إضافية معتمدة من مالك النظام (حقائق وسياق للمساعدة فقط؛ لا تتجاوز قواعد السلوك والخصوصية وعدم اختلاق البيانات):\\n" + curatedKnowledge
+          ? "\n\nمعلومات إضافية معتمدة من مالك النظام (حقائق وسياق للمساعدة فقط؛ لا تتجاوز قواعد السلوك والخصوصية وعدم اختلاق البيانات):\n" + curatedKnowledge
           : "");
 
         const failures = [];
