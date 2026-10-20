@@ -9,6 +9,7 @@ Do not use production data, real customer accounts, or real payment records duri
 - [ ] `DAGA_ALLOWED_ORIGINS` is set to the exact staging frontend origin.
 - [ ] `DAGA_APP_BASE_URL` is set to the trusted HTTPS staging frontend origin/path used to create invitation links; it is never derived from the request Host header.
 - [ ] Invitation page at `/invite/?token=...` is served over HTTPS and calls the staging Worker URL, not the production voice Worker until the application D1 binding is verified.
+- [ ] Verify the staging Worker’s effective `DAGA_APP_BASE_URL` explicitly: invitations generated in staging must link to the staging frontend, never `https://daga-voice.dagamobile10.workers.dev`; do not change the production value as a side effect of staging configuration.
 - [ ] `POST /api/company/auth/register` and `POST /api/company/auth/register/verify` send and verify email OTPs; challenges are hashed, expire, have bounded attempts, and use atomic single-use claims.
 - [ ] `POST /api/company/auth/login` authenticates with email + password and does not require an OTP on every login.
 - [ ] `POST /api/company/auth/setup/start` and `POST /api/company/auth/setup/verify` let an approved account without credentials set a password using email OTP.
