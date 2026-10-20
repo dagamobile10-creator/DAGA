@@ -47,7 +47,7 @@ class NavigationRouteTests(unittest.TestCase):
         for path in (
             "/api/company/auth/me",
             "/api/company/auth/login",
-            "/api/company/auth/register/verify",
+            "/api/company/auth/setup/verify",
             "/api/company/auth/logout",
             "/api/company/invitations",
             "/api/company/orders",
