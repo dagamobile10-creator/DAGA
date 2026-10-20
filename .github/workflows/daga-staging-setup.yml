@@ -128,6 +128,11 @@ jobs:
           ESMS_SENDER_ID: ${{ secrets.ESMS_SENDER_ID }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           DAGA_EMAIL_FROM: ${{ secrets.DAGA_EMAIL_FROM }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          LIVEAVATAR_API_KEY: ${{ secrets.LIVEAVATAR_API_KEY }}
+          LIVEAVATAR_AVATAR_ID: ${{ secrets.LIVEAVATAR_AVATAR_ID }}
         run: |
           set -euo pipefail
           missing=()
@@ -148,13 +153,13 @@ jobs:
               echo "## DAGA staging readiness"
               echo "- Infrastructure: deployed; schema migrations and runtime smoke checks are verified separately below."
               echo "- Owner authentication / OTP delivery: **BLOCKED**."
-              echo "- Missing GitHub Actions repository secrets: `$missing_csv`."
+              echo "- Missing GitHub Actions repository secrets: $missing_csv."
               echo "- Add the missing secrets under Settings → Secrets and variables → Actions, then rerun this workflow."
               echo "- Production Worker and main branch were not targeted."
             } >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          for name in DAGA_OTP_PEPPER DAGA_OWNER_BOOTSTRAP_TOKEN DAGA_OWNER_PHONE DAGA_OWNER_EMAIL RESEND_API_KEY DAGA_EMAIL_FROM ESMS_API_KEY ESMS_SENDER_ID TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN TWILIO_FROM_NUMBER; do
+          for name in DAGA_OTP_PEPPER DAGA_OWNER_BOOTSTRAP_TOKEN DAGA_OWNER_PHONE DAGA_OWNER_EMAIL RESEND_API_KEY DAGA_EMAIL_FROM ESMS_API_KEY ESMS_SENDER_ID TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN TWILIO_FROM_NUMBER ELEVENLABS_API_KEY OPENAI_API_KEY GROQ_API_KEY LIVEAVATAR_API_KEY LIVEAVATAR_AVATAR_ID; do
             if [ -n "${!name:-}" ]; then
               printf '%s' "${!name}" | npx --yes wrangler@3 secret put "$name" --name daga-app-staging
             fi
