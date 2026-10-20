@@ -14,6 +14,24 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Guard staging readiness fail-closed behavior
+        run: |
+          python3 - <<'PY'
+          workflow = open(".github/workflows/daga-staging-setup.yml", encoding="utf-8").read()
+          checks = {
+              "staging deploy targets dedicated worker": 'name = "daga-app-staging"' in workflow,
+              "staging database is separately named": 'database_name = "daga-app-staging"' in workflow,
+              "staging memory gate enabled": 'DAGA_MEMORY_REQUIRE_AUTH = "true"' in workflow,
+              "voice auth compatibility is explicit": 'DAGA_VOICE_REQUIRE_AUTH = "false"' in workflow,
+              "missing auth secrets mark readiness false": 'echo "auth_ready=false" >> "$GITHUB_OUTPUT"' in workflow,
+              "configured auth secrets mark readiness true": 'echo "auth_ready=true" >> "$GITHUB_OUTPUT"' in workflow,
+              "missing secrets cannot yield a green staging run": 'Require owner-auth secrets for a green staging run' in workflow and 'if [ "$AUTH_READY" != "true" ]; then' in workflow,
+              "production worker is not the staging target": 'name = "daga-voice"' not in workflow,
+          }
+          for name, ok in checks.items():
+              print(("PASS" if ok else "FAIL") + ": " + name)
+          assert all(checks.values()), "Staging readiness fail-closed guard failed"
+          PY
       - name: Check Worker module syntax
         run: node --input-type=module --check < worker.js
       - name: Check owner-auth module syntax
