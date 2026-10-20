@@ -324,7 +324,7 @@ export default {
             const ai = await fetch("https://api.openai.com/v1/responses", {
               signal: AbortSignal.timeout(6500), method: "POST",
               headers: { "Authorization": `Bearer ${env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
-              body: JSON.stringify({ model: "gpt-5-mini", instructions, input: conversation, max_output_tokens: 320 })
+              body: JSON.stringify({ model: "gpt-5-mini", instructions: finalInstructions, input: conversation, max_output_tokens: 320 })
             });
             const data = await ai.json();
             if (ai.ok) {
