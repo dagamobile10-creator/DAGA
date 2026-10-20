@@ -137,7 +137,7 @@ export async function handleOwnerAdmin(request, env, url) {
       if(await db.prepare("SELECT id FROM daga_accounts WHERE lower(email)=? LIMIT 1").bind(email).first())return json(env,{error:"account_email_already_exists"},409);
       const id=crypto.randomUUID(),storeId=crypto.randomUUID(),now=new Date().toISOString(),publicId="DAGA-USER-"+id.replace(/-/g,"").toUpperCase(),companyPublicId="DAGA-COMPANY-"+storeId.replace(/-/g,"").toUpperCase();
       try{await db.batch([
-        db.prepare("INSERT INTO daga_accounts (id,public_id,phone_e164,email,display_name,role,status,store_id,phone_verified_at,email_verified_at,created_at,updated_at) VALUES (?,?,NULL,?,?,'store_owner','pending',?,NULL,NULL,?,?)").bind(id,publicId,email,ownerName,storeId,now,now),
+        db.prepare("INSERT INTO daga_accounts (id,public_id,email,display_name,role,status,store_id,created_at,updated_at) VALUES (?,?,?,?,'store_owner','pending',?,?,?)").bind(id,publicId,email,ownerName,storeId,now,now),
         db.prepare("INSERT INTO daga_stores (id,public_id,owner_account_id,legal_identity,display_name,status,created_at,updated_at) VALUES (?,?,?,?,?,'pending',?,?)").bind(storeId,companyPublicId,id,legalIdentity,displayName,now,now)
       ]);}catch(_){return json(env,{error:"company_owner_creation_conflict"},409);}
       await audit(db,owner.id,"company_owner_provisioned","daga_stores",storeId,{companyPublicId,ownerPublicId:publicId});
