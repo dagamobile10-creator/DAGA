@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This is the preparation guide for adding owner-approved facts and operating rules to LIVE DAGA without rewriting its core behavior instructions. The Worker supports an optional `DAGA_KNOWLEDGE_BASE` environment variable. It is currently a deployment-time setting, not an in-app editor.
+This is the preparation guide for adding owner-approved facts and operating rules to LIVE DAGA without rewriting its core behavior instructions. The Worker supports an optional `DAGA_KNOWLEDGE_BASE` environment variable and an owner-managed in-app editor backed by the D1 database. The environment variable remains an optional deployment-time source; the dashboard editor manages database entries.
 
 ## Current behavior
 
