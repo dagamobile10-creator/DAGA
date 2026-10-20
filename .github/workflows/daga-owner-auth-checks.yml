@@ -4,7 +4,7 @@ on:
   push:
     branches: [daga-v30-implementation]
   pull_request:
-    branches: [main]
+    branches: [main, daga-v30-implementation]
 
 jobs:
   syntax-and-schema:
