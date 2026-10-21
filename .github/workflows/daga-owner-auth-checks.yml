@@ -2,9 +2,9 @@ name: DAGA V30 owner-auth checks
 
 on:
   push:
-    branches: [daga-v30-implementation, daga-email-only-auth]
+    branches: [daga-v30-implementation, daga-email-only-auth, feat-daga-curated-knowledge-context-v2]
   pull_request:
-    branches: [main, daga-v30-implementation, daga-email-only-auth]
+    branches: [main, daga-v30-implementation, daga-email-only-auth, feat-daga-curated-knowledge-context-v2]
 
 jobs:
   syntax-and-schema:
@@ -33,6 +33,8 @@ jobs:
               print(("PASS" if ok else "FAIL") + ": " + name)
           assert all(checks.values()), "Staging readiness fail-closed guard failed"
           PY
+      - name: Check owner email verification, password login, and recovery lifecycle
+        run: python3 tests/owner-auth-lifecycle-regression.py
       - name: Check Worker module syntax
         run: node --input-type=module --check < worker.js
       - name: Check owner-auth module syntax
