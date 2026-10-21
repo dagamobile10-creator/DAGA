@@ -43,7 +43,7 @@ export async function handleOwnerAdmin(request, env, url) {
       await audit(db,owner.id,"knowledge_entry_created","daga_knowledge_entries",id,{title,category});
       return json(env,{ok:true,id},201);
     }
-    const knowledgeMatch = path.match(/^\\/owner\\/admin\\/knowledge\\/([a-f0-9-]{36})$/i);
+    const knowledgeMatch = path.match(/^\/owner\/admin\/knowledge\/([a-f0-9-]{36})$/i);
     if (knowledgeMatch && request.method === "PATCH") {
       await ensureKnowledgeTable(db);
       const b = await readJson(request); if (!b) return json(env, { error: "invalid_json" }, 400);
