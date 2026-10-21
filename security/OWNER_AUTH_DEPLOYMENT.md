@@ -15,6 +15,9 @@ Create a **new dedicated Cloudflare D1 database** for app/account data. Do not r
 7. `migrations/0007_daga_company_registration_challenges.sql`
 8. `migrations/0008_daga_company_login_challenges.sql`
 9. `migrations/0009_daga_payment_submission_uniqueness.sql` (prevents more than one pending-review payment submission per order)
+10. `migrations/0010_email_only_auth.sql` (email-only account credentials; removes legacy phone columns)
+
+Migration 0010 is part of the current email-only staging branch. Back up the dedicated staging database and review the migration before applying it. Do not apply it to the production database without a separately approved migration plan.
 
 Bind that database to the Worker as `DAGA_APP_DB`. Keep the existing `DAGA_MEMORY_DB` binding separate until its user identity model is migrated and tested.
 
