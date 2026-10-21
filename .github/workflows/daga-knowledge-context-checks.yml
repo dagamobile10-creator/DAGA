@@ -1,0 +1,22 @@
+name: DAGA curated knowledge checks
+
+on:
+  push:
+    branches: [feat-daga-curated-knowledge-context-v2]
+  pull_request:
+    branches: [daga-v30-implementation]
+
+jobs:
+  knowledge-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check JavaScript module syntax
+        run: |
+          node --input-type=module --check < worker.js
+          node --input-type=module --check < owner-admin.js
+      - name: Check curated knowledge security and wiring
+        run: python3 tests/knowledge-context-regression.py
