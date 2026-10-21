@@ -254,6 +254,10 @@ jobs:
           test "$code" = "401" || { echo "::error::Unauthenticated owner session endpoint returned HTTP $code"; exit 1; }
           code="$(curl -sS -o /tmp/owner-admin.json -w '%{http_code}' --max-time 15 https://daga-app-staging.dagamobile10.workers.dev/owner/admin/overview)"
           test "$code" = "401" || { echo "::error::Unauthenticated owner administration endpoint returned HTTP $code"; exit 1; }
+          code="$(curl -sS -o /tmp/owner-knowledge.json -w '%{http_code}' --max-time 15 https://daga-app-staging.dagamobile10.workers.dev/owner/admin/knowledge)"
+          test "$code" = "401" || { echo "::error::Unauthenticated owner knowledge endpoint returned HTTP $code"; exit 1; }
+          grep -q 'معرفة ضجه' /tmp/page-_owner_.html || { echo "::error::Staging owner console is missing the knowledge management UI"; exit 1; }
+          echo "Owner-managed knowledge API denies anonymous access and owner console serves its management UI."
           for path in /api/company/plans /api/company/payment-methods /api/company/offers?service=store /api/company/orders; do
             code="$(curl -sS -o /tmp/company-orders.json -w '%{http_code}' --max-time 15 "https://daga-app-staging.dagamobile10.workers.dev$path")"
             test "$code" = "401" || { echo "::error::Unauthenticated company order endpoint $path returned HTTP $code"; exit 1; }
