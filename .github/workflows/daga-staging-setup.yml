@@ -252,6 +252,14 @@ jobs:
           # Owner session and administration endpoints must reject unauthenticated callers too.
           code="$(curl -sS -o /tmp/owner-me.json -w '%{http_code}' --max-time 15 https://daga-app-staging.dagamobile10.workers.dev/owner/auth/me)"
           test "$code" = "401" || { echo "::error::Unauthenticated owner session endpoint returned HTTP $code"; exit 1; }
+          # Bootstrap negative-path checks must never send a verification email.
+          code="$(curl -sS -o /tmp/owner-bootstrap-anon.json -w '%{http_code}' --max-time 15 -H 'Content-Type: application/json' -d '{"email":"staging-smoke-invalid@example.invalid"}' https://daga-app-staging.dagamobile10.workers.dev/owner/bootstrap/start)"
+          test "$code" = "401" || { echo "::error::Owner bootstrap without a token returned HTTP $code"; exit 1; }
+          grep -q '"error":"unauthorized"' /tmp/owner-bootstrap-anon.json || { echo "::error::Owner bootstrap anonymous request did not fail as unauthorized"; exit 1; }
+          code="$(curl -sS -o /tmp/owner-bootstrap-wrong-token.json -w '%{http_code}' --max-time 15 -H 'Authorization: Bearer invalid-staging-smoke-token' -H 'Content-Type: application/json' -d '{"email":"staging-smoke-invalid@example.invalid"}' https://daga-app-staging.dagamobile10.workers.dev/owner/bootstrap/start)"
+          test "$code" = "401" || { echo "::error::Owner bootstrap with an invalid token returned HTTP $code"; exit 1; }
+          grep -q '"error":"unauthorized"' /tmp/owner-bootstrap-wrong-token.json || { echo "::error::Owner bootstrap invalid-token request did not fail as unauthorized"; exit 1; }
+          echo "Owner bootstrap rejects missing and invalid tokens without triggering verification-email delivery."
           code="$(curl -sS -o /tmp/owner-admin.json -w '%{http_code}' --max-time 15 https://daga-app-staging.dagamobile10.workers.dev/owner/admin/overview)"
           test "$code" = "401" || { echo "::error::Unauthenticated owner administration endpoint returned HTTP $code"; exit 1; }
           code="$(curl -sS -o /tmp/owner-knowledge.json -w '%{http_code}' --max-time 15 https://daga-app-staging.dagamobile10.workers.dev/owner/admin/knowledge)"
