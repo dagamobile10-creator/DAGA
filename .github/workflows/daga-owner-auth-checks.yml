@@ -37,6 +37,8 @@ jobs:
         run: python3 tests/owner-auth-lifecycle-regression.py
       - name: Check company account setup, recovery, and invitation lifecycle
         run: python3 tests/company-auth-lifecycle-regression.py
+      - name: Check checkout pricing, payment review, and entitlement lifecycle
+        run: python3 tests/checkout-payment-lifecycle-regression.py
       - name: Check Worker module syntax
         run: node --input-type=module --check < worker.js
       - name: Check owner-auth module syntax
