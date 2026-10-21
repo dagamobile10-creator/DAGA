@@ -122,6 +122,8 @@ jobs:
               print(("PASS" if passed else "FAIL") + ": " + name)
           assert all(checks.values()), "Company invitation privilege-boundary guard failed"
           PY
+      - name: Check company invitation authorization regression coverage
+        run: python3 tests/company-invitation-security-regression.py
       - name: Guard provider error redaction
         run: |
           python3 - <<'PY'
