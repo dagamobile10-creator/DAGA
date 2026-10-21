@@ -91,3 +91,16 @@ Do not use production data, real customer accounts, or real payment records duri
 - [ ] Editing a company display name does not change its public ID.
 - [ ] Public ID / identity QR alone never authenticates or grants access.
 - [ ] Company terminology is used in user-facing copy; internal legacy SQL names are not renamed without a separate compatibility migration.
+
+
+## LIVE DAGA owner-managed knowledge context (draft feature)
+- [ ] Test only on a dedicated non-production Worker and D1 database with the current feature branch deployed.
+- [ ] Open the owner console from the same Worker origin and confirm an unauthenticated request to `/owner/admin/knowledge` returns 401.
+- [ ] As an authenticated program owner, create a harmless demo entry and confirm it appears in the list.
+- [ ] Ask LIVE DAGA a question that depends on the demo fact and verify that the configured chat provider receives the curated context.
+- [ ] Disable the entry and verify it is excluded from new chat requests; edit it and verify the updated content is used.
+- [ ] Verify empty title/content, content longer than 4,000 characters, and creation after 200 entries are rejected safely.
+- [ ] Verify creating/editing entries produces owner audit events and does not expose secrets or private customer information.
+- [ ] Test the Groq, Cloudflare AI, and OpenAI fallback paths separately when each provider is configured.
+- [ ] Confirm the existing chat, TTS, LiveAvatar, owner login, and company portal still behave correctly on staging.
+- [ ] Do not merge or deploy this feature to production until these runtime checks pass and the release is explicitly approved.
