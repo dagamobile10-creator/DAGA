@@ -35,6 +35,8 @@ jobs:
           PY
       - name: Check owner email verification, password login, and recovery lifecycle
         run: python3 tests/owner-auth-lifecycle-regression.py
+      - name: Check company account setup, recovery, and invitation lifecycle
+        run: python3 tests/company-auth-lifecycle-regression.py
       - name: Check Worker module syntax
         run: node --input-type=module --check < worker.js
       - name: Check owner-auth module syntax
