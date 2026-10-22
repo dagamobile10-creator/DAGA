@@ -49,6 +49,11 @@ jobs:
           rm -rf _site
           mkdir _site
           cp index.html _site/index.html
+          # Include the separate first-time program-admin setup pages in the published site.
+          test -s admin-first-setup.html
+          cp admin-first-setup.html _site/admin-first-setup.html
+          test -s admin-setup.html
+          cp admin-setup.html _site/admin-setup.html
           test -s daga_user_voice_reference.m4a
           cp daga_user_voice_reference.m4a _site/daga_user_voice_reference.m4a
           touch _site/.nojekyll
