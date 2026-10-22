@@ -3,7 +3,7 @@ name: DAGA isolated staging setup
 on:
   workflow_dispatch:
   push:
-    branches: [daga-v30-implementation, daga-email-only-auth]
+    branches: [daga-v30-implementation, daga-email-only-auth, feat-daga-curated-knowledge-context-v2]
     paths:
       - ".github/workflows/daga-staging-setup.yml"
       - "worker.js"
@@ -252,8 +252,20 @@ jobs:
           # Owner session and administration endpoints must reject unauthenticated callers too.
           code="$(curl -sS -o /tmp/owner-me.json -w '%{http_code}' --max-time 15 https://daga-app-staging.dagamobile10.workers.dev/owner/auth/me)"
           test "$code" = "401" || { echo "::error::Unauthenticated owner session endpoint returned HTTP $code"; exit 1; }
+          # Bootstrap negative-path checks must never send a verification email.
+          code="$(curl -sS -o /tmp/owner-bootstrap-anon.json -w '%{http_code}' --max-time 15 -H 'Content-Type: application/json' -d '{"email":"staging-smoke-invalid@example.invalid"}' https://daga-app-staging.dagamobile10.workers.dev/owner/bootstrap/start)"
+          test "$code" = "401" || { echo "::error::Owner bootstrap without a token returned HTTP $code"; exit 1; }
+          grep -q '"error":"unauthorized"' /tmp/owner-bootstrap-anon.json || { echo "::error::Owner bootstrap anonymous request did not fail as unauthorized"; exit 1; }
+          code="$(curl -sS -o /tmp/owner-bootstrap-wrong-token.json -w '%{http_code}' --max-time 15 -H 'Authorization: Bearer invalid-staging-smoke-token' -H 'Content-Type: application/json' -d '{"email":"staging-smoke-invalid@example.invalid"}' https://daga-app-staging.dagamobile10.workers.dev/owner/bootstrap/start)"
+          test "$code" = "401" || { echo "::error::Owner bootstrap with an invalid token returned HTTP $code"; exit 1; }
+          grep -q '"error":"unauthorized"' /tmp/owner-bootstrap-wrong-token.json || { echo "::error::Owner bootstrap invalid-token request did not fail as unauthorized"; exit 1; }
+          echo "Owner bootstrap rejects missing and invalid tokens without triggering verification-email delivery."
           code="$(curl -sS -o /tmp/owner-admin.json -w '%{http_code}' --max-time 15 https://daga-app-staging.dagamobile10.workers.dev/owner/admin/overview)"
           test "$code" = "401" || { echo "::error::Unauthenticated owner administration endpoint returned HTTP $code"; exit 1; }
+          code="$(curl -sS -o /tmp/owner-knowledge.json -w '%{http_code}' --max-time 15 https://daga-app-staging.dagamobile10.workers.dev/owner/admin/knowledge)"
+          test "$code" = "401" || { echo "::error::Unauthenticated owner knowledge endpoint returned HTTP $code"; exit 1; }
+          grep -q 'معرفة ضجه' /tmp/page-_owner_.html || { echo "::error::Staging owner console is missing the knowledge management UI"; exit 1; }
+          echo "Owner-managed knowledge API denies anonymous access and owner console serves its management UI."
           for path in /api/company/plans /api/company/payment-methods /api/company/offers?service=store /api/company/orders; do
             code="$(curl -sS -o /tmp/company-orders.json -w '%{http_code}' --max-time 15 "https://daga-app-staging.dagamobile10.workers.dev$path")"
             test "$code" = "401" || { echo "::error::Unauthenticated company order endpoint $path returned HTTP $code"; exit 1; }

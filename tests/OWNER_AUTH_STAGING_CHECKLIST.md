@@ -107,3 +107,14 @@ Do not use production data, real customer accounts, or real payment records duri
 - [ ] With auth gates disabled for compatibility, document that `/memory` still accepts a caller-supplied legacy `userId`; do not treat that compatibility mode as tenant-secure or expose sensitive account data through it.
 - [ ] With auth gates enabled in staging, verify unauthenticated `/memory`, `/chat`, `/tts`, and `/liveavatar/token` requests fail closed, while valid approved company sessions succeed.
 - [ ] Test manager/employee cross-company isolation and invite permission boundaries.
+
+## LIVE DAGA owner-managed knowledge context
+- [ ] Test only on a dedicated non-production Worker and D1 database with the current feature branch deployed.
+- [ ] Confirm unauthenticated requests to `/owner/admin/knowledge` return 401.
+- [ ] As the authenticated program owner, create a harmless demo entry and confirm it appears in the list.
+- [ ] Ask LIVE DAGA about the demo fact; verify the configured chat provider receives the curated context.
+- [ ] Disable the entry and confirm it is excluded from new requests; test editing and audit events.
+- [ ] Confirm empty content, content longer than 4,000 characters, and more than 200 entries are rejected.
+- [ ] Test Groq, Cloudflare AI, and OpenAI fallback separately when configured.
+- [ ] Verify chat, TTS, LiveAvatar, owner login, and company portal remain functional.
+- [ ] Do not release to production until these runtime checks pass and the release is explicitly approved.

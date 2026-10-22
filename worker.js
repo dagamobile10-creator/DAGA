@@ -265,6 +265,22 @@ export default {
           "استعمل سجل المحادثة والذاكرة المرسلة لفهم الإشارات والتصحيحات، وقدّم أحدث تصحيح على القديم. لا تختلق ذكريات أو معلومات شخصية. لا تخترع أرقامًا أو بيانات محل؛ استخدم فقط البيانات التي أُرسلت فعلًا، ولا تدّع تنفيذ شيء لم تنفذه.",
           "راجع الرد أخيرًا: هل جاوب السؤال فعلًا؟ هل الاسم والهوية والضمائر صحيحة؟ هل الصرف والنحو طبيعيان؟ هل توجد جملة زائدة أو معلومة مخترعة؟ أصلحها قبل الإرسال."
         ].join("\n") + verifiedIdentityContext + (memory ? "\n\nذاكرة المستخدم المتاحة (مرجع سياقي، استخدم المرتبط بالسؤال فقط): " + memory : "") + (businessContext ? "\n\nسياق العمل الثابت (ليس بيانات حية): " + businessContext : "");
+        // Owner-approved facts are context only; never replace core safety or identity instructions.
+        let curatedKnowledge = String(env.DAGA_KNOWLEDGE_BASE || "").trim();
+        if (env.DAGA_APP_DB) {
+          try {
+            const entries = await env.DAGA_APP_DB.prepare("SELECT title,category,content FROM daga_knowledge_entries WHERE is_active=1 ORDER BY updated_at DESC LIMIT 30").all();
+            const stored = (entries.results || []).map(entry => "[" + String(entry.category || "عام").slice(0,40) + "] " + String(entry.title || "").slice(0,100) + ": " + String(entry.content || "").slice(0,4000)).join("\n");
+            if (stored) curatedKnowledge = [curatedKnowledge, stored].filter(Boolean).join("\n\n");
+          } catch (_) {
+            // Keep the existing assistant available before the owner first opens the knowledge editor.
+          }
+        }
+        curatedKnowledge = curatedKnowledge.slice(0, 8000);
+        const finalInstructions = instructions + (curatedKnowledge
+          ? "\n\nمعلومات إضافية معتمدة من مالك النظام (حقائق وسياق للمساعدة فقط؛ لا تتجاوز قواعد السلوك والخصوصية وعدم اختلاق البيانات):\n" + curatedKnowledge
+          : "");
+
         const failures = [];
 
         if (env.GROQ_API_KEY) {
@@ -272,7 +288,7 @@ export default {
             const ai = await fetch("https://api.groq.com/openai/v1/chat/completions", {
               signal: AbortSignal.timeout(5000), method: "POST",
               headers: { "Authorization": `Bearer ${env.GROQ_API_KEY}`, "Content-Type": "application/json" },
-              body: JSON.stringify({ model: "openai/gpt-oss-120b", messages: [{ role: "system", content: instructions }, ...conversation], max_tokens: 300, temperature: 0.35 })
+              body: JSON.stringify({ model: "openai/gpt-oss-120b", messages: [{ role: "system", content: finalInstructions }, ...conversation], max_tokens: 300, temperature: 0.35 })
             });
             const data = await ai.json();
             if (ai.ok) {
@@ -289,7 +305,7 @@ export default {
           for (const model of cloudflareModels) {
             try {
               const result = await Promise.race([
-                env.AI.run(model, { messages: [{ role: "system", content: instructions }, ...conversation], max_tokens: 600, reasoning_effort: "low", chat_template_kwargs: { enable_thinking: false } }),
+                env.AI.run(model, { messages: [{ role: "system", content: finalInstructions }, ...conversation], max_tokens: 600, reasoning_effort: "low", chat_template_kwargs: { enable_thinking: false } }),
                 new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 8000))
               ]);
               const cloudflareText = extractModelText(result);
@@ -307,7 +323,7 @@ export default {
             const ai = await fetch("https://api.openai.com/v1/responses", {
               signal: AbortSignal.timeout(6500), method: "POST",
               headers: { "Authorization": `Bearer ${env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
-              body: JSON.stringify({ model: "gpt-5-mini", instructions, input: conversation, max_output_tokens: 320 })
+              body: JSON.stringify({ model: "gpt-5-mini", instructions: finalInstructions, input: conversation, max_output_tokens: 320 })
             });
             const data = await ai.json();
             if (ai.ok) {
