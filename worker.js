@@ -69,7 +69,7 @@ export default {
       ownerAuthResponse = await handleOwnerAuth(request, env, url);
     } catch (error) {
       // Keep auth API failures JSON-shaped and log only a bounded diagnostic, never request data.
-      console.error("owner_auth_unhandled", url.pathname, error instanceof Error ? error.name : "unknown_error");
+      console.error("owner_auth_unhandled", url.pathname, error instanceof Error ? error.name : "unknown_error", error instanceof Error ? error.message : "no_error_message");
       return json({ error: "owner_auth_internal_error" }, 500);
     }
     if (ownerAuthResponse) return ownerAuthResponse;
