@@ -64,7 +64,14 @@ export default {
       });
     }
 
-    const ownerAuthResponse = await handleOwnerAuth(request, env, url);
+    let ownerAuthResponse;
+    try {
+      ownerAuthResponse = await handleOwnerAuth(request, env, url);
+    } catch (error) {
+      // Keep auth API failures JSON-shaped and log only a bounded diagnostic, never request data.
+      console.error("owner_auth_unhandled", url.pathname, error instanceof Error ? error.name : "unknown_error");
+      return json({ error: "owner_auth_internal_error" }, 500);
+    }
     if (ownerAuthResponse) return ownerAuthResponse;
     const ownerAdminResponse = await handleOwnerAdmin(request, env, url);
     if (ownerAdminResponse) return ownerAdminResponse;
