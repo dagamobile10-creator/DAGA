@@ -84,19 +84,26 @@ class NavigationRouteTests(unittest.TestCase):
                 self.assertIn(path, self.company_auth)
 
 
-    def test_company_auth_ui_is_email_only(self):
+    def test_company_and_program_owner_auth_ui_are_email_only(self):
         self.assertIn('id="identifier" type="email"', self.company)
-        for forbidden in (
-            'id="phone"',
-            'id="phoneNumber"',
-            'id="loginPhone"',
-            'id="setupPhoneCode"',
-            'id="recoveryPhoneCode"',
-            'id="registerPhone"',
-            'id="smsCode"',
-        ):
-            with self.subTest(forbidden=forbidden):
-                self.assertNotIn(forbidden, self.company)
+        self.assertIn('id="bootstrapEmail" type="email"', self.owner)
+        self.assertIn('id="bootstrapEmailCode"', self.owner)
+        self.assertIn('id="recoveryEmailCode"', self.owner)
+        for page_name, page in (("company", self.company), ("program_owner", self.owner)):
+            for forbidden in (
+                'id="phone"',
+                'id="phoneNumber"',
+                'id="loginPhone"',
+                'id="setupPhoneCode"',
+                'id="recoveryPhoneCode"',
+                'id="registerPhone"',
+                'id="smsCode"',
+                'id="bootstrapPhone"',
+                'id="bootstrapPhoneCode"',
+                'id="recoveryPhone"',
+            ):
+                with self.subTest(page=page_name, forbidden=forbidden):
+                    self.assertNotIn(forbidden, page)
         for route in (
             "/api/company/auth/setup/start",
             "/api/company/auth/setup/verify",
@@ -107,6 +114,9 @@ class NavigationRouteTests(unittest.TestCase):
                 self.assertIn(route, self.company_auth)
         self.assertIn("emailCode", self.company_auth)
         self.assertIn("RESEND_API_KEY", self.company_auth)
+        self.assertIn("/owner/bootstrap/start", self.owner)
+        self.assertIn("/owner/bootstrap/verify", self.owner)
+        self.assertIn("/owner/recovery/complete", self.owner)
 
     def test_owner_console_admin_endpoints_have_server_handlers(self):
         for path in (
