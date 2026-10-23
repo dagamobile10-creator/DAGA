@@ -84,6 +84,13 @@ class NavigationRouteTests(unittest.TestCase):
             with self.subTest(marker=marker):
                 self.assertIn(marker, self.live)
 
+    def test_first_time_owner_setup_is_visible_on_initial_load(self):
+        self.assertIn('<details id="ownerBootstrap" open', self.owner)
+        self.assertIn('id="bootstrapStartForm"', self.owner)
+        self.assertIn('id="bootstrapVerifyForm"', self.owner)
+        self.assertIn('/owner/bootstrap/start', self.owner)
+        self.assertIn('/owner/bootstrap/verify', self.owner)
+
 
 if __name__ == "__main__":
     unittest.main()
