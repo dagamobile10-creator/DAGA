@@ -83,6 +83,31 @@ class NavigationRouteTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertIn(path, self.company_auth)
 
+
+    def test_company_auth_ui_is_email_only(self):
+        self.assertIn('id="identifier" type="email"', self.company)
+        for forbidden in (
+            'id="phone"',
+            'id="phoneNumber"',
+            'id="loginPhone"',
+            'id="setupPhoneCode"',
+            'id="recoveryPhoneCode"',
+            'id="registerPhone"',
+            'id="smsCode"',
+        ):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, self.company)
+        for route in (
+            "/api/company/auth/setup/start",
+            "/api/company/auth/setup/verify",
+            "/api/company/auth/recovery/start",
+            "/api/company/auth/recovery/complete",
+        ):
+            with self.subTest(route=route):
+                self.assertIn(route, self.company_auth)
+        self.assertIn("emailCode", self.company_auth)
+        self.assertIn("RESEND_API_KEY", self.company_auth)
+
     def test_owner_console_admin_endpoints_have_server_handlers(self):
         for path in (
             "/owner/admin/overview",
