@@ -60,6 +60,9 @@ jobs:
           auth = open("owner-auth.js", encoding="utf-8").read()
           checks = {
               "first-time setup form exists": 'id="bootstrapStartForm"' in html and 'id="bootstrapVerifyForm"' in html,
+              "first-time setup is visible without opening details": '<details id="ownerBootstrap" open' in html,
+              "bootstrap is protected by a server-side setup token": "DAGA_OWNER_BOOTSTRAP_TOKEN" in auth and "constantTimeEqual(auth,\"Bearer \"+env.DAGA_OWNER_BOOTSTRAP_TOKEN)" in auth,
+              "bootstrap verification also requires setup token": "DAGA_OWNER_BOOTSTRAP_TOKEN" in auth and "owner_bootstrap_email" in auth,
               "setup token is sent only in Authorization header": "'Authorization':'Bearer '+bootstrapTokenInMemory" in html,
               "setup token is not persisted in browser storage": "localStorage.setItem('bootstrapToken'" not in html and "sessionStorage.setItem('bootstrapToken'" not in html,
               "bootstrap uses email verification only": 'id="bootstrapEmailCode"' in html and 'id="bootstrapPhoneCode"' not in html and "owner_bootstrap_email" in auth,
