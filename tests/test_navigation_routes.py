@@ -13,6 +13,7 @@ class NavigationRouteTests(unittest.TestCase):
         cls.owner = (ROOT / "owner-console.html").read_text(encoding="utf-8")
         cls.company = (ROOT / "company" / "portal.html").read_text(encoding="utf-8")
         cls.invite = (ROOT / "invite" / "index.html").read_text(encoding="utf-8")
+        cls.review = (ROOT / "review" / "index.html").read_text(encoding="utf-8")
 
     def test_worker_serves_all_navigation_destinations(self):
         for path in ("/go", "/owner-console", "/company", "/invite"):
@@ -90,6 +91,11 @@ class NavigationRouteTests(unittest.TestCase):
         self.assertIn('id="bootstrapVerifyForm"', self.owner)
         self.assertIn('/owner/bootstrap/start', self.owner)
         self.assertIn('/owner/bootstrap/verify', self.owner)
+
+    def test_review_hub_links_to_all_current_daga_destinations(self):
+        for path in ("/go/", "/company/", "/owner-console/", "/invite/", "https://dagamobile10-creator.github.io/DAGA/"):
+            with self.subTest(path=path):
+                self.assertIn(path, self.review)
 
 
 if __name__ == "__main__":
