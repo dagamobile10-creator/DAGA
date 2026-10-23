@@ -51,7 +51,7 @@ db.prepare("INSERT INTO daga_accounts (id,email,display_name,role,status,email_v
 db.prepare("INSERT INTO daga_program_owner (singleton_id,account_id) VALUES (1,?)").bind(id),
 db.prepare("INSERT INTO daga_owner_credentials (account_id,password_hash,password_salt,password_iterations,recovery_code_hash,created_at,updated_at) VALUES (?,?,?,?,?,?,?)").bind(id,passwordHash,salt,PBKDF2_ITERATIONS,recoveryHash,now,now),
 db.prepare("INSERT INTO daga_owner_bootstrap_state (singleton_id,consumed_at,consumed_account_id) VALUES (1,?,?)").bind(now,id)
-]);}catch(_){return json(env,{error:"owner_provisioning_failed"},409);}
+]);}catch(error){console.error("owner_provisioning_batch_failed",error instanceof Error?error.message:"unknown_error");return json(env,{error:"owner_provisioning_failed",...(new URL(request.url).hostname==="daga-app-staging.dagamobile10.workers.dev"?{diagnostic:error instanceof Error?error.message.slice(0,200):"unknown_error"}:{})},409);}
 await db.batch([db.prepare("UPDATE daga_auth_challenges SET consumed_at=? WHERE purpose='owner_bootstrap_email' AND consumed_at IS NULL").bind(now),db.prepare("INSERT INTO daga_security_events (id,account_id,event_type,outcome) VALUES (?,?,?,'success')").bind(crypto.randomUUID(),id,"owner_provisioned")]);
 const session=await createSession(db,id);return json(env,{ok:true,account:{id,role:OWNER_ROLE,emailMasked:maskEmail(email)},sessionToken:session.token,expiresAt:session.expiresAt,recoveryCodeReminder:"Store the recovery code offline. It is never shown again."});
 }
