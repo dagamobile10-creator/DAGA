@@ -14,6 +14,9 @@ class NavigationRouteTests(unittest.TestCase):
         cls.company = (ROOT / "company" / "portal.html").read_text(encoding="utf-8")
         cls.invite = (ROOT / "invite" / "index.html").read_text(encoding="utf-8")
         cls.review = (ROOT / "review" / "index.html").read_text(encoding="utf-8")
+        cls.company_auth = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
+        cls.company_orders = (ROOT / "company-orders.js").read_text(encoding="utf-8")
+        cls.owner_admin = (ROOT / "owner-admin.js").read_text(encoding="utf-8")
 
     def test_worker_serves_all_navigation_destinations(self):
         for path in ("/go", "/owner-console", "/company", "/invite"):
@@ -42,13 +45,13 @@ class NavigationRouteTests(unittest.TestCase):
             self.assertNotIn('href="/invite/"', page)
 
     def test_company_portal_api_paths_have_server_handlers(self):
-        portal = (ROOT / "company" / "portal.html").read_text(encoding="utf-8")
-        invitations = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
-        orders = (ROOT / "company-orders.js").read_text(encoding="utf-8")
         for path in (
             "/api/company/auth/me",
             "/api/company/auth/login",
+            "/api/company/auth/setup/start",
             "/api/company/auth/setup/verify",
+            "/api/company/auth/recovery/start",
+            "/api/company/auth/recovery/complete",
             "/api/company/auth/logout",
             "/api/company/invitations",
             "/api/company/orders",
@@ -58,12 +61,29 @@ class NavigationRouteTests(unittest.TestCase):
         ):
             with self.subTest(path=path):
                 portal_path = path.replace("/api/company", "")
-                self.assertTrue(path in portal or portal_path in portal, f"portal does not call {path}")
-                self.assertTrue(path in invitations or path in orders or path in self.worker,
-                                f"no Worker handler found for {path}")
+                self.assertTrue(path in self.company or portal_path in self.company or path in self.live,
+                                f"no frontend call found for {path}")
+                handler_sources = self.company_auth + self.company_orders + self.worker
+                self.assertIn(path, handler_sources, f"no server handler found for {path}")
+
+    def test_company_auth_routes_are_dispatched_to_the_real_handler(self):
+        self.assertIn('import { handleCompanyInvitations } from "./company-invitations.js";', self.worker)
+        self.assertIn("const invitationResponse = await handleCompanyInvitations(request, env, url);", self.worker)
+        for path in (
+            "/api/company/auth/register",
+            "/api/company/auth/register/verify",
+            "/api/company/auth/login",
+            "/api/company/auth/setup/start",
+            "/api/company/auth/setup/verify",
+            "/api/company/auth/recovery/start",
+            "/api/company/auth/recovery/complete",
+            "/api/company/auth/me",
+            "/api/company/auth/logout",
+        ):
+            with self.subTest(path=path):
+                self.assertIn(path, self.company_auth)
 
     def test_owner_console_admin_endpoints_have_server_handlers(self):
-        admin = (ROOT / "owner-admin.js").read_text(encoding="utf-8")
         for path in (
             "/owner/admin/overview",
             "/owner/admin/plans",
@@ -77,8 +97,8 @@ class NavigationRouteTests(unittest.TestCase):
         ):
             with self.subTest(path=path):
                 self.assertIn(path, self.owner)
-                self.assertIn(path, admin)
-        self.assertIn("authenticatedOwner(request, db)", admin)
+                self.assertIn(path, self.owner_admin)
+        self.assertIn("authenticatedOwner(request, db)", self.owner_admin)
 
     def test_navigation_does_not_remove_live_voice_contract_markers(self):
         for marker in ("workers.dev/chat", "workers.dev/tts", "playVoiceTest", "daga_mh_memory_v1"):
