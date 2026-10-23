@@ -135,6 +135,19 @@ class NavigationRouteTests(unittest.TestCase):
                 self.assertIn(path, self.owner_admin)
         self.assertIn("authenticatedOwner(request, db)", self.owner_admin)
 
+    def test_approved_company_owner_is_sent_email_password_setup_code(self):
+        # The admin decision must persist approval first, then request the
+        # existing email-only setup OTP flow. Rejected/pending accounts must
+        # not receive a setup code, and invitation registration stays separate.
+        start = self.owner.index("document.addEventListener('click',async e=>")
+        end = self.owner.index("\n})();", start)
+        handler = self.owner[start:end]
+        self.assertIn("b.dataset.decision==='approved'", handler)
+        self.assertIn("'/api/company/auth/setup/start'", handler)
+        self.assertIn("JSON.stringify({email:approvedStore.email})", handler)
+        self.assertIn("تمت الموافقة على الشركة", handler)
+        self.assertIn("company-invitations.js", self.worker)
+
     def test_navigation_does_not_remove_live_voice_contract_markers(self):
         for marker in ("workers.dev/chat", "workers.dev/tts", "playVoiceTest", "daga_mh_memory_v1"):
             with self.subTest(marker=marker):
