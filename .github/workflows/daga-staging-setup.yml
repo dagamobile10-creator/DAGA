@@ -123,7 +123,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           DAGA_OTP_PEPPER: ${{ secrets.DAGA_OTP_PEPPER }}
-          DAGA_OWNER_BOOTSTRAP_TOKEN: ${{ secrets.DAGA_OWNER_BOOTSTRAP_TOKEN }}
+          DAGA_OWNER_BOOTSTRAP_TOKEN: ${{ secrets.DAGA_STAGING_OWNER_BOOTSTRAP_TOKEN }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           DAGA_EMAIL_FROM: ${{ secrets.DAGA_EMAIL_FROM }}
           ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
@@ -145,7 +145,9 @@ jobs:
           done
           missing=()
           for name in DAGA_OTP_PEPPER DAGA_OWNER_BOOTSTRAP_TOKEN RESEND_API_KEY DAGA_EMAIL_FROM; do
-            if [ -z "${!name:-}" ]; then missing+=("$name"); fi
+            if [ -z "${!name:-}" ]; then
+              if [ "$name" = "DAGA_OWNER_BOOTSTRAP_TOKEN" ]; then missing+=("DAGA_STAGING_OWNER_BOOTSTRAP_TOKEN"); else missing+=("$name"); fi
+            fi
           done
           if [ "${#missing[@]}" -gt 0 ]; then
             missing_csv="$(IFS=', '; echo "${missing[*]}")"
@@ -156,7 +158,7 @@ jobs:
               echo "- Owner authentication / OTP delivery: **BLOCKED**."
             echo "- Voice/chat/TTS are explicitly in legacy compatibility mode; this does not establish tenant-secure voice identity."
               echo "- Missing GitHub Actions repository secrets: $missing_csv."
-              echo "- Add the missing secrets under Settings → Secrets and variables → Actions, then rerun this workflow."
+              echo "- Add the missing secrets under Settings → Secrets and variables → Actions, then rerun this workflow. Staging bootstrap uses the separate DAGA_STAGING_OWNER_BOOTSTRAP_TOKEN secret; it does not reuse the production bootstrap token."
               echo "- Optional voice secrets missing: ${voice_missing[*]:-none}."
               echo "- Production Worker and main branch were not targeted."
             } >> "$GITHUB_STEP_SUMMARY"
@@ -171,7 +173,7 @@ jobs:
           echo "auth_ready=true" >> "$GITHUB_OUTPUT"
           {
             echo "## DAGA staging readiness"
-            echo "- Email-only owner authentication and email OTP delivery secrets: present and configured on the isolated staging Worker."
+            echo "- Email-only owner authentication and email OTP delivery secrets: present and configured on the isolated staging Worker. The staging bootstrap token is sourced from the dedicated DAGA_STAGING_OWNER_BOOTSTRAP_TOKEN GitHub secret, separate from production."
             echo "- Owner bootstrap and real email delivery still require end-to-end verification with the designated owner."
             echo "- Voice/chat/TTS remain explicitly in legacy compatibility mode until the client sends verified sessions; do not treat these smoke tests as authenticated voice validation."
             echo "- Production Worker and main branch were not targeted."
