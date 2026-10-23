@@ -1,7 +1,7 @@
 const OWNER_ROLE = "program_owner";
 const SESSION_TTL_SECONDS = 60 * 60 * 8;
 const OTP_TTL_SECONDS = 10 * 60;
-const PBKDF2_ITERATIONS = 310000;
+const PBKDF2_ITERATIONS = 100000; // Cloudflare Workers Web Crypto supports at most 100000 iterations
 
 export async function handleOwnerAuth(request, env, url) {
   const routes = new Set([
