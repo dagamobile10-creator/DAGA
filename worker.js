@@ -5,7 +5,7 @@ import { handleCompanyOrders } from "./company-orders.js";
 import { handleShopAuth } from "./shop-auth.js";
 import { authenticatedAccount } from "./owner-auth.js";
 import inviteHtml from "./invite/index.html";
-import companyPortalHtml from "./company/portal.html";
+import shopPortalHtml from "./company/portal.html";
 import shopDashboardHtml from "./shop-dashboard-v30.html";
 import officialLandingHtml from "./go/index.html";
 import ownerConsoleHtml from "./owner-console.html";
@@ -53,8 +53,8 @@ export default {
       });
     }
 
-    if ((url.pathname === "/company" || url.pathname === "/company/") && request.method === "GET") {
-      return new Response(companyPortalHtml, {
+    if ((url.pathname === "/shop-access" || url.pathname === "/shop-access/" || url.pathname === "/company" || url.pathname === "/company/") && request.method === "GET") {
+      return new Response(shopPortalHtml, {
         status: 200,
         headers: {
           "Content-Type": "text/html; charset=utf-8",
