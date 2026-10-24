@@ -550,7 +550,7 @@ class InvitationSchemaTests(unittest.TestCase):
         self.db.execute(
             """INSERT INTO daga_company_registration_challenges
             (id,invitation_token_hash,channel,destination_hash,code_hash,expires_at,attempts)
-            VALUES ('reg-limited','invite-hash','phone','phone-hash','otp-hash','2026-10-18T00:00:00.000Z',4)"""
+            VALUES ('reg-limited','invite-hash','email','email-hash','otp-hash','2026-10-18T00:00:00.000Z',4)"""
         )
         fifth = self.db.execute(
             "UPDATE daga_company_registration_challenges SET attempts=attempts+1 WHERE id='reg-limited' AND attempts<5 RETURNING attempts"
