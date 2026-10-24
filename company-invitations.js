@@ -4,13 +4,15 @@ const MAX_INVITE_TTL_HOURS = 24 * 14;
 const DEFAULT_INVITE_TTL_HOURS = 72;
 export async function handleCompanyInvitations(request, env, url) {
   const path = url.pathname.replace(/\/+$/, "") || "/";
-  const publicPaths = ["/api/company/auth/register", "/api/company/auth/register/verify", "/api/company/auth/login", "/api/company/auth/setup/start", "/api/company/auth/setup/verify", "/api/company/auth/recovery/start", "/api/company/auth/recovery/complete"];
+  const publicPaths = ["/api/company/onboarding/start", "/api/company/onboarding/verify", "/api/company/auth/register", "/api/company/auth/register/verify", "/api/company/auth/login", "/api/company/auth/setup/start", "/api/company/auth/setup/verify", "/api/company/auth/recovery/start", "/api/company/auth/recovery/complete"];
   const accountPaths = ["/api/company/auth/me", "/api/company/auth/logout"];
   if (!publicPaths.includes(path) && !accountPaths.includes(path) && !["/api/company/invitations", "/api/company/invitations/accept"].includes(path) &&
       !/^\/api\/company\/invitations\/[0-9a-f-]{36}(?:\/revoke)?$/i.test(path)) return null;
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors(env) });
   const db = env.DAGA_APP_DB;
   if (!db) return json(env, { error: "application_database_not_configured" }, 503);
+  if (path === "/api/company/onboarding/start" && request.method === "POST") return companyOnboardingStart(request, env, db);
+  if (path === "/api/company/onboarding/verify" && request.method === "POST") return companyOnboardingVerify(request, env, db);
   if (path === "/api/company/auth/register" && request.method === "POST") return registerStart(request, env, db);
   if (path === "/api/company/auth/register/verify" && request.method === "POST") return registerVerify(request, env, db);
   if (path === "/api/company/auth/login" && request.method === "POST") return companyLoginStart(request, env, db);
@@ -130,6 +132,111 @@ async function companyRecoveryComplete(request,env,db){
   if(Number(results?.[0]?.meta?.changes||0)!==1||Number(results?.[1]?.meta?.changes||0)!==1)return json(env,{error:"invalid_expired_or_used_recovery_credentials"},400);
   return json(env,{ok:true,message:"Password reset. Sign in again with your new password."});
 }
+
+async function companyOnboardingStart(request, env, db) {
+  if (!env.DAGA_OTP_PEPPER || !env.RESEND_API_KEY || !env.DAGA_EMAIL_FROM) {
+    return json(env, { error: "company_registration_not_configured" }, 503);
+  }
+  const b = await safeJson(request);
+  if (!b) return json(env, { error: "invalid_json" }, 400);
+  const ownerName = String(b.ownerName || "").trim().slice(0, 100);
+  const companyName = String(b.companyName || "").trim().slice(0, 120);
+  const legalIdentity = String(b.legalIdentity || "").trim().slice(0, 120);
+  const email = String(b.email || "").trim().toLowerCase();
+  if (ownerName.length < 2 || companyName.length < 2 || legalIdentity.length < 3 ||
+      email.length > 254 || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) {
+    return json(env, { error: "valid_company_owner_name_and_email_required" }, 400);
+  }
+  const ip = String(request.headers.get("CF-Connecting-IP") || "unknown").slice(0, 128);
+  if (!await companyRateLimit(db, env, "company-onboarding-ip:" + ip, 5, 900) ||
+      !await companyRateLimit(db, env, "company-onboarding-email:" + await sha256(email), 3, 3600)) {
+    return json(env, { error: "rate_limited" }, 429);
+  }
+  if (await db.prepare("SELECT id FROM daga_accounts WHERE lower(email)=? LIMIT 1").bind(email).first()) {
+    return json(env, { error: "account_email_already_exists" }, 409);
+  }
+  if (await db.prepare("SELECT id FROM daga_stores WHERE lower(legal_identity)=lower(?) LIMIT 1").bind(legalIdentity).first()) {
+    return json(env, { error: "company_identity_already_exists" }, 409);
+  }
+  const id = crypto.randomUUID();
+  const code = companyDigits();
+  const now = new Date().toISOString();
+  const expires = new Date(Date.now() + 600000).toISOString();
+  const [codeHash, destinationHash] = await Promise.all([
+    sha256(id + ":" + code + ":" + env.DAGA_OTP_PEPPER),
+    sha256("email:" + email)
+  ]);
+  await db.prepare("INSERT INTO daga_company_onboarding_challenges (id,email,owner_name,company_name,legal_identity,destination_hash,code_hash,expires_at) VALUES (?,?,?,?,?,?,?,?)")
+    .bind(id, email, ownerName, companyName, legalIdentity, destinationHash, codeHash, expires).run();
+  try {
+    await companySendEmail(env, email, "DAGA company registration verification",
+      "<p>Your DAGA company registration code is <strong>" + code + "</strong>.</p><p>It expires in 10 minutes. Your company will remain pending until approved by the DAGA program owner.</p>");
+  } catch (_) {
+    await db.prepare("UPDATE daga_company_onboarding_challenges SET consumed_at=? WHERE id=? AND consumed_at IS NULL").bind(now, id).run();
+    return json(env, { error: "verification_delivery_failed" }, 502);
+  }
+  return json(env, { ok: true, requiresVerification: true, emailMasked: maskCompanyEmail(email), expiresInSeconds: 600 }, 202);
+}
+
+async function companyOnboardingVerify(request, env, db) {
+  if (!env.DAGA_OTP_PEPPER) return json(env, { error: "company_registration_not_configured" }, 503);
+  const b = await safeJson(request);
+  if (!b) return json(env, { error: "invalid_json" }, 400);
+  const email = String(b.email || "").trim().toLowerCase();
+  const code = String(b.emailCode || "").trim();
+  if (email.length > 254 || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) || !/^\\d{6}$/.test(code)) {
+    return json(env, { error: "valid_email_and_verification_code_required" }, 400);
+  }
+  const ip = String(request.headers.get("CF-Connecting-IP") || "unknown").slice(0, 128);
+  if (!await companyRateLimit(db, env, "company-onboarding-verify-ip:" + ip, 10, 900) ||
+      !await companyRateLimit(db, env, "company-onboarding-verify-email:" + await sha256(email), 6, 3600)) {
+    return json(env, { error: "rate_limited" }, 429);
+  }
+  const now = new Date().toISOString();
+  const destinationHash = await sha256("email:" + email);
+  const challenge = await db.prepare("SELECT id,owner_name,company_name,legal_identity,code_hash FROM daga_company_onboarding_challenges WHERE email=? AND destination_hash=? AND consumed_at IS NULL AND attempts<5 AND expires_at>? ORDER BY created_at DESC LIMIT 1")
+    .bind(email, destinationHash, now).first();
+  if (!challenge) return json(env, { error: "invalid_expired_or_used_verification_code" }, 400);
+  const attempt = await db.prepare("UPDATE daga_company_onboarding_challenges SET attempts=attempts+1 WHERE id=? AND consumed_at IS NULL AND attempts<5 AND expires_at>? RETURNING attempts")
+    .bind(challenge.id, now).first();
+  if (!attempt || !constantTimeEqualCompany(await sha256(challenge.id + ":" + code + ":" + env.DAGA_OTP_PEPPER), challenge.code_hash)) {
+    return json(env, { error: "invalid_expired_or_used_verification_code" }, 400);
+  }
+  if (await db.prepare("SELECT id FROM daga_accounts WHERE lower(email)=? LIMIT 1").bind(email).first()) {
+    return json(env, { error: "account_email_already_exists" }, 409);
+  }
+  if (await db.prepare("SELECT id FROM daga_stores WHERE lower(legal_identity)=lower(?) LIMIT 1").bind(challenge.legal_identity).first()) {
+    return json(env, { error: "company_identity_already_exists" }, 409);
+  }
+  const accountId = crypto.randomUUID();
+  const storeId = crypto.randomUUID();
+  const ownerPublicId = "DAGA-USER-" + accountId.replace(/-/g, "").toUpperCase();
+  const companyPublicId = "DAGA-COMPANY-" + storeId.replace(/-/g, "").toUpperCase();
+  const claimId = crypto.randomUUID();
+  try {
+    const results = await db.batch([
+      db.prepare("UPDATE daga_company_onboarding_challenges SET consumed_at=?,claim_id=? WHERE id=? AND consumed_at IS NULL AND attempts<=5 AND expires_at>? RETURNING id")
+        .bind(now, claimId, challenge.id, now),
+      db.prepare("INSERT INTO daga_accounts (id,public_id,email,display_name,role,status,store_id,email_verified_at,created_at,updated_at) SELECT ?,?,?,?,'store_owner','pending',?,?,?,? WHERE EXISTS (SELECT 1 FROM daga_company_onboarding_challenges WHERE id=? AND claim_id=? AND consumed_at=?)")
+        .bind(accountId, ownerPublicId, email, challenge.owner_name, storeId, now, now, now, challenge.id, claimId, now),
+      db.prepare("INSERT INTO daga_stores (id,public_id,owner_account_id,legal_identity,display_name,status,created_at,updated_at) SELECT ?,?,?,?,?, 'pending',?,? WHERE EXISTS (SELECT 1 FROM daga_accounts WHERE id=? AND status='pending' AND role='store_owner')")
+        .bind(storeId, companyPublicId, accountId, challenge.legal_identity, challenge.company_name, now, now, accountId)
+    ]);
+    if (Number(results?.[1]?.meta?.changes || 0) !== 1 || Number(results?.[2]?.meta?.changes || 0) !== 1) {
+      return json(env, { error: "registration_conflict_retry" }, 409);
+    }
+  } catch (_) {
+    return json(env, { error: "company_owner_creation_conflict" }, 409);
+  }
+  return json(env, {
+    ok: true,
+    status: "pending",
+    message: "Email verified. Your company registration is pending program-owner approval. No sign-in is available until approval.",
+    store: { publicId: companyPublicId, displayName: challenge.company_name, status: "pending" },
+    owner: { publicId: ownerPublicId, emailMasked: maskCompanyEmail(email) }
+  }, 201);
+}
+
 async function registerStart(request,env,db){
 if(!env.DAGA_OTP_PEPPER||!env.RESEND_API_KEY||!env.DAGA_EMAIL_FROM)return json(env,{error:"company_registration_not_configured"},503);const b=await safeJson(request);if(!b)return json(env,{error:"invalid_json"},400);
 const token=String(b.token||"").trim(),name=String(b.displayName||"").trim().slice(0,100),email=String(b.email||"").trim().toLowerCase();
