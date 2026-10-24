@@ -598,10 +598,10 @@ let dashboardBooted=false;
 async function bootAuthenticatedDashboard(token,selectedCompanyId){
  if(dashboardBooted)return;dashboardBooted=true;
  try{
-  const response=await fetch('/api/company/auth/me',{method:'GET',headers:{Authorization:'Bearer '+token},cache:'no-store',credentials:'omit'});
+  const response=await fetch('/api/shop/auth/me',{method:'GET',headers:{Authorization:'Bearer '+token},cache:'no-store',credentials:'omit'});
   const data=await response.json().catch(()=>({}));
-  if(!response.ok||!data.account||!Array.isArray(data.companies)||!data.companies.length){window.location.replace('/company/');return;}
-  const company=data.companies.find(c=>c.id===selectedCompanyId);
+  if(!response.ok||!data.account||!Array.isArray(data.shops)||!data.shops.length){window.location.replace('/company/');return;}
+  const company=data.shops.find(c=>c.id===selectedCompanyId);
   if(!company){window.location.replace('/company/');return;}
   let role=String(company.role||data.account.role||'').toLowerCase();
   if(role==='owner')role='store_owner';
@@ -609,7 +609,7 @@ async function bootAuthenticatedDashboard(token,selectedCompanyId){
   window.DAGA_AUTH_USER={id:data.account.id,displayName:data.account.displayName||'',role:role,storeId:company.id,storeName:company.displayName||'ضجه',permissions:company.permissions||{}};
   loadStoreData(company.id);
   const header=document.querySelector('header.top .row');
-  if(header&&!document.getElementById('accountLogout')){const b=document.createElement('button');b.id='accountLogout';b.type='button';b.textContent='تسجيل الخروج';b.style.cssText='margin:0 10px;padding:8px 11px;border:1px solid #4a402c;border-radius:9px;background:#15120c;color:#d7ad57;font:inherit;font-size:12px;cursor:pointer';b.addEventListener('click',async()=>{b.disabled=true;try{await fetch('/api/company/auth/logout',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:'{}',cache:'no-store',credentials:'omit'});}finally{window.location.replace('/company/');}});header.insertBefore(b,header.lastElementChild);}
+  if(header&&!document.getElementById('accountLogout')){const b=document.createElement('button');b.id='accountLogout';b.type='button';b.textContent='تسجيل الخروج';b.style.cssText='margin:0 10px;padding:8px 11px;border:1px solid #4a402c;border-radius:9px;background:#15120c;color:#d7ad57;font:inherit;font-size:12px;cursor:pointer';b.addEventListener('click',async()=>{b.disabled=true;try{await fetch('/api/shop/auth/logout',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:'{}',cache:'no-store',credentials:'omit'});}finally{window.location.replace('/company/');}});header.insertBefore(b,header.lastElementChild);}
   render();
  }catch(_){window.location.replace('/company/');}
 }
