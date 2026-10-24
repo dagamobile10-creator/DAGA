@@ -137,12 +137,12 @@ export async function handleOwnerAdmin(request, env, url) {
     const storeEditMatch=path.match(/^\/owner\/admin\/stores\/([a-f0-9-]{36})$/i);
     if(storeEditMatch&&request.method==="PATCH"){
       const b=await readJson(request);if(!b)return json(env,{error:"invalid_json"},400);
-      const store=await db.prepare("SELECT id,display_name,legal_identity FROM daga_stores WHERE id=?").bind(storeEditMatch[1]).first();
+      const store=await db.prepare("SELECT id,display_name FROM daga_stores WHERE id=?").bind(storeEditMatch[1]).first();
       if(!store)return json(env,{error:"store_not_found"},404);
       const displayName=b.displayName===undefined?store.display_name:String(b.displayName).trim().slice(0,120);
       if(!displayName)return json(env,{error:"display_name_required"},400);
       await db.prepare("UPDATE daga_stores SET display_name=?,updated_at=? WHERE id=?").bind(displayName,new Date().toISOString(),store.id).run();
-      await audit(db,owner.id,"store_display_name_changed","daga_stores",store.id,{legalIdentityUnchanged:true});
+      await audit(db,owner.id,"store_display_name_changed","daga_stores",store.id,{shopNameUpdated:true});
       return json(env,{ok:true,displayName,legalIdentityUnchanged:true});
     }
 
