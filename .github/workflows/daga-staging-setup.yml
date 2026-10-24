@@ -11,6 +11,7 @@ on:
       - "owner-console.html"
       - "owner-auth.js"
       - "owner-admin.js"
+      - "shop-auth.js"
       - "company-invitations.js"
       - "company-orders.js"
       - "wrangler.toml"
