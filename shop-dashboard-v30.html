@@ -602,7 +602,8 @@ async function bootAuthenticatedDashboard(){
   const data=await response.json().catch(()=>({}));
   if(!response.ok||!data.account||!['store_owner','manager','employee'].includes(String(data.account.role||'').toLowerCase())||!Array.isArray(data.companies)||!data.companies.length){sessionStorage.removeItem('daga_company_session');window.location.replace('/company/');return;}
   const company=data.companies[0];
-  const role=String(company.role||data.account.role||'').toLowerCase();
+  let role=String(company.role||data.account.role||'').toLowerCase();
+  if(role==='owner')role='store_owner';
   if(!['store_owner','manager','employee'].includes(role)){sessionStorage.removeItem('daga_company_session');window.location.replace('/company/');return;}
   window.DAGA_AUTH_USER={id:data.account.id,displayName:data.account.displayName||'',role:role,storeId:company.id,storeName:company.displayName||'ضجه',permissions:company.permissions||{}};
   const header=document.querySelector('header.top .row');
