@@ -55,6 +55,38 @@ class InvitationSchemaTests(unittest.TestCase):
         )
         self.db.commit()
 
+    def test_email_only_migration_preserves_email_challenges_and_drops_phone_challenges(self):
+        db = sqlite3.connect(":memory:")
+        db.row_factory = sqlite3.Row
+        db.execute("PRAGMA foreign_keys=ON")
+        try:
+            for migration in MIGRATIONS[:-1]:
+                db.executescript((ROOT / "migrations" / migration).read_text(encoding="utf-8"))
+            db.execute(
+                """INSERT INTO daga_company_registration_challenges
+                (id,invitation_token_hash,channel,destination_hash,code_hash,expires_at,attempts)
+                VALUES ('email-row','invite-email','email','email-dest','email-code','2026-10-18T00:00:00.000Z',1)"""
+            )
+            db.execute(
+                """INSERT INTO daga_company_registration_challenges
+                (id,invitation_token_hash,channel,destination_hash,code_hash,expires_at,attempts)
+                VALUES ('phone-row','invite-phone','phone','phone-dest','phone-code','2026-10-18T00:00:00.000Z',1)"""
+            )
+            db.commit()
+            db.executescript((ROOT / "migrations" / MIGRATIONS[-1]).read_text(encoding="utf-8"))
+            rows = db.execute(
+                "SELECT id,channel FROM daga_company_registration_challenges ORDER BY id"
+            ).fetchall()
+            self.assertEqual([(row["id"], row["channel"]) for row in rows], [("email-row", "email")])
+            with self.assertRaises(sqlite3.IntegrityError):
+                db.execute(
+                    """INSERT INTO daga_company_registration_challenges
+                    (id,invitation_token_hash,channel,destination_hash,code_hash,expires_at)
+                    VALUES ('new-phone','invite','phone','dest','code','2026-10-18T00:00:00.000Z')"""
+                )
+        finally:
+            db.close()
+
     def test_invitation_token_hash_is_unique(self):
         self.invite()
         with self.assertRaises(sqlite3.IntegrityError):
