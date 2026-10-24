@@ -14,6 +14,7 @@ MIGRATIONS = [
     "0008_daga_company_login_challenges.sql",
     "0009_daga_payment_submission_uniqueness.sql",
     "0010_email_only_auth.sql",
+    "0011_email_only_registration_challenges.sql",
 ]
 
 
