@@ -35,7 +35,7 @@ try{await sendEmail(env,email,"DAGA owner verification","<p>Your DAGA owner veri
 await audit(db,null,"owner_bootstrap_start","success");return json(env,{ok:true,emailMasked:maskEmail(email),expiresInSeconds:OTP_TTL_SECONDS});
 }
 async function bootstrapVerify(request,env){
-const db=env.DAGA_APP_DB;if(!db||!env.DAGA_OTP_PEPPER)return json(env,{error:"owner_auth_not_configured"},503);
+const db=env.DAGA_APP_DB;if(!db)return json(env,{error:"owner_auth_database_not_configured"},503);if(!env.DAGA_OTP_PEPPER)return json(env,{error:"owner_auth_not_configured"},503);
 const auth=request.headers.get("Authorization")||"";if(!env.DAGA_OWNER_BOOTSTRAP_TOKEN||!constantTimeEqual(auth,"Bearer "+env.DAGA_OWNER_BOOTSTRAP_TOKEN))return json(env,{error:"unauthorized"},401);
 if(await db.prepare("SELECT singleton_id FROM daga_program_owner WHERE singleton_id=1").first())return json(env,{error:"owner_already_provisioned"},409);
 const body=await safeJson(request);if(!body)return json(env,{error:"invalid_json"},400);
