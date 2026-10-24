@@ -20,7 +20,9 @@ export async function handleShopAuth(request, env, url) {
     if (path === "/api/shop/registration/verify" && request.method === "POST") return await registrationVerify(request,env,db);
     if (path === "/api/shop/auth/setup/start" && request.method === "POST") return await setupStart(request,env,db);
     if (path === "/api/shop/auth/setup/verify" && request.method === "POST") return await setupVerify(request,env,db);
-    if (path === "/api/shop/auth/login" && request.method === "POST") return await login(request,env,db);\n    if (path === "/api/shop/auth/recovery/start" && request.method === "POST") return await recoveryStart(request,env,db);\n    if (path === "/api/shop/auth/recovery/complete" && request.method === "POST") return await recoveryComplete(request,env,db);
+    if (path === "/api/shop/auth/login" && request.method === "POST") return await login(request,env,db);
+    if (path === "/api/shop/auth/recovery/start" && request.method === "POST") return await recoveryStart(request,env,db);
+    if (path === "/api/shop/auth/recovery/complete" && request.method === "POST") return await recoveryComplete(request,env,db);
     if (path === "/api/shop/auth/me" && request.method === "GET") return await me(request,env,db);
     if (path === "/api/shop/auth/logout" && request.method === "POST") return await logout(request,env,db);
     return json(env,{error:"method_not_allowed"},405);
