@@ -601,7 +601,8 @@ async function bootAuthenticatedDashboard(){
   const response=await fetch('/api/company/auth/me',{method:'GET',headers:{Authorization:'Bearer '+token},cache:'no-store',credentials:'omit'});
   const data=await response.json().catch(()=>({}));
   if(!response.ok||!data.account||!['store_owner','manager','employee'].includes(String(data.account.role||'').toLowerCase())||!Array.isArray(data.companies)||!data.companies.length){sessionStorage.removeItem('daga_company_session');window.location.replace('/company/');return;}
-  const company=data.companies[0];
+  const wantedCompany=sessionStorage.getItem('daga_selected_company');
+  const company=data.companies.find(c=>c.id===wantedCompany)||data.companies[0];
   let role=String(company.role||data.account.role||'').toLowerCase();
   if(role==='owner')role='store_owner';
   if(!['store_owner','manager','employee'].includes(role)){sessionStorage.removeItem('daga_company_session');window.location.replace('/company/');return;}
