@@ -62,12 +62,12 @@ const defaultCols=[
 {name:'كاش 4',entries:[['مكسب اليوم','6,000']]},
 {name:'الإكسسوار',entries:[['سكرينة آيفون','50'],['سكرينة أندرويد','50'],['سكرينة N95','50']]}
 ];
-const STORE_KEY='daga_dashboard_v30_full_accounting_test'; let cols=JSON.parse(JSON.stringify(defaultCols)); let ledger=[],closedDays=[]; let pendingOrder=null,rec=null,pendingClarification=null;
-try{
- let saved=JSON.parse(localStorage.getItem(STORE_KEY)||'null');
- if(!saved){const prior=JSON.parse(localStorage.getItem('daga_dashboard_v27_live_button_test')||'null');if(prior){saved=prior;localStorage.setItem(STORE_KEY,JSON.stringify(prior));}}
- if(saved){if(Array.isArray(saved.cols)&&saved.cols.length===10)cols=saved.cols;if(Array.isArray(saved.ledger))ledger=saved.ledger;if(Array.isArray(saved.closedDays))closedDays=saved.closedDays;}
-}catch(e){}
+let STORE_KEY=''; let cols=JSON.parse(JSON.stringify(defaultCols)); let ledger=[],closedDays=[]; let pendingOrder=null,rec=null,pendingClarification=null;
+function loadStoreData(storeId){
+ STORE_KEY='daga_dashboard_v30_store_'+encodeURIComponent(String(storeId));
+ cols=JSON.parse(JSON.stringify(defaultCols));ledger=[];closedDays=[];
+ try{const saved=JSON.parse(localStorage.getItem(STORE_KEY)||'null');if(saved){if(Array.isArray(saved.cols)&&saved.cols.length===10)cols=saved.cols;if(Array.isArray(saved.ledger))ledger=saved.ledger;if(Array.isArray(saved.closedDays))closedDays=saved.closedDays;}}catch(e){}
+}
 function persist(){try{localStorage.setItem(STORE_KEY,JSON.stringify({cols,ledger,closedDays}));return true}catch(e){alert('تعذر الحفظ على هذا الجهاز. صدّر نسخة احتياطية قبل المتابعة.');return false}}
 function num(v){return Number(String(v).replace(/[^0-9.-]/g,''))||0} function fmt(v){return Math.round(v).toLocaleString('en-US')} function esc(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
 function sumCol(name){const c=cols.find(x=>x.name===name);return c?c.entries.reduce((a,e)=>a+num(e[1]),0):0}
@@ -607,6 +607,7 @@ async function bootAuthenticatedDashboard(){
   if(role==='owner')role='store_owner';
   if(!['store_owner','manager','employee'].includes(role)){sessionStorage.removeItem('daga_company_session');window.location.replace('/company/');return;}
   window.DAGA_AUTH_USER={id:data.account.id,displayName:data.account.displayName||'',role:role,storeId:company.id,storeName:company.displayName||'ضجه',permissions:company.permissions||{}};
+  loadStoreData(company.id);
   const header=document.querySelector('header.top .row');
   if(header&&!document.getElementById('accountLogout')){const b=document.createElement('button');b.id='accountLogout';b.type='button';b.textContent='تسجيل الخروج';b.style.cssText='margin:0 10px;padding:8px 11px;border:1px solid #4a402c;border-radius:9px;background:#15120c;color:#d7ad57;font:inherit;font-size:12px;cursor:pointer';b.addEventListener('click',async()=>{b.disabled=true;try{await fetch('/api/company/auth/logout',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:'{}',cache:'no-store',credentials:'omit'});}finally{sessionStorage.removeItem('daga_company_session');window.location.replace('/company/');}});header.insertBefore(b,header.lastElementChild);}
   render();
