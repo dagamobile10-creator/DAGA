@@ -84,6 +84,21 @@ class NavigationRouteTests(unittest.TestCase):
                 self.assertIn(path, self.company_auth)
 
 
+    def test_company_onboarding_routes_require_email_verification_and_pending_approval(self):
+        for route in ('"/api/company/onboarding/start"', '"/api/company/onboarding/verify"'):
+            with self.subTest(route=route):
+                self.assertIn(route, self.company_auth)
+        self.assertIn("companyOnboardingStart", self.company_auth)
+        self.assertIn("companyOnboardingVerify", self.company_auth)
+        self.assertIn("role,status,store_id,email_verified_at", self.company_auth)
+        self.assertIn("'store_owner','pending'", self.company_auth)
+        self.assertIn("daga_company_onboarding_challenges", self.company_auth)
+        self.assertIn('id="showCompanyRegistration"', self.company)
+        self.assertIn('id="onboardingEmailCode"', self.company)
+        self.assertIn('/api/company/onboarding/start', self.company)
+        self.assertIn('/api/company/onboarding/verify', self.company)
+        self.assertIn("موافقة مالك التطبيق", self.company)
+
     def test_company_and_program_owner_auth_ui_are_email_only(self):
         self.assertIn('id="identifier" type="email"', self.company)
         self.assertIn('id="bootstrapEmail" type="email"', self.owner)
