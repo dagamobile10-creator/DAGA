@@ -43,6 +43,10 @@ jobs:
         run: node --input-type=module --check < company-orders.js
       - name: Check owner-admin module syntax
         run: node --input-type=module --check < owner-admin.js
+      - name: Check shop-auth module syntax
+        run: node --input-type=module --check < shop-auth.js
+      - name: Run shop self-registration regression tests
+        run: python3 tests/test_shop_self_registration.py
       - name: Check owner console inline JavaScript syntax
         run: |
           python3 - <<'PY'
