@@ -614,13 +614,13 @@ async function bootAuthenticatedDashboard(token,selectedCompanyId){
  }catch(_){window.location.replace('/company/');}
 }
 if(window.opener){
- window.opener.postMessage('DAGA_SHOP_READY',location.origin);
  const receiveAuthMessage=event=>{
   if(event.origin!==location.origin||event.source!==window.opener||!event.data||event.data.type!=='DAGA_AUTH'||typeof event.data.token!=='string'||!event.data.token||typeof event.data.companyId!=='string')return;
   window.removeEventListener('message',receiveAuthMessage);
   bootAuthenticatedDashboard(event.data.token,event.data.companyId);
  };
  window.addEventListener('message',receiveAuthMessage);
+ window.opener.postMessage('DAGA_SHOP_READY',location.origin);
 }else{window.location.replace('/company/');}
 </script>
 </body></html>
