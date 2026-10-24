@@ -64,7 +64,14 @@ export default {
       });
     }
 
-    const ownerAuthResponse = await handleOwnerAuth(request, env, url);
+    let ownerAuthResponse;
+    try {
+      ownerAuthResponse = await handleOwnerAuth(request, env, url);
+    } catch (error) {
+      // Keep auth API failures JSON-shaped and log only a bounded diagnostic, never request data.
+      console.error("owner_auth_unhandled", url.pathname, error instanceof Error ? error.name : "unknown_error", error instanceof Error ? error.message : "no_error_message");
+      return json({ error: "owner_auth_internal_error", ...(url.hostname === "daga-app-staging.dagamobile10.workers.dev" ? { diagnostic: error instanceof Error ? error.message.slice(0, 200) : "unknown_error" } : {}) }, 500);
+    }
     if (ownerAuthResponse) return ownerAuthResponse;
     const ownerAdminResponse = await handleOwnerAdmin(request, env, url);
     if (ownerAdminResponse) return ownerAdminResponse;
