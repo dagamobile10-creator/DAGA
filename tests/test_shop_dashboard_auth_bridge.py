@@ -27,7 +27,7 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
     def test_role_is_normalized_and_not_used_as_security_boundary(self):
         dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
         self.assertIn("if(role==='owner')role='store_owner';", dashboard)
-        self.assertIn("Authorization: 'Bearer '+token", dashboard)
+        self.assertIn("Authorization:'Bearer '+token", dashboard)
         self.assertIn("api/company/auth/logout", dashboard)
 
 
