@@ -74,7 +74,7 @@ class InvitationSchemaTests(unittest.TestCase):
         db.row_factory = sqlite3.Row
         db.execute("PRAGMA foreign_keys=ON")
         try:
-            for migration in MIGRATIONS[:-1]:
+            for migration in MIGRATIONS[:-2]:
                 db.executescript((ROOT / "migrations" / migration).read_text(encoding="utf-8"))
             db.execute(
                 """INSERT INTO daga_company_registration_challenges
@@ -87,7 +87,8 @@ class InvitationSchemaTests(unittest.TestCase):
                 VALUES ('phone-row','invite-phone','phone','phone-dest','phone-code','2026-10-18T00:00:00.000Z',1)"""
             )
             db.commit()
-            db.executescript((ROOT / "migrations" / MIGRATIONS[-1]).read_text(encoding="utf-8"))
+            db.executescript((ROOT / "migrations" / "0011_email_only_registration_challenges.sql").read_text(encoding="utf-8"))
+            db.executescript((ROOT / "migrations" / "0012_company_email_onboarding.sql").read_text(encoding="utf-8"))
             rows = db.execute(
                 "SELECT id,channel FROM daga_company_registration_challenges ORDER BY id"
             ).fetchall()
