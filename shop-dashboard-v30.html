@@ -594,25 +594,32 @@ function exportBackup(){const blob=new Blob([JSON.stringify({cols,ledger,closedD
 function importBackupPrompt(){open('<h2>استيراد نسخة احتياطية</h2><p class="small">اختر ملف JSON صادر من الداشبورد. الاستيراد يستبدل البيانات الحالية على هذا المتصفح.</p><input type="file" id="backupFile" accept="application/json"><button class="primary" onclick="importBackup()">استيراد البيانات</button>')}
 function importBackup(){const f=document.getElementById('backupFile').files[0];if(!f)return alert('اختار ملف النسخة الاحتياطية');const reader=new FileReader();reader.onload=()=>{try{const x=JSON.parse(reader.result);if(!Array.isArray(x.cols)||x.cols.length!==10)throw Error('bad');if(!confirm('هيتم استبدال البيانات الحالية. متأكد؟'))return;cols=x.cols;ledger=Array.isArray(x.ledger)?x.ledger:[];closedDays=Array.isArray(x.closedDays)?x.closedDays:[];persist();closeModal();render();alert('تم استيراد النسخة على هذا الجهاز.')}catch(e){alert('ملف النسخة غير صالح')}};reader.readAsText(f)}
 function open(s){document.getElementById('sheet').innerHTML=s;document.getElementById('modal').style.display='block'}function closeModal(){document.getElementById('modal').style.display='none'}
-async function bootAuthenticatedDashboard(){
- const token=sessionStorage.getItem('daga_company_session')||'';
- if(!token){window.location.replace('/company/');return;}
+let dashboardBooted=false;
+async function bootAuthenticatedDashboard(token,selectedCompanyId){
+ if(dashboardBooted)return;dashboardBooted=true;
  try{
   const response=await fetch('/api/company/auth/me',{method:'GET',headers:{Authorization:'Bearer '+token},cache:'no-store',credentials:'omit'});
   const data=await response.json().catch(()=>({}));
-  if(!response.ok||!data.account||!['store_owner','manager','employee'].includes(String(data.account.role||'').toLowerCase())||!Array.isArray(data.companies)||!data.companies.length){sessionStorage.removeItem('daga_company_session');window.location.replace('/company/');return;}
-  const wantedCompany=sessionStorage.getItem('daga_selected_company');
-  const company=data.companies.find(c=>c.id===wantedCompany)||data.companies[0];
+  if(!response.ok||!data.account||!Array.isArray(data.companies)||!data.companies.length){window.location.replace('/company/');return;}
+  const company=data.companies.find(c=>c.id===selectedCompanyId);
+  if(!company){window.location.replace('/company/');return;}
   let role=String(company.role||data.account.role||'').toLowerCase();
   if(role==='owner')role='store_owner';
-  if(!['store_owner','manager','employee'].includes(role)){sessionStorage.removeItem('daga_company_session');window.location.replace('/company/');return;}
+  if(!['store_owner','manager','employee'].includes(role)){window.location.replace('/company/');return;}
   window.DAGA_AUTH_USER={id:data.account.id,displayName:data.account.displayName||'',role:role,storeId:company.id,storeName:company.displayName||'ضجه',permissions:company.permissions||{}};
   loadStoreData(company.id);
   const header=document.querySelector('header.top .row');
-  if(header&&!document.getElementById('accountLogout')){const b=document.createElement('button');b.id='accountLogout';b.type='button';b.textContent='تسجيل الخروج';b.style.cssText='margin:0 10px;padding:8px 11px;border:1px solid #4a402c;border-radius:9px;background:#15120c;color:#d7ad57;font:inherit;font-size:12px;cursor:pointer';b.addEventListener('click',async()=>{b.disabled=true;try{await fetch('/api/company/auth/logout',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:'{}',cache:'no-store',credentials:'omit'});}finally{sessionStorage.removeItem('daga_company_session');window.location.replace('/company/');}});header.insertBefore(b,header.lastElementChild);}
+  if(header&&!document.getElementById('accountLogout')){const b=document.createElement('button');b.id='accountLogout';b.type='button';b.textContent='تسجيل الخروج';b.style.cssText='margin:0 10px;padding:8px 11px;border:1px solid #4a402c;border-radius:9px;background:#15120c;color:#d7ad57;font:inherit;font-size:12px;cursor:pointer';b.addEventListener('click',async()=>{b.disabled=true;try{await fetch('/api/company/auth/logout',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:'{}',cache:'no-store',credentials:'omit'});}finally{window.location.replace('/company/');}});header.insertBefore(b,header.lastElementChild);}
   render();
- }catch(_){sessionStorage.removeItem('daga_company_session');window.location.replace('/company/');}
+ }catch(_){window.location.replace('/company/');}
 }
-bootAuthenticatedDashboard();
+if(window.opener){
+ window.opener.postMessage('DAGA_SHOP_READY',location.origin);
+ window.addEventListener('message',event=>{
+  if(event.origin!==location.origin||event.source!==window.opener||!event.data||event.data.type!=='DAGA_AUTH'||typeof event.data.token!=='string'||!event.data.token||typeof event.data.companyId!=='string')return;
+  window.removeEventListener('message',arguments.callee);
+  bootAuthenticatedDashboard(event.data.token,event.data.companyId);
+ });
+}else{window.location.replace('/company/');}
 </script>
 </body></html>
