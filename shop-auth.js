@@ -76,6 +76,7 @@ async function setupStart(request,env,db){
   if(!env.DAGA_OTP_PEPPER||!env.RESEND_API_KEY||!env.DAGA_EMAIL_FROM)return json(env,{error:"email_verification_not_configured"},503);
   const b=await body(request);if(!b)return json(env,{error:"invalid_json"},400);
   const email=normalizeEmail(b.email);if(!validEmail(email))return json(env,{error:"valid_email_required"},400);
+  if(!await rateLimit(db,env,"shop-setup:"+email+":"+(request.headers.get("CF-Connecting-IP")||"unknown"),4,3600))return json(env,{error:"rate_limited"},429);
   const account=await db.prepare("SELECT id,email,display_name FROM daga_accounts WHERE lower(email)=? AND role='store_owner' AND status='approved' LIMIT 1").bind(email).first();
   if(!account)return json(env,{ok:true,message:"لو الحساب موافق عليه ومحتاج إعداد كلمة مرور، هيوصل كود على البريد."});
   if(await db.prepare("SELECT account_id FROM daga_account_credentials WHERE account_id=?").bind(account.id).first())return json(env,{ok:true,message:"لو الحساب محتاج إعداد، هيوصل كود على البريد."});
@@ -123,6 +124,7 @@ async function recoveryStart(request,env,db){
   if(!env.DAGA_OTP_PEPPER||!env.RESEND_API_KEY||!env.DAGA_EMAIL_FROM)return json(env,{error:"email_verification_not_configured"},503);
   const b=await body(request);if(!b)return json(env,{error:"invalid_json"},400);
   const email=normalizeEmail(b.email);if(!validEmail(email))return json(env,{error:"valid_email_required"},400);
+  if(!await rateLimit(db,env,"shop-recovery:"+email+":"+(request.headers.get("CF-Connecting-IP")||"unknown"),3,3600))return json(env,{error:"rate_limited"},429);
   const account=await db.prepare("SELECT id,email,display_name FROM daga_accounts WHERE lower(email)=? AND role='store_owner' AND status='approved' LIMIT 1").bind(email).first();
   if(!account)return json(env,{ok:true,message:"لو الحساب مؤهل للاسترداد، هيوصل كود على البريد."});
   const code=digits(),id=crypto.randomUUID(),expires=new Date(Date.now()+OTP_TTL_SECONDS*1000).toISOString(),[codeHash,destinationHash]=await Promise.all([sha(id+":"+code+":"+env.DAGA_OTP_PEPPER),sha("email:"+email)]);
