@@ -233,7 +233,7 @@ jobs:
             echo "::error::Owner API returned an allow-origin header for an untrusted origin"; exit 1
           fi
           echo "Staging company and owner API CORS checks passed: no wildcard origin was returned."
-          for path in /go/ /company/ /invite/ /owner/ /owner-console/ /shop/; do
+          for path in /go/ /shop-access/ /company/ /invite/ /owner/ /owner-console/ /shop/; do
             code="$(curl -sS -o "/tmp/page-$(echo "$path" | tr '/' '_').html" -w '%{http_code}' --max-time 15 "https://daga-app-staging.dagamobile10.workers.dev$path")"
             if [ "$code" != "200" ]; then echo "::error::Staging page $path returned HTTP $code"; exit 1; fi
             echo "Staging page $path returned HTTP 200."
