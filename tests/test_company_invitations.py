@@ -56,6 +56,19 @@ class InvitationSchemaTests(unittest.TestCase):
         )
         self.db.commit()
 
+    def test_company_onboarding_challenge_schema_has_bounded_attempts_and_single_claim(self):
+        sql = self.db.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='daga_company_onboarding_challenges'"
+        ).fetchone()[0]
+        self.assertIn("attempts BETWEEN 0 AND 5", sql)
+        columns = {row["name"] for row in self.db.execute(
+            "PRAGMA table_info(daga_company_onboarding_challenges)"
+        )}
+        self.assertTrue({"email", "owner_name", "company_name", "legal_identity", "destination_hash", "code_hash", "expires_at", "consumed_at", "claim_id"} <= columns)
+        self.assertIn("daga_company_onboarding_lookup", {
+            row["name"] for row in self.db.execute("PRAGMA index_list(daga_company_onboarding_challenges)")
+        })
+
     def test_email_only_migration_preserves_email_challenges_and_drops_phone_challenges(self):
         db = sqlite3.connect(":memory:")
         db.row_factory = sqlite3.Row
