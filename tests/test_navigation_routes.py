@@ -100,6 +100,8 @@ class NavigationRouteTests(unittest.TestCase):
         self.assertIn('/api/shop/registration/start', self.company)
         self.assertIn('/api/shop/registration/verify', self.company)
         self.assertIn("موافقة مالك التطبيق", self.company)
+        self.assertNotIn("/api/company/onboarding/start", self.company_auth)
+        self.assertNotIn("/api/company/onboarding/verify", self.company_auth)
 
     def test_company_and_program_owner_auth_ui_are_email_only(self):
         self.assertIn('id="identifier" type="email"', self.company)
