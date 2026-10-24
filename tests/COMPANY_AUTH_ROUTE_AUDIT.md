@@ -2,18 +2,36 @@
 
 ## Verified implementation
 
-The company-account authentication routes are implemented in `company-invitations.js` and dispatched by `worker.js` through `handleCompanyInvitations`. The handler covers registration, registration verification, password login, first-time password setup, recovery, current-account lookup, logout, and company invitations. It is separate from `/owner/auth/*`, which is for the singleton `program_owner`.
+The company-account authentication routes are implemented in `company-invitations.js` and dispatched by `worker.js` through `handleCompanyInvitations`. The handler covers invitation-bound registration, email verification, password login, first-time password setup, recovery, current-account lookup, logout, and company invitations. It is separate from `/owner/auth/*`, which is for the singleton `program_owner`.
 
-The company portal and LIVE DAGA call `/api/company/auth/login`, `/api/company/auth/me`, and `/api/company/auth/logout`. The portal also calls the setup and recovery routes implemented by the same handler. Password login uses approved company accounts and `daga_account_credentials`; session tokens are stored as hashes and account lookup/revocation use the shared session tables.
+The company portal and LIVE DAGA call `/api/company/auth/login`, `/api/company/auth/me`, and `/api/company/auth/logout`. Password login uses approved company accounts and `daga_account_credentials`; session tokens are stored as hashes. Setup and recovery use email OTP and do not activate pending/rejected/suspended accounts.
 
-## Test-maintenance issue found
+## Email-only policy
 
-`tests/test_navigation_routes.py` checks whether company portal endpoints have handlers, but its handler-source list originally included `worker.js`, `company-orders.js`, and no `company-invitations.js`. This makes its auth-route assertion inaccurate: the auth handlers live in `company-invitations.js`. Update the regression test to inspect the actual handler module and to explicitly verify that `worker.js` dispatches to `handleCompanyInvitations`.
+Migration `0010_email_only_auth.sql` removes legacy phone authentication columns. Migration `0011_email_only_registration_challenges.sql` recreates the company registration challenge table with a database CHECK constraint requiring `channel = 'email'`, preserving email challenge rows and discarding any legacy phone-channel challenges. The migration regression checks now apply migrations `0001`–`0011` to a fresh SQLite database and verify the email-only constraint.
 
-## Remaining staging validation
+Invitation-bound employee/manager registration is intentionally separate from company onboarding. Company creation is currently provisioned through the program-owner admin flow; the account and store remain pending until approval. After approval, the owner console requests email-based password setup. There is not yet a separate public self-service company-registration-request form.
 
-Static source checks do not prove that authentication works against the deployed Worker or the intended D1 database. Before declaring this complete, run the company-auth tests against a dedicated staging D1 database and staging Worker. Confirm migrations `0001`–`0010` are applied in order, email delivery works, setup and recovery OTPs expire and cannot be replayed, invalid credentials are rejected, logout/recovery revoke sessions, and company roles cannot use program-owner routes. Migration `0010_email_only_auth.sql` drops legacy phone columns; back up and verify the target database before applying it anywhere.
+## Regression and staging status
 
-## Status
+The latest CI runs for the reviewed branch completed successfully:
+- company invitation, order/payment security, and schema migration checks;
+- owner-auth syntax/schema and authorization guards;
+- session security regression checks;
+- navigation/route regression checks.
 
-The source review confirms that the company auth handler exists. This audit does not claim end-to-end authentication or production deployment has been verified.
+The isolated staging workflow also completed successfully: staging-only D1 migrations, staging Worker deployment, staging secret configuration, and staging health verification. This is not a production deployment.
+
+## Remaining end-to-end checks
+
+A green CI and staging health check do not prove that a real inbox receives OTP mail or that every browser flow succeeds against the deployed database. Before declaring authentication fully accepted, manually verify on staging:
+1. Request and receive an email OTP; reject wrong, expired, exhausted, and replayed codes.
+2. Complete first-time password setup only after owner approval.
+3. Verify pending, rejected, and suspended accounts cannot sign in or obtain setup codes.
+4. Verify password recovery revokes existing sessions and login works only with the new password.
+5. Verify company role/tenant isolation and that company accounts cannot call program-owner admin routes.
+6. Confirm the existing LIVE DAGA voice/chat/TTS behavior remains intact.
+
+## Production and merge boundary
+
+PR #16 remains open and in draft. No merge or production deployment has been performed. Keep V30 as the only approved baseline, preserve the Premium RTL interface, and do not alter the production Worker or LIVE DAGA voice contract without explicit approval.
