@@ -2,6 +2,7 @@ import { handleOwnerAuth } from "./owner-auth.js";
 import { handleOwnerAdmin } from "./owner-admin.js";
 import { handleCompanyInvitations } from "./company-invitations.js";
 import { handleCompanyOrders } from "./company-orders.js";
+import { handleShopAuth } from "./shop-auth.js";
 import { authenticatedAccount } from "./owner-auth.js";
 import inviteHtml from "./invite/index.html";
 import companyPortalHtml from "./company/portal.html";
@@ -87,6 +88,8 @@ export default {
       return json({ error: "owner_auth_internal_error", ...(url.hostname === "daga-app-staging.dagamobile10.workers.dev" ? { diagnostic: error instanceof Error ? error.message.slice(0, 200) : "unknown_error" } : {}) }, 500);
     }
     if (ownerAuthResponse) return ownerAuthResponse;
+    const shopAuthResponse = await handleShopAuth(request, env, url);
+    if (shopAuthResponse) return shopAuthResponse;
     const ownerAdminResponse = await handleOwnerAdmin(request, env, url);
     if (ownerAdminResponse) return ownerAdminResponse;
     const invitationResponse = await handleCompanyInvitations(request, env, url);
