@@ -130,22 +130,8 @@ export async function handleOwnerAdmin(request, env, url) {
       return json(env,{ok:true,accounts:r.results||[]});
     }
 
-    if(path==="/owner/admin/stores"&&request.method==="POST"){
-      const b=await readJson(request);if(!b)return json(env,{error:"invalid_json"},400);
-      const displayName=String(b.displayName||"").trim().slice(0,120),legalIdentity=String(b.legalIdentity||"").trim().slice(0,120),ownerName=String(b.ownerName||"").trim().slice(0,100),email=String(b.email||"").trim().toLowerCase();
-      if(displayName.length<2||legalIdentity.length<3||ownerName.length<2||email.length>254||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return json(env,{error:"valid_company_owner_name_and_email_required"},400);
-      if(await db.prepare("SELECT id FROM daga_accounts WHERE lower(email)=? LIMIT 1").bind(email).first())return json(env,{error:"account_email_already_exists"},409);
-      const id=crypto.randomUUID(),storeId=crypto.randomUUID(),now=new Date().toISOString(),publicId="DAGA-USER-"+id.replace(/-/g,"").toUpperCase(),companyPublicId="DAGA-COMPANY-"+storeId.replace(/-/g,"").toUpperCase();
-      try{await db.batch([
-        db.prepare("INSERT INTO daga_accounts (id,public_id,email,display_name,role,status,store_id,created_at,updated_at) VALUES (?,?,?,?,'store_owner','pending',?,?,?)").bind(id,publicId,email,ownerName,storeId,now,now),
-        db.prepare("INSERT INTO daga_stores (id,public_id,owner_account_id,legal_identity,display_name,status,created_at,updated_at) VALUES (?,?,?,?,?,'pending',?,?)").bind(storeId,companyPublicId,id,legalIdentity,displayName,now,now)
-      ]);}catch(_){return json(env,{error:"company_owner_creation_conflict"},409);}
-      await audit(db,owner.id,"company_owner_provisioned","daga_stores",storeId,{companyPublicId,ownerPublicId:publicId});
-      return json(env,{ok:true,store:{id:storeId,publicId:companyPublicId,displayName,status:"pending"},owner:{id,publicId,displayName:ownerName,emailMasked:email.slice(0,2)+"•••@"+email.split("@")[1]},nextStep:"approve_company_then_owner_sets_password_using_email_code"},201);
-    }
-
     if(path==="/owner/admin/stores"&&request.method==="GET"){
-      const r=await db.prepare("SELECT s.id,s.public_id,s.owner_account_id,s.legal_identity,s.display_name,s.status,s.created_at,a.public_id AS owner_public_id,a.email FROM daga_stores s JOIN daga_accounts a ON a.id=s.owner_account_id ORDER BY s.created_at DESC LIMIT 500").all();
+      const r=await db.prepare("SELECT s.id,s.public_id,s.owner_account_id,s.display_name,s.status,s.created_at,a.email FROM daga_stores s JOIN daga_accounts a ON a.id=s.owner_account_id ORDER BY s.created_at DESC LIMIT 500").all();
       return json(env, {ok:true,stores:r.results||[]});
     }
     const storeEditMatch=path.match(/^\/owner\/admin\/stores\/([a-f0-9-]{36})$/i);
@@ -169,7 +155,7 @@ export async function handleOwnerAdmin(request, env, url) {
       const now=new Date().toISOString();
       await db.batch([
         db.prepare("UPDATE daga_stores SET status=?,updated_at=? WHERE id=?").bind(b.status,now,store.id),
-        db.prepare("UPDATE daga_accounts SET status=?,updated_at=? WHERE id=? AND role='store_owner'").bind(b.status,now,store.owner_account_id)
+        db.prepare("UPDATE daga_accounts SET status=?,updated_at=? WHERE id=? AND role='store_owner'").bind(b.status==="approved"?"approved":b.status,now,store.owner_account_id)
       ]);
       await audit(db,owner.id,"store_status_changed","daga_stores",store.id,{from:store.status,to:b.status});
       return json(env, {ok:true,status:b.status});
