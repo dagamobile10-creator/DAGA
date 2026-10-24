@@ -615,11 +615,12 @@ async function bootAuthenticatedDashboard(token,selectedCompanyId){
 }
 if(window.opener){
  window.opener.postMessage('DAGA_SHOP_READY',location.origin);
- window.addEventListener('message',event=>{
+ const receiveAuthMessage=event=>{
   if(event.origin!==location.origin||event.source!==window.opener||!event.data||event.data.type!=='DAGA_AUTH'||typeof event.data.token!=='string'||!event.data.token||typeof event.data.companyId!=='string')return;
-  window.removeEventListener('message',arguments.callee);
+  window.removeEventListener('message',receiveAuthMessage);
   bootAuthenticatedDashboard(event.data.token,event.data.companyId);
- });
+ };
+ window.addEventListener('message',receiveAuthMessage);
 }else{window.location.replace('/company/');}
 </script>
 </body></html>
