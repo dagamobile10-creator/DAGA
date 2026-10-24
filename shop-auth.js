@@ -152,7 +152,8 @@ async function me(request,env,db){
   if(!account||account.role!=="store_owner"||account.status!=="approved")return json(env,{error:"authentication_required"},401);
   const store=await db.prepare("SELECT id,public_id,display_name,status FROM daga_stores WHERE id=? AND owner_account_id=? AND status='approved'").bind(account.store_id,account.id).first();
   if(!store)return json(env,{error:"shop_not_approved"},403);
-  return json(env,{ok:true,account:{id:account.id,role:account.role,displayName:account.display_name,emailMasked:maskEmail(account.email)},shops:[{id:store.id,publicId:store.public_id,displayName:store.display_name,role:"store_owner",permissions:{}}]});
+  const entitlement=await db.prepare("SELECT id FROM daga_entitlements WHERE account_id=? AND store_id=? AND service='store' AND status='active' AND expires_at>? LIMIT 1").bind(account.id,store.id,new Date().toISOString()).first();
+  return json(env,{ok:true,account:{id:account.id,role:account.role,displayName:account.display_name,emailMasked:maskEmail(account.email)},shops:[{id:store.id,publicId:store.public_id,displayName:store.display_name,role:"store_owner",permissions:{},ledgerEnabled:Boolean(entitlement)}]});
 }
 
 async function logout(request,env,db){
