@@ -10,7 +10,7 @@ The company portal and LIVE DAGA call `/api/company/auth/login`, `/api/company/a
 
 Migration `0010_email_only_auth.sql` removes legacy phone authentication columns. Migration `0011_email_only_registration_challenges.sql` recreates the company registration challenge table with a database CHECK constraint requiring `channel = 'email'`, preserving email challenge rows and discarding any legacy phone-channel challenges. The migration regression checks now apply migrations `0001`–`0011` to a fresh SQLite database and verify the email-only constraint.
 
-Invitation-bound employee/manager registration is intentionally separate from company onboarding. Company creation is currently provisioned through the program-owner admin flow; the account and store remain pending until approval. After approval, the owner console requests email-based password setup. There is not yet a separate public self-service company-registration-request form.
+Invitation-bound employee/manager registration is intentionally separate from company onboarding. Company onboarding now has a public email-verified request flow in the company portal. The flow verifies the email by OTP, creates a store-owner account and company record in `pending` status, issues no session and no password, and leaves approval to the program-owner console. After approval, the owner console requests email-based password setup. Invitation-bound employee/manager registration remains separate.
 
 ## Regression and staging status
 
@@ -25,7 +25,7 @@ The isolated staging workflow also completed successfully: staging-only D1 migra
 ## Remaining end-to-end checks
 
 A green CI and staging health check do not prove that a real inbox receives OTP mail or that every browser flow succeeds against the deployed database. Before declaring authentication fully accepted, manually verify on staging:
-1. Request and receive an email OTP; reject wrong, expired, exhausted, and replayed codes.
+1. Submit a company onboarding request and receive an email OTP; reject wrong, expired, exhausted, and replayed codes; confirm the resulting account/store remain pending and have no session.
 2. Complete first-time password setup only after owner approval.
 3. Verify pending, rejected, and suspended accounts cannot sign in or obtain setup codes.
 4. Verify password recovery revokes existing sessions and login works only with the new password.
