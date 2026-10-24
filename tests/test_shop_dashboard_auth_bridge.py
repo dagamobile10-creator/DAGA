@@ -17,7 +17,7 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn("bootAuthenticatedDashboard(event.data.token,event.data.companyId)", dashboard)
         self.assertNotIn("sessionStorage", dashboard)
         self.assertIn("fetch('/api/shop/auth/me'", dashboard)
-        self.assertIn("window.location.replace('/company/')", dashboard)
+        self.assertIn("window.location.replace('/shop-access/')", dashboard)
         self.assertIn("if(window.opener)", dashboard)
         self.assertIn("loadStoreData(company.id)", dashboard)
         self.assertIn("daga_dashboard_v30_store_", dashboard)
