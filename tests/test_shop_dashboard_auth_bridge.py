@@ -26,7 +26,8 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         portal = (ROOT / "company" / "portal.html").read_text(encoding="utf-8")
         self.assertIn('type:"DAGA_AUTH",token:sessionToken,companyId:activeCompany.id', portal)
         self.assertNotIn("sessionStorage", portal)
-        self.assertIn('window.open("/shop/","_blank")', portal)
+        self.assertIn('window.open("about:blank","_blank")', portal)
+        self.assertIn('shopWindow.location.assign("/shop/")', portal)
         self.assertIn('event.source!==shopWindow', portal)
 
     def test_role_is_normalized_and_not_used_as_security_boundary(self):
