@@ -602,7 +602,7 @@ async function bootAuthenticatedDashboard(token,selectedCompanyId){
   const data=await response.json().catch(()=>({}));
   if(!response.ok||!data.account||!Array.isArray(data.shops)||!data.shops.length){window.location.replace('/company/');return;}
   const company=data.shops.find(c=>c.id===selectedCompanyId);
-  if(!company){window.location.replace('/company/');return;}
+  if(!company||company.ledgerEnabled!==true){window.location.replace('/company/');return;}
   let role=String(company.role||data.account.role||'').toLowerCase();
   if(role==='owner')role='store_owner';
   if(!['store_owner','manager','employee'].includes(role)){window.location.replace('/company/');return;}
