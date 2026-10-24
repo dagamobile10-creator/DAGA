@@ -286,6 +286,7 @@ jobs:
               "migrations/0008_daga_company_login_challenges.sql",
               "migrations/0009_daga_payment_submission_uniqueness.sql",
               "migrations/0010_email_only_auth.sql",
+              "migrations/0011_email_only_registration_challenges.sql",
           ):
               with open(path, encoding="utf-8") as f:
                   db.executescript(f.read())
@@ -316,6 +317,7 @@ jobs:
           assert "WHERE status = 'pending_review'" in pending_index_sql, "Payment uniqueness must apply to pending review rows only"
           challenge_sql = db.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='daga_company_registration_challenges'").fetchone()[0]
           assert "attempts BETWEEN 0 AND 5" in challenge_sql, "Company registration OTP attempts must be bounded"
+          assert "channel = 'email'" in challenge_sql, "Company registration challenges must be email-only after migration 0011"
           membership_columns = {row[1] for row in db.execute("PRAGMA table_info(daga_store_memberships)")}
           assert {"store_id", "account_id", "role", "status", "permissions_json"} <= membership_columns
           invitation_columns = {row[1] for row in db.execute("PRAGMA table_info(daga_store_invitations)")}
@@ -323,5 +325,5 @@ jobs:
           # Invitations are single-use; revocation and expiry are explicit states.
           invite_sql = db.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='daga_store_invitations'").fetchone()[0]
           assert "max_uses = 1" in invite_sql and "use_count BETWEEN 0 AND max_uses" in invite_sql
-          print("All ten migrations applied; email-only credentials, company/account identity, invitation and auth challenge schemas, pending-payment uniqueness, and grant uniqueness constraints exist.")
+          print("All eleven migrations applied; email-only credentials and registration challenges, company/account identity, invitations, pending-payment uniqueness, and grant uniqueness constraints exist.")
           PY
