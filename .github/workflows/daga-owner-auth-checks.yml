@@ -84,6 +84,18 @@ jobs:
           open("/tmp/company-portal.js", "w", encoding="utf-8").write("\n".join(scripts))
           PY
           node --check /tmp/company-portal.js
+      - name: Check original V30 shop dashboard JavaScript syntax
+        run: |
+          python3 - <<'PY'
+          import re
+          html = open("shop-dashboard-v30.html", encoding="utf-8").read()
+          scripts = re.findall(r"<script>(.*?)</script>", html, re.S)
+          assert len(scripts) == 1, f"Expected one dashboard script, found {len(scripts)}"
+          open("/tmp/shop-dashboard-v30.js", "w", encoding="utf-8").write(scripts[0])
+          PY
+          node --check /tmp/shop-dashboard-v30.js
+      - name: Run V30 dashboard authentication bridge regression tests
+        run: python3 tests/test_shop_dashboard_auth_bridge.py
       - name: Check official DAGA QR page JavaScript syntax
         run: |
           python3 - <<'PY'
