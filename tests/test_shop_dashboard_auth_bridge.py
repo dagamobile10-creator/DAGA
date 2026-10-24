@@ -13,15 +13,17 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
 
     def test_dashboard_requires_authenticated_company_session(self):
         dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
-        self.assertIn("sessionStorage.getItem('daga_company_session')", dashboard)
+        self.assertIn("DAGA_SHOP_READY", dashboard)
+        self.assertIn("bootAuthenticatedDashboard(event.data.token,event.data.companyId)", dashboard)
+        self.assertNotIn("sessionStorage", dashboard)
         self.assertIn("fetch('/api/company/auth/me'", dashboard)
         self.assertIn("window.location.replace('/company/')", dashboard)
         self.assertIn("bootAuthenticatedDashboard();", dashboard)
 
     def test_portal_passes_session_and_selected_company(self):
         portal = (ROOT / "company" / "portal.html").read_text(encoding="utf-8")
-        self.assertIn('sessionStorage.setItem("daga_company_session",sessionToken)', portal)
-        self.assertIn('sessionStorage.setItem("daga_selected_company",activeCompany?activeCompany.id:"")', portal)
+        self.assertIn('type:"DAGA_AUTH",token:sessionToken,companyId:activeCompany.id', portal)
+        self.assertNotIn("sessionStorage", portal)
         self.assertIn('window.location.assign("/shop/")', portal)
 
     def test_role_is_normalized_and_not_used_as_security_boundary(self):
