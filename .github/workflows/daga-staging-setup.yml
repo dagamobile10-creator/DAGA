@@ -17,6 +17,7 @@ on:
       - "migrations/**"
       - "invite/**"
       - "company/**"
+      - "shop-dashboard-v30.html"
       - "go/**"
       - "tests/**"
 
