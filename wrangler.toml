@@ -12,3 +12,19 @@ binding = "AI"
 [[previews.d1_databases]]
 binding = "DAGA_APP_DB"
 database_id = "a4b15995-8ec7-4bb9-aa49-cf1bce9d7341"
+
+# Isolated staging environment for DAGA V30 acceptance tests.
+# Deploy with: wrangler deploy --env staging
+[env.staging]
+name = "daga-app-staging"
+
+[env.staging.vars]
+DAGA_APP_BASE_URL = "https://daga-app-staging.dagamobile10.workers.dev"
+DAGA_ALLOWED_ORIGINS = "https://dagamobile10-creator.github.io"
+
+[env.staging.ai]
+binding = "AI"
+
+[[env.staging.d1_databases]]
+binding = "DAGA_APP_DB"
+database_id = "a4b15995-8ec7-4bb9-aa49-cf1bce9d7341"
