@@ -22,11 +22,10 @@ export async function handleOwnerAuth(request, env, url) {
 
 async function bootstrapStart(request,env){
 const db=env.DAGA_APP_DB;if(!db)return json(env,{error:"owner_auth_database_not_configured"},503);
-if(!env.DAGA_OWNER_BOOTSTRAP_TOKEN||!env.DAGA_OTP_PEPPER||!env.RESEND_API_KEY||!env.DAGA_EMAIL_FROM)return json(env,{error:"owner_auth_not_configured"},503);
-const auth=request.headers.get("Authorization")||"";if(!constantTimeEqual(auth,"Bearer "+env.DAGA_OWNER_BOOTSTRAP_TOKEN)){await audit(db,null,"owner_bootstrap_start","failure");return json(env,{error:"unauthorized"},401);}
+if(!env.DAGA_OWNER_EMAIL||!env.DAGA_OTP_PEPPER||!env.RESEND_API_KEY||!env.DAGA_EMAIL_FROM)return json(env,{error:"owner_auth_not_configured"},503);
 if(await db.prepare("SELECT singleton_id FROM daga_program_owner WHERE singleton_id=1").first())return json(env,{error:"owner_already_provisioned"},409);
 const body=await safeJson(request);if(!body)return json(env,{error:"invalid_json"},400);
-const email=String(body.email||"").trim().toLowerCase();if(email.length>254||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return json(env,{error:"valid_email_required"},400);
+const email=String(body.email||"").trim().toLowerCase();const allowedOwnerEmail=String(env.DAGA_OWNER_EMAIL||"").trim().toLowerCase();if(email.length>254||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return json(env,{error:"valid_email_required"},400);if(!allowedOwnerEmail||email!==allowedOwnerEmail)return json(env,{error:"owner_email_not_authorized"},403);
 if(!await rateLimit(db,env,"bootstrap:"+(request.headers.get("CF-Connecting-IP")||"unknown"),3,3600))return json(env,{error:"rate_limited"},429);
 if(await db.prepare("SELECT id FROM daga_accounts WHERE lower(email)=? LIMIT 1").bind(email).first())return json(env,{error:"owner_email_already_in_use"},409);
 const id=crypto.randomUUID(),code=randomDigits(),now=Math.floor(Date.now()/1000),[codeHash,destHash]=await Promise.all([sha256(id+":"+code+":"+env.DAGA_OTP_PEPPER),sha256("email:"+email)]),expires=new Date((now+OTP_TTL_SECONDS)*1000).toISOString();
@@ -35,11 +34,10 @@ try{await sendEmail(env,email,"DAGA owner verification","<p>Your DAGA owner veri
 await audit(db,null,"owner_bootstrap_start","success");return json(env,{ok:true,emailMasked:maskEmail(email),expiresInSeconds:OTP_TTL_SECONDS});
 }
 async function bootstrapVerify(request,env){
-const db=env.DAGA_APP_DB;if(!db||!env.DAGA_OTP_PEPPER)return json(env,{error:"owner_auth_not_configured"},503);
-const auth=request.headers.get("Authorization")||"";if(!env.DAGA_OWNER_BOOTSTRAP_TOKEN||!constantTimeEqual(auth,"Bearer "+env.DAGA_OWNER_BOOTSTRAP_TOKEN))return json(env,{error:"unauthorized"},401);
+const db=env.DAGA_APP_DB;if(!db||!env.DAGA_OTP_PEPPER||!env.DAGA_OWNER_EMAIL)return json(env,{error:"owner_auth_not_configured"},503);
 if(await db.prepare("SELECT singleton_id FROM daga_program_owner WHERE singleton_id=1").first())return json(env,{error:"owner_already_provisioned"},409);
 const body=await safeJson(request);if(!body)return json(env,{error:"invalid_json"},400);
-const email=String(body.email||"").trim().toLowerCase(),code=String(body.emailCode||"").trim(),password=String(body.password||""),recovery=String(body.recoveryCode||"");
+const email=String(body.email||"").trim().toLowerCase(),code=String(body.emailCode||"").trim(),password=String(body.password||""),recovery=String(body.recoveryCode||"");if(email!==String(env.DAGA_OWNER_EMAIL||"").trim().toLowerCase())return json(env,{error:"owner_email_not_authorized"},403);
 if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||!/^\d{6}$/.test(code))return json(env,{error:"valid_email_and_verification_code_required"},400);
 if(!validPassword(password))return json(env,{error:"password_must_be_14_to_128_chars_with_uppercase_lowercase_and_number"},400);
 if(recovery.length<20||recovery.length>128)return json(env,{error:"new_recovery_code_required_20_to_128_chars"},400);
