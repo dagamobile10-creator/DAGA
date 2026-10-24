@@ -36,6 +36,8 @@ async function registrationStart(request,env,db){
   if(!env.DAGA_OTP_PEPPER||!env.RESEND_API_KEY||!env.DAGA_EMAIL_FROM)return json(env,{error:"email_verification_not_configured"},503);
   const b=await body(request);if(!b)return json(env,{error:"invalid_json"},400);
   const name=String(b.shopName||"").trim().slice(0,120),owner=String(b.ownerName||"").trim().slice(0,100),email=normalizeEmail(b.email);
+  const ip=request.headers.get("CF-Connecting-IP")||"unknown";
+  if(!await rateLimit(db,env,"shop-register-ip:"+ip,8,3600)||!await rateLimit(db,env,"shop-register-email:"+email,3,3600))return json(env,{error:"rate_limited"},429);
   if(name.length<2||owner.length<2||!validEmail(email))return json(env,{error:"valid_shop_owner_name_and_email_required"},400);
   if(await db.prepare("SELECT id FROM daga_accounts WHERE lower(email)=? LIMIT 1").bind(email).first())return json(env,{error:"account_email_already_exists"},409);
   const code=digits(),id=crypto.randomUUID(),now=new Date(),expires=new Date(now.getTime()+OTP_TTL_SECONDS*1000).toISOString();
@@ -108,6 +110,7 @@ async function login(request,env,db){
   const b=await body(request);if(!b)return json(env,{error:"invalid_json"},400);
   const email=normalizeEmail(b.email),password=String(b.password||"");
   if(!validEmail(email)||password.length>128)return json(env,{error:"invalid_credentials"},401);
+  if(!await rateLimit(db,env,"shop-login:"+email+":"+(request.headers.get("CF-Connecting-IP")||"unknown"),8,900))return json(env,{error:"rate_limited"},429);
   const account=await db.prepare("SELECT a.id,a.role,a.status,a.email,a.display_name,a.store_id,c.password_hash,c.password_salt,c.password_iterations FROM daga_accounts a JOIN daga_account_credentials c ON c.account_id=a.id WHERE lower(a.email)=? LIMIT 1").bind(email).first();
   if(!account||account.role!=="store_owner"||account.status!=="approved")return json(env,{error:account&&account.status==="pending"?"shop_pending_approval":"invalid_credentials"},401);
   const attempt=await passwordHash(password,account.password_salt,Number(account.password_iterations)||ITERATIONS);
@@ -164,6 +167,11 @@ async function logout(request,env,db){
 async function createSession(db,accountId){const raw=token(32),now=new Date(),expires=new Date(now.getTime()+SESSION_TTL_SECONDS*1000).toISOString();await db.prepare("INSERT INTO daga_auth_sessions (id,account_id,token_hash,created_at,expires_at,last_seen_at) VALUES (?,?,?,?,?,?)").bind(crypto.randomUUID(),accountId,await sha(raw),now.toISOString(),expires,now.toISOString()).run();return {token:raw,expiresAt:expires};}
 async function passwordHash(password,salt,iterations=ITERATIONS){const key=await crypto.subtle.importKey("raw",new TextEncoder().encode(password),"PBKDF2",false,["deriveBits"]);const bits=await crypto.subtle.deriveBits({name:"PBKDF2",salt:new TextEncoder().encode(salt),iterations,hash:"SHA-256"},key,256);return hex(new Uint8Array(bits));}
 function validPassword(p){return p.length>=14&&p.length<=128&&/[a-z]/.test(p)&&/[A-Z]/.test(p)&&/[0-9]/.test(p);}
+async function rateLimit(db,env,key,limit,windowSeconds){
+  const hashed=await sha(key+":"+(env.DAGA_OTP_PEPPER||"daga-rate-limit")),now=Math.floor(Date.now()/1000);
+  const row=await db.prepare("INSERT INTO daga_auth_rate_limits (bucket_key,window_started_at,attempts) VALUES (?,?,1) ON CONFLICT(bucket_key) DO UPDATE SET window_started_at=CASE WHEN ? - daga_auth_rate_limits.window_started_at >= ? THEN ? ELSE daga_auth_rate_limits.window_started_at END, attempts=CASE WHEN ? - daga_auth_rate_limits.window_started_at >= ? THEN 1 ELSE daga_auth_rate_limits.attempts+1 END WHERE ? - daga_auth_rate_limits.window_started_at >= ? OR daga_auth_rate_limits.attempts < ? RETURNING attempts").bind(hashed,now,now,windowSeconds,now,now,windowSeconds,now,windowSeconds,limit).first();
+  return Boolean(row);
+}
 async function sendEmail(env,email,subject,html){const r=await fetch("https://api.resend.com/emails",{method:"POST",headers:{Authorization:"Bearer "+env.RESEND_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({from:env.DAGA_EMAIL_FROM,to:[email],subject,html}),signal:AbortSignal.timeout(10000)});if(!r.ok)throw new Error("email_delivery_failed");}
 async function body(request){try{return await request.json()}catch(_){return null}}
 function normalizeEmail(v){return String(v||"").trim().toLowerCase()}
