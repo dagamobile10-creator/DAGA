@@ -11,6 +11,7 @@ on:
       - "owner-console.html"
       - "owner-auth.js"
       - "owner-admin.js"
+      - "shop-auth.js"
       - "company-invitations.js"
       - "company-orders.js"
       - "wrangler.toml"
@@ -107,7 +108,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p staging-migrations
-          for file in migrations/0001_daga_core.sql migrations/0002_daga_owner_auth.sql migrations/0003_daga_owner_credentials.sql migrations/0004_daga_offers.sql migrations/0005_daga_store_identity_invitations.sql migrations/0006_daga_public_identity_ids.sql migrations/0007_daga_company_registration_challenges.sql migrations/0008_daga_company_login_challenges.sql migrations/0009_daga_payment_submission_uniqueness.sql migrations/0010_email_only_auth.sql; do
+          for file in migrations/0001_daga_core.sql migrations/0002_daga_owner_auth.sql migrations/0003_daga_owner_credentials.sql migrations/0004_daga_offers.sql migrations/0005_daga_store_identity_invitations.sql migrations/0006_daga_public_identity_ids.sql migrations/0007_daga_company_registration_challenges.sql migrations/0008_daga_company_login_challenges.sql migrations/0009_daga_payment_submission_uniqueness.sql migrations/0010_email_only_auth.sql migrations/0011_email_only_registration_challenges.sql migrations/0012_company_email_onboarding.sql migrations/0013_shop_email_registration.sql; do
             clean="staging-migrations/$(basename "$file")"
             grep -v '^[[:space:]]*PRAGMA foreign_keys' "$file" > "$clean"
           done
@@ -232,7 +233,7 @@ jobs:
             echo "::error::Owner API returned an allow-origin header for an untrusted origin"; exit 1
           fi
           echo "Staging company and owner API CORS checks passed: no wildcard origin was returned."
-          for path in /go/ /company/ /invite/ /owner/ /owner-console/ /shop/; do
+          for path in /go/ /shop-access/ /company/ /invite/ /owner/ /owner-console/ /shop/; do
             code="$(curl -sS -o "/tmp/page-$(echo "$path" | tr '/' '_').html" -w '%{http_code}' --max-time 15 "https://daga-app-staging.dagamobile10.workers.dev$path")"
             if [ "$code" != "200" ]; then echo "::error::Staging page $path returned HTTP $code"; exit 1; fi
             echo "Staging page $path returned HTTP 200."

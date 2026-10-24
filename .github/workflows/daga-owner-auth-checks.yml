@@ -43,6 +43,10 @@ jobs:
         run: node --input-type=module --check < company-orders.js
       - name: Check owner-admin module syntax
         run: node --input-type=module --check < owner-admin.js
+      - name: Check shop-auth module syntax
+        run: node --input-type=module --check < shop-auth.js
+      - name: Run shop self-registration regression tests
+        run: python3 tests/test_shop_self_registration.py
       - name: Check owner console inline JavaScript syntax
         run: |
           python3 - <<'PY'
@@ -300,6 +304,7 @@ jobs:
               "migrations/0010_email_only_auth.sql",
               "migrations/0011_email_only_registration_challenges.sql",
               "migrations/0012_company_email_onboarding.sql",
+              "migrations/0013_shop_email_registration.sql",
           ):
               with open(path, encoding="utf-8") as f:
                   db.executescript(f.read())
@@ -341,5 +346,7 @@ jobs:
           # Invitations are single-use; revocation and expiry are explicit states.
           invite_sql = db.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='daga_store_invitations'").fetchone()[0]
           assert "max_uses = 1" in invite_sql and "use_count BETWEEN 0 AND max_uses" in invite_sql
-          print("All twelve migrations applied; email-only credentials and challenges, verified company onboarding, company/account identity, invitations, pending-payment uniqueness, and grant uniqueness constraints exist.")
+          shop_registration = db.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='daga_shop_registration_challenges'").fetchone()
+          assert shop_registration and "shop_name TEXT NOT NULL" in shop_registration[0], "Shop-only registration challenge table is missing"
+          print("All thirteen migrations applied; email-only authentication, shop self-registration, invitations, pending-payment uniqueness, and grant uniqueness constraints exist.")
           PY

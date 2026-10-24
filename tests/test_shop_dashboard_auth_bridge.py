@@ -11,13 +11,13 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn('import shopDashboardHtml from "./shop-dashboard-v30.html";', worker)
         self.assertIn('url.pathname === "/shop"', worker)
 
-    def test_dashboard_requires_authenticated_company_session(self):
+    def test_dashboard_requires_authenticated_shop_session(self):
         dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
         self.assertIn("DAGA_SHOP_READY", dashboard)
         self.assertIn("bootAuthenticatedDashboard(event.data.token,event.data.companyId)", dashboard)
         self.assertNotIn("sessionStorage", dashboard)
-        self.assertIn("fetch('/api/company/auth/me'", dashboard)
-        self.assertIn("window.location.replace('/company/')", dashboard)
+        self.assertIn("fetch('/api/shop/auth/me'", dashboard)
+        self.assertIn("window.location.replace('/shop-access/')", dashboard)
         self.assertIn("if(window.opener)", dashboard)
         self.assertIn("loadStoreData(company.id)", dashboard)
         self.assertIn("daga_dashboard_v30_store_", dashboard)
@@ -34,7 +34,7 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
         self.assertIn("if(role==='owner')role='store_owner';", dashboard)
         self.assertIn("Authorization:'Bearer '+token", dashboard)
-        self.assertIn("api/company/auth/logout", dashboard)
+        self.assertIn("api/shop/auth/logout", dashboard)
 
 
 if __name__ == "__main__":
