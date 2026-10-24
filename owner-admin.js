@@ -126,7 +126,7 @@ export async function handleOwnerAdmin(request, env, url) {
     }
 
     if(path==="/owner/admin/accounts"&&request.method==="GET"){
-      const r=await db.prepare("SELECT a.id,a.public_id,a.display_name,a.role,a.status,a.created_at,a.email,s.public_id AS company_public_id,s.display_name AS company_name FROM daga_accounts a LEFT JOIN daga_stores s ON s.id=a.store_id ORDER BY a.created_at DESC LIMIT 1000").all();
+      const r=await db.prepare("SELECT a.id,a.public_id,a.display_name,a.role,a.status,a.created_at,a.email,FROM daga_accounts a ORDER BY a.created_at DESC LIMIT 1000").all();
       return json(env,{ok:true,accounts:r.results||[]});
     }
 
@@ -143,7 +143,7 @@ export async function handleOwnerAdmin(request, env, url) {
       if(!displayName)return json(env,{error:"display_name_required"},400);
       await db.prepare("UPDATE daga_stores SET display_name=?,updated_at=? WHERE id=?").bind(displayName,new Date().toISOString(),store.id).run();
       await audit(db,owner.id,"store_display_name_changed","daga_stores",store.id,{shopNameUpdated:true});
-      return json(env,{ok:true,displayName,legalIdentityUnchanged:true});
+      return json(env,{ok:true,displayName});
     }
 
     const storeMatch=path.match(/^\/owner\/admin\/stores\/([a-f0-9-]{36})\/decision$/i);
