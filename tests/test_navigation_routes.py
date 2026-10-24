@@ -33,7 +33,7 @@ class NavigationRouteTests(unittest.TestCase):
         for page, paths in (
             (self.live, ("/go/", "/company/", "/owner-console/")),
             (self.landing, ("/company/", "/owner-console/")),
-            (self.owner, ("/company/", "/go/")),
+            (self.owner, ("/shop-access/", "/go/")),
             (self.company, ("/owner-console/", "/go/")),
             (self.invite, ("/company/", "/owner-console/", "/go/")),
         ):
@@ -64,7 +64,7 @@ class NavigationRouteTests(unittest.TestCase):
                 portal_path = path.replace("/api/shop", "")
                 self.assertTrue(path in self.company or portal_path in self.company or path in self.live,
                                 f"no frontend call found for {path}")
-                handler_sources = self.shop_auth + self.company_orders + self.worker
+                handler_sources = self.shop_auth + self.company_auth + self.company_orders + self.worker
                 self.assertIn(path, handler_sources, f"no server handler found for {path}")
 
     def test_shop_auth_routes_are_dispatched_to_the_real_handler(self):
