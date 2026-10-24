@@ -126,7 +126,7 @@ export async function handleOwnerAdmin(request, env, url) {
     }
 
     if(path==="/owner/admin/accounts"&&request.method==="GET"){
-      const r=await db.prepare("SELECT a.id,a.public_id,a.display_name,a.role,a.status,a.created_at,a.email,FROM daga_accounts a ORDER BY a.created_at DESC LIMIT 1000").all();
+      const r=await db.prepare("SELECT a.id,a.public_id,a.display_name,a.role,a.status,a.created_at,a.email FROM daga_accounts a ORDER BY a.created_at DESC LIMIT 1000").all();
       return json(env,{ok:true,accounts:r.results||[]});
     }
 
