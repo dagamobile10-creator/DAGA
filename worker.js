@@ -2,6 +2,7 @@ import { handleOwnerAuth } from "./owner-auth.js";
 import { handleOwnerAdmin } from "./owner-admin.js";
 import { handleCompanyInvitations } from "./company-invitations.js";
 import { handleCompanyOrders } from "./company-orders.js";
+import { handleCompanyLedger } from "./company-ledger.js";
 import { authenticatedAccount } from "./owner-auth.js";
 import inviteHtml from "./invite/index.html";
 import companyPortalHtml from "./company/portal.html";
@@ -93,6 +94,8 @@ export default {
     if (invitationResponse) return invitationResponse;
     const companyOrderResponse = await handleCompanyOrders(request, env, url);
     if (companyOrderResponse) return companyOrderResponse;
+    const companyLedgerResponse = await handleCompanyLedger(request, env, url);
+    if (companyLedgerResponse) return companyLedgerResponse;
 
     if (request.method === "OPTIONS") return new Response(null, { headers: cors({ allowedOrigins: env.DAGA_ALLOWED_ORIGINS || "" }) });
 
