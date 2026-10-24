@@ -62,7 +62,7 @@ async function registrationVerify(request,env,db){
     await db.batch([
       db.prepare("UPDATE daga_shop_registration_challenges SET consumed_at=?,claim_id=? WHERE id=? AND consumed_at IS NULL").bind(now,accountId,ch.id),
       db.prepare("INSERT INTO daga_accounts (id,public_id,email,display_name,role,status,store_id,email_verified_at,created_at,updated_at) VALUES (?,?,?,?,'store_owner','pending',?,?,?,?)").bind(accountId,userPublicId,email,ch.owner_name,storeId,now,now,now),
-      db.prepare("INSERT INTO daga_stores (id,public_id,owner_account_id,internal_identity,display_name,status,created_at,updated_at) VALUES (?,?,?,?,?,'pending',?,?)").bind(storeId,storePublicId,accountId,internalIdentity,ch.shop_name,now,now)
+      db.prepare("INSERT INTO daga_stores (id,public_id,owner_account_id,legal_identity,display_name,status,created_at,updated_at) VALUES (?,?,?,?,?,'pending',?,?)").bind(storeId,storePublicId,accountId,internalIdentity,ch.shop_name,now,now)
     ]);
   } catch(_) {return json(env,{error:"shop_registration_conflict"},409);}
   return json(env,{ok:true,status:"pending",message:"تم تأكيد البريد. طلب المحل اتبعت لمالك التطبيق للموافقة المبدئية. هيوصلك تنبيه بعد القرار."},201);
