@@ -9,7 +9,7 @@ export async function handleShopAuth(request, env, url) {
   const routes = new Set([
     "/api/shop/registration/start", "/api/shop/registration/verify",
     "/api/shop/auth/setup/start", "/api/shop/auth/setup/verify",
-    "/api/shop/auth/login", "/api/shop/auth/me", "/api/shop/auth/logout"
+    "/api/shop/auth/login", "/api/shop/auth/me", "/api/shop/auth/logout", "/api/shop/auth/recovery/start", "/api/shop/auth/recovery/complete"
   ]);
   if (!routes.has(path)) return null;
   if (request.method === "OPTIONS") return new Response(null, {status:204,headers:cors(env)});
@@ -20,7 +20,7 @@ export async function handleShopAuth(request, env, url) {
     if (path === "/api/shop/registration/verify" && request.method === "POST") return await registrationVerify(request,env,db);
     if (path === "/api/shop/auth/setup/start" && request.method === "POST") return await setupStart(request,env,db);
     if (path === "/api/shop/auth/setup/verify" && request.method === "POST") return await setupVerify(request,env,db);
-    if (path === "/api/shop/auth/login" && request.method === "POST") return await login(request,env,db);
+    if (path === "/api/shop/auth/login" && request.method === "POST") return await login(request,env,db);\n    if (path === "/api/shop/auth/recovery/start" && request.method === "POST") return await recoveryStart(request,env,db);\n    if (path === "/api/shop/auth/recovery/complete" && request.method === "POST") return await recoveryComplete(request,env,db);
     if (path === "/api/shop/auth/me" && request.method === "GET") return await me(request,env,db);
     if (path === "/api/shop/auth/logout" && request.method === "POST") return await logout(request,env,db);
     return json(env,{error:"method_not_allowed"},405);
@@ -114,6 +114,37 @@ async function login(request,env,db){
   return json(env,{ok:true,account:{id:account.id,role:account.role,displayName:account.display_name,emailMasked:maskEmail(account.email)},sessionToken:session.token,expiresAt:session.expiresAt});
 }
 
+async function recoveryStart(request,env,db){
+  if(!env.DAGA_OTP_PEPPER||!env.RESEND_API_KEY||!env.DAGA_EMAIL_FROM)return json(env,{error:"email_verification_not_configured"},503);
+  const b=await body(request);if(!b)return json(env,{error:"invalid_json"},400);
+  const email=normalizeEmail(b.email);if(!validEmail(email))return json(env,{error:"valid_email_required"},400);
+  const account=await db.prepare("SELECT id,email,display_name FROM daga_accounts WHERE lower(email)=? AND role='store_owner' AND status='approved' LIMIT 1").bind(email).first();
+  if(!account)return json(env,{ok:true,message:"لو الحساب مؤهل للاسترداد، هيوصل كود على البريد."});
+  const code=digits(),id=crypto.randomUUID(),expires=new Date(Date.now()+OTP_TTL_SECONDS*1000).toISOString(),[codeHash,destinationHash]=await Promise.all([sha(id+":"+code+":"+env.DAGA_OTP_PEPPER),sha("email:"+email)]);
+  await db.prepare("INSERT INTO daga_shop_registration_challenges (id,email,owner_name,shop_name,internal_identity,destination_hash,code_hash,expires_at) VALUES (?,?,?,'__recovery__',?,?,?,?)").bind(id,email,account.display_name,"recovery:"+account.id,destinationHash,codeHash,expires).run();
+  try{await sendEmail(env,email,"DAGA shop account recovery","<p>Your DAGA account recovery code is <strong>"+code+"</strong>.</p><p>It expires in 10 minutes.</p>");}
+  catch(_){await db.prepare("UPDATE daga_shop_registration_challenges SET consumed_at=? WHERE id=?").bind(new Date().toISOString(),id).run();return json(env,{error:"verification_delivery_failed"},502);}
+  return json(env,{ok:true,emailMasked:maskEmail(email),expiresInSeconds:OTP_TTL_SECONDS});
+}
+async function recoveryComplete(request,env,db){
+  if(!env.DAGA_OTP_PEPPER)return json(env,{error:"account_recovery_not_configured"},503);
+  const b=await body(request);if(!b)return json(env,{error:"invalid_json"},400);
+  const email=normalizeEmail(b.email),code=String(b.emailCode||"").trim(),oldRecovery=String(b.recoveryCode||""),newRecovery=String(b.newRecoveryCode||""),password=String(b.newPassword||"");
+  if(!validEmail(email)||!/^[0-9]{6}$/.test(code)||oldRecovery.length<20||oldRecovery.length>128||newRecovery.length<20||newRecovery.length>128||!validPassword(password))return json(env,{error:"valid_recovery_fields_required"},400);
+  const ch=await db.prepare("SELECT * FROM daga_shop_registration_challenges WHERE lower(email)=? AND internal_identity LIKE 'recovery:%' AND consumed_at IS NULL AND attempts<5 AND expires_at>? ORDER BY created_at DESC LIMIT 1").bind(email,new Date().toISOString()).first();
+  if(!ch)return json(env,{error:"invalid_expired_or_used_verification_code"},400);
+  await db.prepare("UPDATE daga_shop_registration_challenges SET attempts=attempts+1 WHERE id=? AND consumed_at IS NULL AND attempts<5").bind(ch.id).run();
+  if(!same(await sha(ch.id+":"+code+":"+env.DAGA_OTP_PEPPER),ch.code_hash))return json(env,{error:"invalid_expired_or_used_verification_code"},400);
+  const accountId=ch.internal_identity.slice(9),account=await db.prepare("SELECT a.id,c.recovery_code_hash FROM daga_accounts a JOIN daga_account_credentials c ON c.account_id=a.id WHERE a.id=? AND lower(a.email)=? AND a.role='store_owner' AND a.status='approved'").bind(accountId,email).first();
+  if(!account||!account.recovery_code_hash||!same(await sha(oldRecovery+":"+env.DAGA_OTP_PEPPER),account.recovery_code_hash))return json(env,{error:"invalid_recovery_credentials"},400);
+  const salt=token(24),hash=await passwordHash(password,salt),recoveryHash=await sha(newRecovery+":"+env.DAGA_OTP_PEPPER),now=new Date().toISOString();
+  await db.batch([
+    db.prepare("UPDATE daga_account_credentials SET password_hash=?,password_salt=?,password_iterations=?,recovery_code_hash=?,updated_at=? WHERE account_id=?").bind(hash,salt,ITERATIONS,recoveryHash,now,account.id),
+    db.prepare("UPDATE daga_auth_sessions SET revoked_at=? WHERE account_id=? AND revoked_at IS NULL").bind(now,account.id),
+    db.prepare("UPDATE daga_shop_registration_challenges SET consumed_at=? WHERE id=? AND consumed_at IS NULL").bind(now,ch.id)
+  ]);
+  return json(env,{ok:true,message:"تم تغيير كلمة المرور وإلغاء الجلسات السابقة."});
+}
 async function me(request,env,db){
   const account=await authenticatedAccount(request,db);
   if(!account||account.role!=="store_owner"||account.status!=="approved")return json(env,{error:"authentication_required"},401);
