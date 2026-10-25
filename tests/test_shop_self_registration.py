@@ -28,7 +28,9 @@ class ShopSelfRegistrationTests(unittest.TestCase):
         admin = (ROOT / "owner-admin.js").read_text(encoding="utf-8")
         dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
         self.assertIn("ledgerEnabled:Boolean(entitlement)", auth)
-        self.assertIn("b.status===\"approved\"?\"approved\":b.status", admin)
+        self.assertIn('b.status==="preliminary_approved"?"pending":b.status', admin)
+        self.assertIn('store.status!=="preliminary_approved"', admin)
+        self.assertIn('"preliminary_approved"', admin)
         self.assertIn("company.ledgerEnabled!==true", dashboard)
         self.assertIn("daga_entitlements", auth)
 
