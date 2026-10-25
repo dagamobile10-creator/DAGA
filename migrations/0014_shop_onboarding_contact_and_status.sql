@@ -5,3 +5,4 @@ ALTER TABLE daga_stores ADD COLUMN onboarding_status TEXT NOT NULL DEFAULT 'pend
 CREATE INDEX IF NOT EXISTS daga_stores_onboarding_status ON daga_stores(onboarding_status, created_at);
 ALTER TABLE daga_stores ADD COLUMN onboarding_order_id TEXT;
 ALTER TABLE daga_stores ADD COLUMN onboarding_payment_method_id TEXT;
+ALTER TABLE daga_stores ADD COLUMN onboarding_offer_name TEXT;
