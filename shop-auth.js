@@ -174,7 +174,23 @@ async function rateLimit(db,env,key,limit,windowSeconds){
   const row=await db.prepare("INSERT INTO daga_auth_rate_limits (bucket_key,window_started_at,attempts) VALUES (?,?,1) ON CONFLICT(bucket_key) DO UPDATE SET window_started_at=CASE WHEN ? - daga_auth_rate_limits.window_started_at >= ? THEN ? ELSE daga_auth_rate_limits.window_started_at END, attempts=CASE WHEN ? - daga_auth_rate_limits.window_started_at >= ? THEN 1 ELSE daga_auth_rate_limits.attempts+1 END WHERE ? - daga_auth_rate_limits.window_started_at >= ? OR daga_auth_rate_limits.attempts < ? RETURNING attempts").bind(hashed,now,now,windowSeconds,now,now,windowSeconds,now,windowSeconds,limit).first();
   return Boolean(row);
 }
-async function sendEmail(env,email,subject,html){const r=await fetch("https://api.resend.com/emails",{method:"POST",headers:{Authorization:"Bearer "+env.RESEND_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({from:env.DAGA_EMAIL_FROM,to:[email],subject,html}),signal:AbortSignal.timeout(10000)});if(!r.ok)throw new Error("email_delivery_failed");}
+async function sendEmail(env,email,subject,html){
+  const r=await fetch("https://api.resend.com/emails",{
+    method:"POST",
+    headers:{Authorization:"Bearer "+env.RESEND_API_KEY,"Content-Type":"application/json"},
+    body:JSON.stringify({from:env.DAGA_EMAIL_FROM,to:[email],subject,html}),
+    signal:AbortSignal.timeout(10000)
+  });
+  if(!r.ok){
+    let providerCode="unknown";
+    try {
+      const detail=await r.json();
+      providerCode=String(detail?.name||detail?.statusCode||"unknown").slice(0,100);
+    } catch(_) {}
+    console.error("shop_email_provider_rejected",JSON.stringify({status:r.status,providerCode}));
+    throw new Error("email_delivery_failed");
+  }
+}
 async function body(request){try{return await request.json()}catch(_){return null}}
 function normalizeEmail(v){return String(v||"").trim().toLowerCase()}
 function validEmail(v){return v.length<=254&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)}
