@@ -161,7 +161,7 @@ export async function handleOwnerAdmin(request, env, url) {
       const now=new Date().toISOString(),orderId=crypto.randomUUID();
       await db.batch([
         db.prepare("INSERT INTO daga_plan_orders (id,account_id,store_id,plan_id,plan_version,agreed_price_minor,currency,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,'awaiting_payment',?,?)").bind(orderId,store.owner_account_id,store.id,plan.id,plan.version,price,plan.currency||"EGP",now,now),
-        db.prepare("UPDATE daga_stores SET onboarding_order_id=?,onboarding_payment_method_id=?,updated_at=? WHERE id=?").bind(orderId,method.id,now,store.id)
+        db.prepare("UPDATE daga_stores SET onboarding_order_id=?,onboarding_payment_method_id=?,onboarding_offer_name=?,updated_at=? WHERE id=?").bind(orderId,method.id,String(b.offerName||"").trim().slice(0,120)||null,now,store.id)
       ]);
       await audit(db,owner.id,"shop_onboarding_payment_requested","daga_stores",store.id,{orderId,planId:plan.id,paymentMethodId:method.id,agreedPriceMinor:price});
       return json(env,{ok:true,orderId,planName:plan.name,agreedPriceMinor:price,currency:plan.currency||"EGP",paymentMethodId:method.id});
