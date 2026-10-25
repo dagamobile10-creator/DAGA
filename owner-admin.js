@@ -146,6 +146,27 @@ export async function handleOwnerAdmin(request, env, url) {
       return json(env,{ok:true,displayName});
     }
 
+    const onboardingMatch=path.match(/^\/owner\/admin\/stores\/([a-f0-9-]{36})\/onboarding$/i);
+    if(onboardingMatch&&request.method==="POST"){
+      const b=await readJson(request);if(!b)return json(env,{error:"invalid_json"},400);
+      const store=await db.prepare("SELECT id,owner_account_id,onboarding_status FROM daga_stores WHERE id=?").bind(onboardingMatch[1]).first();
+      if(!store)return json(env,{error:"store_not_found"},404);
+      if(store.onboarding_status!=="preliminary_approved")return json(env,{error:"preliminary_approval_required"},409);
+      const plan=await db.prepare("SELECT id,service,name,price_minor,currency,duration_days,version,is_active FROM daga_plans WHERE id=?").bind(String(b.planId||"")).first();
+      if(!plan||plan.service!=="store"||!plan.is_active)return json(env,{error:"active_store_plan_required"},400);
+      const method=await db.prepare("SELECT id,is_active FROM daga_payment_methods WHERE id=?").bind(String(b.paymentMethodId||"")).first();
+      if(!method||!method.is_active)return json(env,{error:"active_payment_method_required"},400);
+      const price=Number(b.agreedPriceMinor);
+      if(!Number.isSafeInteger(price)||price<0)return json(env,{error:"valid_agreed_price_required"},400);
+      const now=new Date().toISOString(),orderId=crypto.randomUUID();
+      await db.batch([
+        db.prepare("INSERT INTO daga_plan_orders (id,account_id,store_id,plan_id,plan_version,agreed_price_minor,currency,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,'awaiting_payment',?,?)").bind(orderId,store.owner_account_id,store.id,plan.id,plan.version,price,plan.currency||"EGP",now,now),
+        db.prepare("UPDATE daga_stores SET onboarding_order_id=?,onboarding_payment_method_id=?,updated_at=? WHERE id=?").bind(orderId,method.id,now,store.id)
+      ]);
+      await audit(db,owner.id,"shop_onboarding_payment_requested","daga_stores",store.id,{orderId,planId:plan.id,paymentMethodId:method.id,agreedPriceMinor:price});
+      return json(env,{ok:true,orderId,planName:plan.name,agreedPriceMinor:price,currency:plan.currency||"EGP",paymentMethodId:method.id});
+    }
+
     const storeMatch=path.match(/^\/owner\/admin\/stores\/([a-f0-9-]{36})\/decision$/i);
     if(storeMatch&&request.method==="POST"){
       const b=await readJson(request);if(!b)return json(env, {error:"invalid_json"},400);
