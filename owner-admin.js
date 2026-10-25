@@ -171,7 +171,7 @@ export async function handleOwnerAdmin(request, env, url) {
     if(storeMatch&&request.method==="POST"){
       const b=await readJson(request);if(!b)return json(env, {error:"invalid_json"},400);
       if(!["preliminary_approved","approved","rejected","suspended"].includes(b.status))return json(env, {error:"invalid_store_status"},400);
-      const store=await db.prepare("SELECT id,owner_account_id,status,onboarding_status FROM daga_stores WHERE id=?").bind(storeMatch[1]).first();
+      const store=await db.prepare("SELECT id,owner_account_id,status,onboarding_status,onboarding_order_id FROM daga_stores WHERE id=?").bind(storeMatch[1]).first();
       if(!store)return json(env, {error:"store_not_found"},404);
       if(b.status==="approved" && store.onboarding_status!=="preliminary_approved")return json(env,{error:"preliminary_approval_required"},409);
       if(b.status==="preliminary_approved" && store.onboarding_status!=="pending")return json(env,{error:"store_not_pending_preliminary_approval"},409);
@@ -179,6 +179,18 @@ export async function handleOwnerAdmin(request, env, url) {
       if(b.status==="preliminary_approved"){
         await db.prepare("UPDATE daga_stores SET onboarding_status='preliminary_approved',updated_at=? WHERE id=?").bind(now,store.id).run();
         await db.prepare("UPDATE daga_accounts SET status='pending',updated_at=? WHERE id=? AND role='store_owner'").bind(now,store.owner_account_id).run();
+      }else if(b.status==="approved"){
+        if(!store.onboarding_order_id)return json(env,{error:"onboarding_plan_payment_not_recorded"},409);
+        const order=await db.prepare("SELECT o.id,o.status,o.plan_id,o.account_id,o.store_id,o.agreed_price_minor,p.duration_days,p.service FROM daga_plan_orders o JOIN daga_plans p ON p.id=o.plan_id WHERE o.id=? AND o.store_id=? AND o.account_id=?").bind(store.onboarding_order_id,store.id,store.owner_account_id).first();
+        if(!order||order.service!=="store"||!["awaiting_payment","under_review","payment_submitted"].includes(order.status))return json(env,{error:"valid_onboarding_payment_order_required"},409);
+        const expires=new Date(Date.now()+Number(order.duration_days)*86400000).toISOString();
+        const entitlementId=crypto.randomUUID();
+        await db.batch([
+          db.prepare("UPDATE daga_plan_orders SET status='paid_approved',updated_at=? WHERE id=? AND status IN ('awaiting_payment','under_review','payment_submitted')").bind(now,order.id),
+          db.prepare("INSERT INTO daga_entitlements (id,account_id,store_id,service,order_id,starts_at,expires_at,status,created_at) VALUES (?,?,?,'store',?,?,?,'active',?)").bind(entitlementId,store.owner_account_id,store.id,order.id,now,expires,now),
+          db.prepare("UPDATE daga_stores SET status='approved',onboarding_status='approved',updated_at=? WHERE id=?").bind(now,store.id),
+          db.prepare("UPDATE daga_accounts SET status='approved',updated_at=? WHERE id=? AND role='store_owner'").bind(now,store.owner_account_id)
+        ]);
       }else{
         await db.batch([
           db.prepare("UPDATE daga_stores SET status=?,onboarding_status=?,updated_at=? WHERE id=?").bind(b.status,b.status,now,store.id),
