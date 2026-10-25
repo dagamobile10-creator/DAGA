@@ -149,13 +149,16 @@ export async function handleOwnerAdmin(request, env, url) {
     const storeMatch=path.match(/^\/owner\/admin\/stores\/([a-f0-9-]{36})\/decision$/i);
     if(storeMatch&&request.method==="POST"){
       const b=await readJson(request);if(!b)return json(env, {error:"invalid_json"},400);
-      if(!["approved","rejected","suspended"].includes(b.status))return json(env, {error:"invalid_store_status"},400);
+      if(!["preliminary_approved","approved","rejected","suspended"].includes(b.status))return json(env, {error:"invalid_store_status"},400);
       const store=await db.prepare("SELECT id,owner_account_id,status FROM daga_stores WHERE id=?").bind(storeMatch[1]).first();
       if(!store)return json(env, {error:"store_not_found"},404);
+      if(b.status==="approved" && store.status!=="preliminary_approved")return json(env,{error:"preliminary_approval_required"},409);
+      if(b.status==="preliminary_approved" && store.status!=="pending")return json(env,{error:"store_not_pending_preliminary_approval"},409);
       const now=new Date().toISOString();
+      const accountStatus=b.status==="preliminary_approved"?"pending":b.status;
       await db.batch([
         db.prepare("UPDATE daga_stores SET status=?,updated_at=? WHERE id=?").bind(b.status,now,store.id),
-        db.prepare("UPDATE daga_accounts SET status=?,updated_at=? WHERE id=? AND role='store_owner'").bind(b.status==="approved"?"approved":b.status,now,store.owner_account_id)
+        db.prepare("UPDATE daga_accounts SET status=?,updated_at=? WHERE id=? AND role='store_owner'").bind(accountStatus,now,store.owner_account_id)
       ]);
       await audit(db,owner.id,"store_status_changed","daga_stores",store.id,{from:store.status,to:b.status});
       return json(env, {ok:true,status:b.status});
