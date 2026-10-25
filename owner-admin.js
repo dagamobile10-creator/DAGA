@@ -150,17 +150,21 @@ export async function handleOwnerAdmin(request, env, url) {
     if(storeMatch&&request.method==="POST"){
       const b=await readJson(request);if(!b)return json(env, {error:"invalid_json"},400);
       if(!["preliminary_approved","approved","rejected","suspended"].includes(b.status))return json(env, {error:"invalid_store_status"},400);
-      const store=await db.prepare("SELECT id,owner_account_id,status FROM daga_stores WHERE id=?").bind(storeMatch[1]).first();
+      const store=await db.prepare("SELECT id,owner_account_id,status,onboarding_status FROM daga_stores WHERE id=?").bind(storeMatch[1]).first();
       if(!store)return json(env, {error:"store_not_found"},404);
-      if(b.status==="approved" && store.status!=="preliminary_approved")return json(env,{error:"preliminary_approval_required"},409);
-      if(b.status==="preliminary_approved" && store.status!=="pending")return json(env,{error:"store_not_pending_preliminary_approval"},409);
+      if(b.status==="approved" && store.onboarding_status!=="preliminary_approved")return json(env,{error:"preliminary_approval_required"},409);
+      if(b.status==="preliminary_approved" && store.onboarding_status!=="pending")return json(env,{error:"store_not_pending_preliminary_approval"},409);
       const now=new Date().toISOString();
-      const accountStatus=b.status==="preliminary_approved"?"pending":b.status;
-      await db.batch([
-        db.prepare("UPDATE daga_stores SET status=?,updated_at=? WHERE id=?").bind(b.status,now,store.id),
-        db.prepare("UPDATE daga_accounts SET status=?,updated_at=? WHERE id=? AND role='store_owner'").bind(accountStatus,now,store.owner_account_id)
-      ]);
-      await audit(db,owner.id,"store_status_changed","daga_stores",store.id,{from:store.status,to:b.status});
+      if(b.status==="preliminary_approved"){
+        await db.prepare("UPDATE daga_stores SET onboarding_status='preliminary_approved',updated_at=? WHERE id=?").bind(now,store.id).run();
+        await db.prepare("UPDATE daga_accounts SET status='pending',updated_at=? WHERE id=? AND role='store_owner'").bind(now,store.owner_account_id).run();
+      }else{
+        await db.batch([
+          db.prepare("UPDATE daga_stores SET status=?,onboarding_status=?,updated_at=? WHERE id=?").bind(b.status,b.status,now,store.id),
+          db.prepare("UPDATE daga_accounts SET status=?,updated_at=? WHERE id=? AND role='store_owner'").bind(b.status,now,store.owner_account_id)
+        ]);
+      }
+      await audit(db,owner.id,"store_status_changed","daga_stores",store.id,{from:store.onboarding_status,to:b.status});
       return json(env, {ok:true,status:b.status});
     }
 
