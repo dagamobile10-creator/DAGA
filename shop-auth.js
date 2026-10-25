@@ -46,7 +46,7 @@ async function registrationStart(request,env,db){
   await db.prepare("INSERT INTO daga_shop_registration_challenges (id,email,owner_name,shop_name,internal_identity,destination_hash,code_hash,expires_at) VALUES (?,?,?,?,?,?,?,?)")
     .bind(id,email,owner,name,internalIdentity,destinationHash,codeHash,expires).run();
   try { await sendEmail(env,email,"DAGA shop registration verification","<p>Your DAGA shop registration code is <strong>"+code+"</strong>.</p><p>It expires in 10 minutes. The shop remains pending until app-owner approval.</p>"); }
-  catch(_){await db.prepare("UPDATE daga_shop_registration_challenges SET consumed_at=? WHERE id=?").bind(new Date().toISOString(),id).run();return json(env,{error:"verification_delivery_failed"},502);}
+  catch(e){await db.prepare("UPDATE daga_shop_registration_challenges SET consumed_at=? WHERE id=?").bind(new Date().toISOString(),id).run();const diagnostic={error:"verification_delivery_failed"};if(Number.isInteger(e?.providerStatus))diagnostic.providerStatus=e.providerStatus;if(typeof e?.providerCode==="string")diagnostic.providerCode=e.providerCode;return json(env,diagnostic,502);}
   return json(env,{ok:true,emailMasked:maskEmail(email),expiresInSeconds:OTP_TTL_SECONDS});
 }
 
@@ -188,7 +188,10 @@ async function sendEmail(env,email,subject,html){
       providerCode=String(detail?.name||detail?.statusCode||"unknown").slice(0,100);
     } catch(_) {}
     console.error("shop_email_provider_rejected",JSON.stringify({status:r.status,providerCode}));
-    throw new Error("email_delivery_failed");
+    const error=new Error("email_delivery_failed");
+    error.providerStatus=r.status;
+    error.providerCode=providerCode;
+    throw error;
   }
 }
 async function body(request){try{return await request.json()}catch(_){return null}}
