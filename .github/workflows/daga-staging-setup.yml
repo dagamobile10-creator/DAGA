@@ -108,7 +108,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p staging-migrations
-          for file in migrations/0001_daga_core.sql migrations/0002_daga_owner_auth.sql migrations/0003_daga_owner_credentials.sql migrations/0004_daga_offers.sql migrations/0005_daga_store_identity_invitations.sql migrations/0006_daga_public_identity_ids.sql migrations/0007_daga_company_registration_challenges.sql migrations/0008_daga_company_login_challenges.sql migrations/0009_daga_payment_submission_uniqueness.sql migrations/0010_email_only_auth.sql migrations/0011_email_only_registration_challenges.sql migrations/0012_company_email_onboarding.sql migrations/0013_shop_email_registration.sql; do
+          for file in migrations/0001_daga_core.sql migrations/0002_daga_owner_auth.sql migrations/0003_daga_owner_credentials.sql migrations/0004_daga_offers.sql migrations/0005_daga_store_identity_invitations.sql migrations/0006_daga_public_identity_ids.sql migrations/0007_daga_company_registration_challenges.sql migrations/0008_daga_company_login_challenges.sql migrations/0009_daga_payment_submission_uniqueness.sql migrations/0010_email_only_auth.sql migrations/0011_email_only_registration_challenges.sql migrations/0012_company_email_onboarding.sql migrations/0013_shop_email_registration.sql migrations/0014_shop_onboarding_contact_and_status.sql; do
             clean="staging-migrations/$(basename "$file")"
             grep -v '^[[:space:]]*PRAGMA foreign_keys' "$file" > "$clean"
           done

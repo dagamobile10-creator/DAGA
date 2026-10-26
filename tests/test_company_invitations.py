@@ -216,10 +216,12 @@ class InvitationSchemaTests(unittest.TestCase):
         start = admin.index('const storeMatch=path.match(/^\\/owner\\/admin\\/stores\\/([a-f0-9-]{36})\\/decision$/i);')
         end = admin.index('if(path==="/owner/admin/payments"', start)
         handler = admin[start:end]
-        self.assertIn('db.prepare("UPDATE daga_stores SET status=?,updated_at=? WHERE id=?")', handler)
+        self.assertIn('db.prepare("UPDATE daga_stores SET status=?,onboarding_status=?,updated_at=? WHERE id=?")', handler)
+        self.assertIn('db.prepare("UPDATE daga_stores SET onboarding_status=\'preliminary_approved\',updated_at=? WHERE id=?")', handler)
+        self.assertIn('store.onboarding_status!=="preliminary_approved"', handler)
         self.assertIn('db.prepare("UPDATE daga_accounts SET status=?,updated_at=? WHERE id=? AND role=\'store_owner\'")', handler)
         self.assertIn("await db.batch([", handler)
-        self.assertIn('["approved","rejected","suspended"]', handler)
+        self.assertIn('["preliminary_approved","approved","rejected","suspended"]', handler)
 
     def test_company_portal_supports_invite_creation_and_revocation(self):
         portal = (ROOT / "company" / "portal.html").read_text(encoding="utf-8")

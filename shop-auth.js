@@ -35,16 +35,16 @@ export async function handleShopAuth(request, env, url) {
 async function registrationStart(request,env,db){
   if(!env.DAGA_OTP_PEPPER||!env.RESEND_API_KEY||!env.DAGA_EMAIL_FROM)return json(env,{error:"email_verification_not_configured"},503);
   const b=await body(request);if(!b)return json(env,{error:"invalid_json"},400);
-  const name=String(b.shopName||"").trim().slice(0,120),owner=String(b.ownerName||"").trim().slice(0,100),email=normalizeEmail(b.email);
+  const name=String(b.shopName||"").trim().slice(0,120),owner=String(b.ownerName||"").trim().slice(0,100),email=normalizeEmail(b.email),contactPhone=String(b.contactPhone||"").replace(/[^0-9+]/g,"").slice(0,20);
   const ip=request.headers.get("CF-Connecting-IP")||"unknown";
   if(!await rateLimit(db,env,"shop-register-ip:"+ip,8,3600)||!await rateLimit(db,env,"shop-register-email:"+email,3,3600))return json(env,{error:"rate_limited"},429);
-  if(name.length<2||owner.length<2||!validEmail(email))return json(env,{error:"valid_shop_owner_name_and_email_required"},400);
+  if(name.length<2||owner.length<2||!validEmail(email)||contactPhone.replace(/[^0-9]/g,"").length<10)return json(env,{error:"valid_shop_owner_name_email_and_whatsapp_required"},400);
   if(await db.prepare("SELECT id FROM daga_accounts WHERE lower(email)=? LIMIT 1").bind(email).first())return json(env,{error:"account_email_already_exists"},409);
   const code=digits(),id=crypto.randomUUID(),now=new Date(),expires=new Date(now.getTime()+OTP_TTL_SECONDS*1000).toISOString();
   const [codeHash,destinationHash]=await Promise.all([sha(id+":"+code+":"+env.DAGA_OTP_PEPPER),sha("email:"+email)]);
   const internalIdentity="request:"+crypto.randomUUID();
-  await db.prepare("INSERT INTO daga_shop_registration_challenges (id,email,owner_name,shop_name,internal_identity,destination_hash,code_hash,expires_at) VALUES (?,?,?,?,?,?,?,?)")
-    .bind(id,email,owner,name,internalIdentity,destinationHash,codeHash,expires).run();
+  await db.prepare("INSERT INTO daga_shop_registration_challenges (id,email,owner_name,shop_name,contact_phone,internal_identity,destination_hash,code_hash,expires_at) VALUES (?,?,?,?,?,?,?,?,?)")
+    .bind(id,email,owner,name,contactPhone,internalIdentity,destinationHash,codeHash,expires).run();
   try { await sendEmail(env,email,"DAGA shop registration verification","<p>Your DAGA shop registration code is <strong>"+code+"</strong>.</p><p>It expires in 10 minutes. The shop remains pending until app-owner approval.</p>"); }
   catch(e){await db.prepare("UPDATE daga_shop_registration_challenges SET consumed_at=? WHERE id=?").bind(new Date().toISOString(),id).run();const diagnostic={error:"verification_delivery_failed"};if(Number.isInteger(e?.providerStatus))diagnostic.providerStatus=e.providerStatus;if(typeof e?.providerCode==="string")diagnostic.providerCode=e.providerCode;return json(env,diagnostic,502);}
   return json(env,{ok:true,emailMasked:maskEmail(email),expiresInSeconds:OTP_TTL_SECONDS});
@@ -66,7 +66,7 @@ async function registrationVerify(request,env,db){
     await db.batch([
       db.prepare("UPDATE daga_shop_registration_challenges SET consumed_at=?,claim_id=? WHERE id=? AND consumed_at IS NULL").bind(now,accountId,ch.id),
       db.prepare("INSERT INTO daga_accounts (id,public_id,email,display_name,role,status,store_id,email_verified_at,created_at,updated_at) VALUES (?,?,?,?,'store_owner','pending',?,?,?,?)").bind(accountId,userPublicId,email,ch.owner_name,storeId,now,now,now),
-      db.prepare("INSERT INTO daga_stores (id,public_id,owner_account_id,legal_identity,display_name,status,created_at,updated_at) VALUES (?,?,?,?,?,'pending',?,?)").bind(storeId,storePublicId,accountId,internalIdentity,ch.shop_name,now,now)
+      db.prepare("INSERT INTO daga_stores (id,public_id,owner_account_id,legal_identity,display_name,contact_phone,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)").bind(storeId,storePublicId,accountId,internalIdentity,ch.shop_name,ch.contact_phone,now,now)
     ]);
   } catch(_) {return json(env,{error:"shop_registration_conflict"},409);}
   return json(env,{ok:true,status:"pending",message:"تم تأكيد البريد. طلب المحل اتبعت لمالك التطبيق للموافقة المبدئية. هيوصلك تنبيه بعد القرار."},201);
