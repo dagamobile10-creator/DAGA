@@ -22,7 +22,7 @@ jobs:
               "staging deploy targets dedicated worker": 'name = "daga-app-staging"' in workflow,
               "staging database is separately named": 'database_name = "daga-app-staging"' in workflow,
               "staging memory gate enabled": 'DAGA_MEMORY_REQUIRE_AUTH = "true"' in workflow,
-              "voice auth compatibility is explicit": 'DAGA_VOICE_REQUIRE_AUTH = "false"' in workflow,
+              "staging voice authentication is enforced": 'DAGA_VOICE_REQUIRE_AUTH = "true"' in workflow and 'DAGA_LIVE_QUOTA_ENFORCE = "true"' in workflow,
               "missing auth secrets mark readiness false": 'echo "auth_ready=false" >> "$GITHUB_OUTPUT"' in workflow,
               "configured auth secrets mark readiness true": 'echo "auth_ready=true" >> "$GITHUB_OUTPUT"' in workflow,
               "missing secrets cannot yield a green staging run": 'Require owner-auth secrets for a green staging run' in workflow and 'if [ "$AUTH_READY" != "true" ]; then' in workflow,
