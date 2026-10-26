@@ -91,9 +91,10 @@ jobs:
           DAGA_APP_BASE_URL = "https://daga-app-staging.dagamobile10.workers.dev"
           DAGA_ALLOWED_ORIGINS = "https://dagamobile10-creator.github.io"
           DAGA_MEMORY_REQUIRE_AUTH = "true"
-          # Keep voice auth explicitly off until the browser client sends verified sessions.
-          # Staging smoke tests below exercise anonymous chat/TTS compatibility only.
-          DAGA_VOICE_REQUIRE_AUTH = "false"
+          # The V30 browser client sends the approved shop session token on chat/TTS/LiveAvatar requests.
+          DAGA_VOICE_REQUIRE_AUTH = "true"
+          # Enforce the LIVE DAGA character ledger only in isolated staging.
+          DAGA_LIVE_QUOTA_ENFORCE = "true"
           DAGA_PUBLIC_API_RATE_LIMITS = "true"
           [[d1_databases]]
           binding = "DAGA_APP_DB"
@@ -200,16 +201,16 @@ jobs:
           else
             echo "::warning::Staging chat smoke test skipped: no chat provider is configured."
           fi
-          # Test TTS only when a provider is configured; never send secrets to logs.
+          # Anonymous TTS must be denied now that staging voice identity and LIVE DAGA quota are enforced.
           if jq -e '.voiceConfigured == true' /tmp/health.json >/dev/null; then
-            tts_code="$(curl -sS -o /tmp/tts-smoke.bin -w '%{http_code}' --max-time 20 \
+            tts_code="$(curl -sS -o /tmp/tts-anon.json -w '%{http_code}' --max-time 20 \
               -H 'Content-Type: application/json' -d '{"text":"اختبار الصوت."}' \
               https://daga-app-staging.dagamobile10.workers.dev/tts)"
-            test "$tts_code" = "200" || { echo "::error::Staging TTS smoke test returned HTTP $tts_code"; exit 1; }
-            test -s /tmp/tts-smoke.bin || { echo "::error::Staging TTS returned empty audio"; exit 1; }
-            echo "Staging TTS smoke test passed."
+            test "$tts_code" = "401" || { echo "::error::Anonymous staging TTS should return HTTP 401, got $tts_code"; cat /tmp/tts-anon.json; exit 1; }
+            grep -q 'authenticated_account_required' /tmp/tts-anon.json || { echo "::error::Anonymous staging TTS did not fail with the expected authentication error"; cat /tmp/tts-anon.json; exit 1; }
+            echo "Staging TTS anonymous-denial test passed."
           else
-            echo "::warning::Staging TTS smoke test skipped: ELEVENLABS_API_KEY is not configured."
+            echo "::warning::Staging TTS auth smoke test skipped: ELEVENLABS_API_KEY is not configured."
           fi
           # Runtime CORS smoke test: only the configured staging origin may be authorized.
           curl -fsS -D /tmp/cors-allowed.headers -o /dev/null -X OPTIONS \
