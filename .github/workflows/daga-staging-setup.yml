@@ -190,6 +190,7 @@ jobs:
           done
           jq -e '.ok == true' /tmp/health.json >/dev/null || { echo "::error::Staging health endpoint did not report ok=true"; cat /tmp/health.json; exit 1; }
           jq '{ok,voiceConfigured,chatConfigured,freeChatConfigured,liveAvatarConfigured}' /tmp/health.json
+          jq -e '.voiceConfigured == true' /tmp/health.json >/dev/null || { echo "::error::Staging voice provider is not configured; staging cannot be considered fully ready."; exit 1; }
           # Anonymous chat must be denied while account authentication is enforced.
           chat_code="$(curl -sS -o /tmp/chat-smoke.json -w '%{http_code}' --max-time 20 \
             -H 'Content-Type: application/json' -d '{"text":"اختبار"}' \
