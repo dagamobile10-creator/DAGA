@@ -190,7 +190,10 @@ jobs:
           done
           jq -e '.ok == true' /tmp/health.json >/dev/null || { echo "::error::Staging health endpoint did not report ok=true"; cat /tmp/health.json; exit 1; }
           jq '{ok,voiceConfigured,chatConfigured,freeChatConfigured,liveAvatarConfigured}' /tmp/health.json
-          jq -e '.voiceConfigured == true' /tmp/health.json >/dev/null || { echo "::error::Staging voice provider is not configured; staging cannot be considered fully ready."; exit 1; }
+          voice_ready="$(jq -r '.voiceConfigured == true' /tmp/health.json)"
+          if [ "$voice_ready" != "true" ]; then
+            echo "::warning::ElevenLabs is not configured; continuing security smoke tests. Voice/TTS readiness remains blocked."
+          fi
           # Anonymous chat must be denied while account authentication is enforced.
           chat_code="$(curl -sS -o /tmp/chat-smoke.json -w '%{http_code}' --max-time 20 \
             -H 'Content-Type: application/json' -d '{"text":"اختبار"}' \
@@ -266,6 +269,10 @@ jobs:
           test "$code" = "400" || { echo "::error::Registration must reject an empty invalid request; got HTTP $code"; exit 1; }
           echo "Unauthenticated company, invitation, owner-session, owner-admin, plan, payment-method, offer, order, and order-payment APIs reject access; registration rejects malformed requests."
           echo "Staging Worker only. Production Worker and main branch were not targeted."
+          if [ "$voice_ready" != "true" ]; then
+            echo "::error::Security smoke tests completed, but voice/TTS is not ready: ELEVENLABS_API_KEY is missing."
+            exit 1
+          fi
       - name: Require owner-auth secrets for a green staging run
         if: always()
         env:
