@@ -6,3 +6,6 @@ CREATE INDEX IF NOT EXISTS daga_stores_onboarding_status ON daga_stores(onboardi
 ALTER TABLE daga_stores ADD COLUMN onboarding_order_id TEXT;
 ALTER TABLE daga_stores ADD COLUMN onboarding_payment_method_id TEXT;
 ALTER TABLE daga_stores ADD COLUMN onboarding_offer_name TEXT;
+
+-- Preserve the lifecycle state of shops that existed before this migration.
+UPDATE daga_stores SET onboarding_status=status WHERE onboarding_status='pending' AND status IN ('approved','rejected','suspended');
