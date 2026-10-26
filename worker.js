@@ -370,7 +370,7 @@ export default {
         if (!env.DAGA_APP_DB) return json({ error: "live_quota_not_configured" }, 503);
         const account = voiceAccount || await authenticatedAccount(request, env.DAGA_APP_DB);
         if (!account || account.status !== "approved" || account.role === "program_owner" || !account.store_id) return json({ error: "approved_shop_account_required" }, 401);
-        const entitlement = await env.DAGA_APP_DB.prepare("SELECT id FROM daga_entitlements WHERE store_id=? AND account_id=? AND service='live_daga' AND status='active' AND starts_at<=CURRENT_TIMESTAMP AND expires_at>CURRENT_TIMESTAMP LIMIT 1").bind(account.store_id, account.id).first();
+        const entitlement = await env.DAGA_APP_DB.prepare("SELECT id FROM daga_entitlements WHERE store_id=? AND service='live_daga' AND status='active' AND starts_at<=CURRENT_TIMESTAMP AND expires_at>CURRENT_TIMESTAMP LIMIT 1").bind(account.store_id).first();
         if (!entitlement) return json({ error: "live_daga_subscription_required" }, 402);
         const ledger = await env.DAGA_APP_DB.prepare("SELECT COALESCE(SUM(CASE WHEN event_type IN ('credit','adjustment','refund') THEN words ELSE -words END),0) AS remaining FROM daga_live_word_ledger WHERE store_id=?").bind(account.store_id).first();
         const characters = text.length;
