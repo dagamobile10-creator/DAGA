@@ -68,6 +68,8 @@ jobs:
         run: node --input-type=module --check < shop-auth.js
       - name: Run shop self-registration regression tests
         run: python3 tests/test_shop_self_registration.py
+      - name: Run LIVE DAGA quota debit regression tests
+        run: python3 tests/test_live_daga_quota.py
       - name: Check owner console inline JavaScript syntax
         run: |
           python3 - <<'PY'
