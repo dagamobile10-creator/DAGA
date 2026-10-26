@@ -32,6 +32,14 @@ jobs:
                   'account.status !== "approved"' in worker
                   and 'account.role === "program_owner"' in worker
                   and "approved_shop_account_required" in worker,
+              "LIVE DAGA plan creation requires a positive character quota":
+                  '(service === "live_daga" && quota === null)' in open("owner-admin.js", encoding="utf-8").read()
+                  and "Number.isSafeInteger(quota)" in open("owner-admin.js", encoding="utf-8").read(),
+              "LIVE DAGA plan edits cannot remove the character quota":
+                  '(existing.service === "live_daga" && quota === null)' in open("owner-admin.js", encoding="utf-8").read(),
+              "owner console labels LIVE DAGA quota as characters and requires it":
+                  "رصيد الحروف (إلزامي لباقة LIVE DAGA)" in open("owner-console.html", encoding="utf-8").read()
+                  and "$('planQuota').required=$('planService').value==='live_daga'" in open("owner-console.html", encoding="utf-8").read(),
               "staging deploy targets dedicated worker": 'name = "daga-app-staging"' in workflow,
               "staging database is separately named": 'database_name = "daga-app-staging"' in workflow,
               "staging memory gate enabled": 'DAGA_MEMORY_REQUIRE_AUTH = "true"' in workflow,
