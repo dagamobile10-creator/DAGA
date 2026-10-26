@@ -365,12 +365,31 @@ export default {
       // The visible/chat spelling remains «ضجه»; only the spoken text is phoneticized.
       text = text.replace(/ضَجَّة|ضَجّة|ضجّة|ضجه/gu, "ضَگَّة").replace(/\s{2,}/g, " ").trim();
 
+      let quota = null;
+      if (String(env.DAGA_LIVE_QUOTA_ENFORCE || "").toLowerCase() === "true") {
+        if (!env.DAGA_APP_DB) return json({ error: "live_quota_not_configured" }, 503);
+        const account = voiceAccount || await authenticatedAccount(request, env.DAGA_APP_DB);
+        if (!account || account.status !== "approved" || account.role === "program_owner" || !account.store_id) return json({ error: "approved_shop_account_required" }, 401);
+        const entitlement = await env.DAGA_APP_DB.prepare("SELECT id FROM daga_entitlements WHERE store_id=? AND account_id=? AND service='live_daga' AND status='active' AND starts_at<=CURRENT_TIMESTAMP AND expires_at>CURRENT_TIMESTAMP LIMIT 1").bind(account.store_id, account.id).first();
+        if (!entitlement) return json({ error: "live_daga_subscription_required" }, 402);
+        const ledger = await env.DAGA_APP_DB.prepare("SELECT COALESCE(SUM(CASE WHEN event_type IN ('credit','adjustment','refund') THEN words ELSE -words END),0) AS remaining FROM daga_live_word_ledger WHERE store_id=?").bind(account.store_id).first();
+        const characters = text.length;
+        const remaining = Number(ledger && ledger.remaining || 0);
+        if (remaining < characters) return json({ error: "live_daga_quota_insufficient", requiredCharacters: characters, remainingCharacters: remaining }, 402);
+        const requestId = "tts:" + crypto.randomUUID();
+        await env.DAGA_APP_DB.prepare("INSERT INTO daga_live_word_ledger (id,account_id,store_id,event_type,words,request_id,note) VALUES (?,?,?,'debit',?,?,?)").bind(crypto.randomUUID(), account.id, account.store_id, characters, requestId, "LIVE DAGA generated text characters").run();
+        quota = { accountId: account.id, storeId: account.store_id, characters, requestId };
+      }
+
       const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}/stream`, {
         signal: AbortSignal.timeout(12000), method: "POST",
         headers: { "xi-api-key": env.ELEVENLABS_API_KEY, "Content-Type": "application/json", "Accept": "audio/mpeg" },
         body: JSON.stringify({ text, model_id: "eleven_flash_v2_5", language_code: "ar", voice_settings: { stability: 0.32, similarity_boost: 0.80, style: 0.22, speed: 0.88, use_speaker_boost: true } })
       });
-      if (!response.ok) return json({ error: "tts_provider_request_failed", status: response.status }, response.status >= 400 && response.status <= 599 ? response.status : 502);
+      if (!response.ok) {
+        if (quota) await env.DAGA_APP_DB.prepare("INSERT INTO daga_live_word_ledger (id,account_id,store_id,event_type,words,request_id,note) VALUES (?,?,?,'refund',?,?,?)").bind(crypto.randomUUID(), quota.accountId, quota.storeId, quota.characters, quota.requestId + ":refund", "Refund for failed voice generation").run().catch(() => {});
+        return json({ error: "tts_provider_request_failed", status: response.status }, response.status >= 400 && response.status <= 599 ? response.status : 502);
+      }
       return new Response(response.body, { headers: cors({ allowedOrigins: env.DAGA_ALLOWED_ORIGINS || "", "Content-Type": response.headers.get("content-type") || "audio/mpeg", "Cache-Control": "no-store" }) });
     } catch (_) { return json({ error: "tts_request_failed" }, 500); }
   }
