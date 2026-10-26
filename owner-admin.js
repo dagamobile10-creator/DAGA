@@ -154,17 +154,18 @@ export async function handleOwnerAdmin(request, env, url) {
       if(store.onboarding_status!=="preliminary_approved")return json(env,{error:"preliminary_approval_required"},409);
       const plan=await db.prepare("SELECT id,service,name,price_minor,currency,duration_days,version,is_active FROM daga_plans WHERE id=?").bind(String(b.planId||"")).first();
       if(!plan||plan.service!=="store"||!plan.is_active)return json(env,{error:"active_store_plan_required"},400);
-      const method=await db.prepare("SELECT id,is_active FROM daga_payment_methods WHERE id=?").bind(String(b.paymentMethodId||"")).first();
-      if(!method||!method.is_active)return json(env,{error:"active_payment_method_required"},400);
+      const methodId=String(b.paymentMethodId||"").trim();
+      const method=methodId?await db.prepare("SELECT id,is_active FROM daga_payment_methods WHERE id=?").bind(methodId).first():null;
+      if(methodId&&(!method||!method.is_active))return json(env,{error:"active_payment_method_required"},400);
       const price=Number(b.agreedPriceMinor);
       if(!Number.isSafeInteger(price)||price<0)return json(env,{error:"valid_agreed_price_required"},400);
       const now=new Date().toISOString(),orderId=crypto.randomUUID();
       await db.batch([
         db.prepare("INSERT INTO daga_plan_orders (id,account_id,store_id,plan_id,plan_version,agreed_price_minor,currency,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,'awaiting_payment',?,?)").bind(orderId,store.owner_account_id,store.id,plan.id,plan.version,price,plan.currency||"EGP",now,now),
-        db.prepare("UPDATE daga_stores SET onboarding_order_id=?,onboarding_payment_method_id=?,onboarding_offer_name=?,updated_at=? WHERE id=?").bind(orderId,method.id,String(b.offerName||"").trim().slice(0,120)||null,now,store.id)
+        db.prepare("UPDATE daga_stores SET onboarding_order_id=?,onboarding_payment_method_id=?,onboarding_offer_name=?,updated_at=? WHERE id=?").bind(orderId,method?method.id:null,String(b.offerName||"").trim().slice(0,120)||null,now,store.id)
       ]);
-      await audit(db,owner.id,"shop_onboarding_payment_requested","daga_stores",store.id,{orderId,planId:plan.id,paymentMethodId:method.id,agreedPriceMinor:price});
-      return json(env,{ok:true,orderId,planName:plan.name,agreedPriceMinor:price,currency:plan.currency||"EGP",paymentMethodId:method.id});
+      await audit(db,owner.id,"shop_onboarding_agreement_recorded","daga_stores",store.id,{orderId,planId:plan.id,paymentMethodId:method?method.id:null,agreedPriceMinor:price,manualWhatsAppAgreement:true});
+      return json(env,{ok:true,orderId,planName:plan.name,agreedPriceMinor:price,currency:plan.currency||"EGP",paymentMethodId:method?method.id:null});
     }
 
     const storeMatch=path.match(/^\/owner\/admin\/stores\/([a-f0-9-]{36})\/decision$/i);
