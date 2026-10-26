@@ -18,7 +18,20 @@ jobs:
         run: |
           python3 - <<'PY'
           workflow = open(".github/workflows/daga-staging-setup.yml", encoding="utf-8").read()
+          worker = open("worker.js", encoding="utf-8").read()
           checks = {
+              "LIVE DAGA quota uses one explicit UTC timestamp for entitlement checks":
+                  'const quotaNow = new Date().toISOString();' in worker
+                  and 'starts_at<=? AND expires_at>?' in worker
+                  and 'account.store_id, quotaNow, quotaNow' in worker
+                  and 'account.store_id, quotaNow, quotaNow).run()' in worker,
+              "LIVE DAGA refunds quota after provider failures":
+                  "const refundQuota = async () =>" in worker
+                  and "await refundQuota();" in worker,
+              "LIVE DAGA quota requires an approved authenticated shop account":
+                  'account.status !== "approved"' in worker
+                  and 'account.role === "program_owner"' in worker
+                  and "approved_shop_account_required" in worker,
               "staging deploy targets dedicated worker": 'name = "daga-app-staging"' in workflow,
               "staging database is separately named": 'database_name = "daga-app-staging"' in workflow,
               "staging memory gate enabled": 'DAGA_MEMORY_REQUIRE_AUTH = "true"' in workflow,
