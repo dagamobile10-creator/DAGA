@@ -69,6 +69,24 @@ class LiveDagaQuotaTests(unittest.TestCase):
         self.db.commit()
         self.assertEqual(self.remaining(), 10)
 
+
+    def test_owner_addon_credit_increases_existing_balance(self):
+        self.db.execute("INSERT INTO daga_live_word_ledger VALUES ('addon1','acct1','store1','credit',5000,'owner-addon-5000-001','Owner added 5000 characters')")
+        self.db.commit()
+        self.assertEqual(self.remaining(), 5010)
+
+    def test_10000_character_package_can_be_spent_to_zero(self):
+        self.db.execute("UPDATE daga_live_word_ledger SET words=10000 WHERE id='c1'")
+        self.db.commit()
+        self.assertEqual(self.debit(10000, "request-package-10000"), 1)
+        self.assertEqual(self.remaining(), 0)
+
+    def test_future_subscription_does_not_allow_live_usage(self):
+        self.db.execute("UPDATE daga_entitlements SET starts_at='2026-11-01T00:00:00.000Z'")
+        self.db.commit()
+        self.assertEqual(self.debit(1, "request-not-started-001"), 0)
+        self.assertEqual(self.remaining(), 10)
+
     def test_unicode_character_count_uses_code_points(self):
         # Python len on Unicode strings matches the code-point count of JS Array.from.
         self.assertEqual(len("ضجّة🙂"), 5)
