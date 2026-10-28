@@ -37,6 +37,22 @@ jobs:
                   and "Number.isSafeInteger(quota)" in open("owner-admin.js", encoding="utf-8").read(),
               "LIVE DAGA plan edits cannot remove the character quota":
                   '(existing.service === "live_daga" && quota === null)' in open("owner-admin.js", encoding="utf-8").read(),
+              "owner can add character credit with unique request ID and audit":
+                  'path==="/owner/admin/words/adjust"' in open("owner-admin.js", encoding="utf-8").read()
+                  and 'requestId.length<12' in open("owner-admin.js", encoding="utf-8").read()
+                  and 'request_id=?' in open("owner-admin.js", encoding="utf-8").read()
+                  and '"live_words_credited"' in open("owner-admin.js", encoding="utf-8").read(),
+              "approved LIVE DAGA purchase credits the plan quota exactly once":
+                  'if(sub.service==="live_daga"&&Number(sub.word_quota)>0)' in open("owner-admin.js", encoding="utf-8").read()
+                  and '"order:"+sub.order_id' in open("owner-admin.js", encoding="utf-8").read(),
+              "LIVE DAGA worker blocks generation when quota is insufficient":
+                  'live_daga_quota_insufficient' in worker
+                  and 'INSERT INTO daga_live_word_ledger' in worker
+                  and '>= ?' in worker
+                  and 'requiredCharacters: characters, remainingCharacters: remaining' in worker,
+              "LIVE DAGA worker checks entitlement start and expiry before debit":
+                  'starts_at<=? AND expires_at>?' in worker
+                  and 'error: "live_daga_subscription_required"' in worker,
               "owner console labels LIVE DAGA quota as characters and requires it":
                   "رصيد الحروف (إلزامي لباقة LIVE DAGA)" in open("owner-console.html", encoding="utf-8").read()
                   and "$('planQuota').required=$('planService').value==='live_daga'" in open("owner-console.html", encoding="utf-8").read(),
@@ -328,6 +344,8 @@ jobs:
               "migrations/0011_email_only_registration_challenges.sql",
               "migrations/0012_company_email_onboarding.sql",
               "migrations/0013_shop_email_registration.sql",
+              "migrations/0014_shop_onboarding_contact_and_status.sql",
+              "migrations/0015_preserve_existing_shop_approval_states.sql",
           ):
               with open(path, encoding="utf-8") as f:
                   db.executescript(f.read())
@@ -371,5 +389,5 @@ jobs:
           assert "max_uses = 1" in invite_sql and "use_count BETWEEN 0 AND max_uses" in invite_sql
           shop_registration = db.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='daga_shop_registration_challenges'").fetchone()
           assert shop_registration and "shop_name TEXT NOT NULL" in shop_registration[0], "Shop-only registration challenge table is missing"
-          print("All thirteen migrations applied; email-only authentication, shop self-registration, invitations, pending-payment uniqueness, and grant uniqueness constraints exist.")
+          print("All fifteen migrations applied; email-only authentication, shop self-registration, invitations, pending-payment uniqueness, and grant uniqueness constraints exist.")
           PY
