@@ -37,6 +37,16 @@ jobs:
                   and "Number.isSafeInteger(quota)" in open("owner-admin.js", encoding="utf-8").read(),
               "LIVE DAGA plan edits cannot remove the character quota":
                   '(existing.service === "live_daga" && quota === null)' in open("owner-admin.js", encoding="utf-8").read(),
+              "owner can configure LIVE DAGA price per 1000 characters and audit changes":
+                  'path === "/owner/admin/live-daga-rate" && request.method === "PUT"' in open("owner-admin.js", encoding="utf-8").read()
+                  and "live_daga_character_rate_updated" in open("owner-admin.js", encoding="utf-8").read()
+                  and "Math.ceil(Number(p.word_quota)*rate/1000)" in open("owner-admin.js", encoding="utf-8").read(),
+              "pricing setting migration is applied by staging setup":
+                  "migrations/0016_live_daga_character_rate.sql" in open(".github/workflows/daga-staging-setup.yml", encoding="utf-8").read()
+                  and "CREATE TABLE IF NOT EXISTS daga_app_settings" in open("migrations/0016_live_daga_character_rate.sql", encoding="utf-8").read(),
+              "owner console includes character-rate control":
+                  "id=\"liveRateForm\"" in open("owner-console.html", encoding="utf-8").read()
+                  and "/owner/admin/live-daga-rate" in open("owner-console.html", encoding="utf-8").read(),
               "owner can add character credit with unique request ID and audit":
                   'path==="/owner/admin/words/adjust"' in open("owner-admin.js", encoding="utf-8").read()
                   and 'requestId.length<12' in open("owner-admin.js", encoding="utf-8").read()
