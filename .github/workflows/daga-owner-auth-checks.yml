@@ -37,6 +37,8 @@ jobs:
                   and "Number.isSafeInteger(quota)" in open("owner-admin.js", encoding="utf-8").read(),
               "LIVE DAGA plan edits cannot remove the character quota":
                   '(existing.service === "live_daga" && quota === null)' in open("owner-admin.js", encoding="utf-8").read(),
+              "owner pricing API allows PUT through CORS":
+                  '"Access-Control-Allow-Methods":"GET,POST,PUT,PATCH,OPTIONS"' in open("owner-admin.js", encoding="utf-8").read(),
               "owner can configure LIVE DAGA price per 1000 characters and audit changes":
                   'path === "/owner/admin/live-daga-rate" && request.method === "PUT"' in open("owner-admin.js", encoding="utf-8").read()
                   and "live_daga_character_rate_updated" in open("owner-admin.js", encoding="utf-8").read()
