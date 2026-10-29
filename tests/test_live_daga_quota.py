@@ -87,6 +87,22 @@ class LiveDagaQuotaTests(unittest.TestCase):
         self.assertEqual(self.debit(1, "request-not-started-001"), 0)
         self.assertEqual(self.remaining(), 10)
 
+    def test_character_rate_is_proportional_and_rounds_up_to_one_piaster(self):
+        rate_minor = 250
+        self.assertEqual((10000 * rate_minor + 999) // 1000, 2500)
+        self.assertEqual((1 * rate_minor + 999) // 1000, 1)
+        self.assertEqual((1001 * rate_minor + 999) // 1000, 251)
+
+    def test_owner_rate_endpoint_is_authenticated_and_reprices_packages(self):
+        root = __import__("pathlib").Path(__file__).resolve().parents[1]
+        handler = (root / "owner-admin.js").read_text(encoding="utf-8")
+        migration = (root / "migrations" / "0016_live_daga_character_rate.sql").read_text(encoding="utf-8")
+        self.assertIn('if (!owner) return json(env, { error: "owner_session_required" }, 401)', handler)
+        self.assertIn('/owner/admin/live-daga-rate', handler)
+        self.assertIn('Math.ceil(Number(p.word_quota)*rate/1000)', handler)
+        self.assertIn('daga_app_settings', migration)
+        self.assertIn('agreed_price_minor', (root / "company-orders.js").read_text(encoding="utf-8"))
+
     def test_unicode_character_count_uses_code_points(self):
         # Python len on Unicode strings matches the code-point count of JS Array.from.
         self.assertEqual(len("ضجّة🙂"), 5)
