@@ -238,9 +238,11 @@ export async function handleOwnerAdmin(request, env, url) {
       if(!/^[a-f0-9-]{36}$/i.test(accountId)||!Number.isSafeInteger(words)||words<1||words>100000000||requestId.length<12||requestId.length>128)return json(env, {error:"invalid_word_adjustment"},400);
       const adjustmentNote=note||"Owner adjustment";
       const account=await db.prepare("SELECT id,role,status,store_id FROM daga_accounts WHERE id=?").bind(accountId).first();
-      if(!account||account.status!=="approved"||account.role==="program_owner")return json(env, {error:"eligible_account_not_found"},404);
-      if(storeId&&account.store_id!==storeId)return json(env, {error:"store_account_mismatch"},409);
-      const resolvedStoreId=storeId||account.store_id||null;
+      if(!account||account.status!=="approved"||account.role!=="store_owner")return json(env, {error:"approved_store_owner_required"},404);
+      const ownedStore=await db.prepare("SELECT id FROM daga_stores WHERE owner_account_id=? AND status='approved' ORDER BY created_at DESC LIMIT 1").bind(accountId).first();
+      if(!ownedStore)return json(env,{error:"approved_owned_store_required"},409);
+      const resolvedStoreId=ownedStore.id;
+      if(storeId&&storeId!==resolvedStoreId)return json(env, {error:"store_account_mismatch"},409);
       const prior=await db.prepare("SELECT id,account_id,store_id,event_type,words,note FROM daga_live_word_ledger WHERE request_id=?").bind(requestId).first();
       if(prior){
         const same=prior.account_id===accountId&&prior.store_id===resolvedStoreId&&prior.event_type==="credit"&&Number(prior.words)===words&&prior.note===adjustmentNote;
