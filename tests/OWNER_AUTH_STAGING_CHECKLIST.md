@@ -39,6 +39,16 @@ Do not use production data, real customer accounts, or real payment records duri
 - [ ] Successful recovery rotates the recovery code and revokes all prior sessions.
 - [ ] Recovery is rate-limited; OTPs/recovery codes never appear in logs.
 
+## LIVE DAGA pricing and quota
+- [ ] Apply migration 0016 to the dedicated staging D1 database before deploying the matching Worker.
+- [ ] Owner-only `GET /owner/admin/live-daga-rate` returns the saved rate or an unset value without exposing it publicly.
+- [ ] Owner-only `PUT /owner/admin/live-daga-rate` rejects zero, negative, fractional-piastre, unsafe, and malformed values; valid EGP per-1000-character rate is stored and audited.
+- [ ] Changing the rate recalculates LIVE DAGA plan prices proportionally with rounding up to the next piastre; existing order price snapshots remain unchanged.
+- [ ] New subscriptions credit the package quota exactly once only after owner confirms the payment.
+- [ ] Generation debits the exact Unicode code-point character count; insufficient balance and expired/not-yet-started subscriptions are blocked.
+- [ ] A failed provider generation refunds the debit once; a manual top-up adds characters to the correct approved store owner and duplicate request IDs cannot double-credit.
+- [ ] Complete a real authenticated staging checkout, payment submission, owner review, quota debit-to-zero, and expiry test before release.
+
 ## Owner admin and data integrity
 - [ ] Every `/owner/admin/*` route returns 401 without a valid owner session.
 - [ ] Store-owner, manager, and employee sessions are rejected by owner routes.

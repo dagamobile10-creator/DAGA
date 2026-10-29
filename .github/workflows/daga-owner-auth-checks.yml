@@ -363,6 +363,7 @@ jobs:
               "migrations/0013_shop_email_registration.sql",
               "migrations/0014_shop_onboarding_contact_and_status.sql",
               "migrations/0015_preserve_existing_shop_approval_states.sql",
+              "migrations/0016_live_daga_character_rate.sql",
           ):
               with open(path, encoding="utf-8") as f:
                   db.executescript(f.read())
@@ -371,7 +372,7 @@ jobs:
               "daga_accounts", "daga_program_owner", "daga_auth_challenges",
               "daga_auth_sessions", "daga_security_events", "daga_offers", "daga_order_price_adjustments",
               "daga_owner_credentials", "daga_owner_bootstrap_state",
-              "daga_auth_rate_limits",
+              "daga_auth_rate_limits", "daga_app_settings",
           }
           missing = required - names
           assert not missing, f"Missing tables: {sorted(missing)}"
@@ -406,5 +407,5 @@ jobs:
           assert "max_uses = 1" in invite_sql and "use_count BETWEEN 0 AND max_uses" in invite_sql
           shop_registration = db.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='daga_shop_registration_challenges'").fetchone()
           assert shop_registration and "shop_name TEXT NOT NULL" in shop_registration[0], "Shop-only registration challenge table is missing"
-          print("All fifteen migrations applied; email-only authentication, shop self-registration, invitations, pending-payment uniqueness, and grant uniqueness constraints exist.")
+          print("All sixteen migrations applied; email-only authentication, configurable LIVE DAGA character pricing, shop self-registration, invitations, pending-payment uniqueness, and grant uniqueness constraints exist.")
           PY
