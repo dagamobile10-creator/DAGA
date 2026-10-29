@@ -56,6 +56,11 @@ jobs:
               "owner console labels LIVE DAGA quota as characters and requires it":
                   "رصيد الحروف (إلزامي لباقة LIVE DAGA)" in open("owner-console.html", encoding="utf-8").read()
                   and "$('planQuota').required=$('planService').value==='live_daga'" in open("owner-console.html", encoding="utf-8").read(),
+              "owner top-up uses approved shop-owner dropdown and generates a unique request ID":
+                  '<select id="wordAccount" required>' in open("owner-console.html", encoding="utf-8").read()
+                  and "p.role==='store_owner'&&p.status==='approved'" in open("owner-console.html", encoding="utf-8").read()
+                  and "const requestId='credit-'+crypto.randomUUID()" in open("owner-console.html", encoding="utf-8").read()
+                  and '<input id="wordRequest" type="hidden">' in open("owner-console.html", encoding="utf-8").read(),
               "staging deploy targets dedicated worker": 'name = "daga-app-staging"' in workflow,
               "staging database is separately named": 'database_name = "daga-app-staging"' in workflow,
               "staging memory gate enabled": 'DAGA_MEMORY_REQUIRE_AUTH = "true"' in workflow,
