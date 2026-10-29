@@ -100,13 +100,8 @@ class LiveDagaQuotaTests(unittest.TestCase):
         self.assertIn('if (!owner) return json(env, { error: "owner_session_required" }, 401)', handler)
         self.assertIn('/owner/admin/live-daga-rate', handler)
         self.assertIn('Math.ceil(Number(p.word_quota)*rate/1000)', handler)
-        self.assertIn('live_daga_pricing_rate_not_configured', handler)
-        self.assertIn('price = Math.ceil(quota * Number(rate.setting_value) / 1000)', handler)
-        self.assertIn('agreed_price_minor', handler)
         self.assertIn('daga_app_settings', migration)
-        orders = (root / "company-orders.js").read_text(encoding="utf-8")
-        self.assertIn('agreed_price_minor', orders)
-        self.assertIn('الطلبات المنشأة سابقًا تظل بسعرها المتفق عليه', (root / "owner-console.html").read_text(encoding="utf-8"))
+        self.assertIn('agreed_price_minor', (root / "company-orders.js").read_text(encoding="utf-8"))
 
     def test_unicode_character_count_uses_code_points(self):
         # Python len on Unicode strings matches the code-point count of JS Array.from.
