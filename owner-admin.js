@@ -28,6 +28,25 @@ export async function handleOwnerAdmin(request, env, url) {
       return json(env,{ok:true,events:rows.results||[]});
     }
 
+    if (path === "/owner/admin/live-daga-rate" && request.method === "GET") {
+      const setting = await db.prepare("SELECT setting_value,updated_at FROM daga_app_settings WHERE setting_key='live_daga_price_per_1000_minor'").first();
+      return json(env,{ok:true,pricePer1000Minor:setting?Number(setting.setting_value):null,updatedAt:setting?.updated_at||null});
+    }
+    if (path === "/owner/admin/live-daga-rate" && request.method === "PUT") {
+      const b = await readJson(request); if (!b) return json(env,{error:"invalid_json"},400);
+      const rate = Number(b.pricePer1000Minor);
+      if (!Number.isSafeInteger(rate) || rate < 1 || rate > 100000000) return json(env,{error:"invalid_character_rate"},400);
+      const now = new Date().toISOString();
+      const plans = await db.prepare("SELECT id,word_quota FROM daga_plans WHERE service='live_daga' AND word_quota IS NOT NULL").all();
+      const statements = [
+        db.prepare("INSERT INTO daga_app_settings (setting_key,setting_value,updated_by,updated_at) VALUES ('live_daga_price_per_1000_minor',?,?,?) ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value,updated_by=excluded.updated_by,updated_at=excluded.updated_at").bind(String(rate),owner.id,now),
+        ...(plans.results||[]).map(p=>db.prepare("UPDATE daga_plans SET price_minor=?,version=version+1,updated_by=?,updated_at=? WHERE id=?").bind(Math.ceil(Number(p.word_quota)*rate/1000),owner.id,now,p.id))
+      ];
+      await db.batch(statements);
+      await audit(db,owner.id,"live_daga_character_rate_updated","daga_app_settings","live_daga_price_per_1000_minor",{pricePer1000Minor:rate,plansRepriced:(plans.results||[]).length});
+      return json(env,{ok:true,pricePer1000Minor:rate,plansRepriced:(plans.results||[]).length});
+    }
+
     if (path === "/owner/admin/plans" && request.method === "GET") {
       const result = await db.prepare("SELECT id,service,name,price_minor,currency,duration_days,word_quota,features_json,is_active,version,updated_at FROM daga_plans ORDER BY service,name").all();
       return json(env, { ok: true, plans: result.results || [] });
