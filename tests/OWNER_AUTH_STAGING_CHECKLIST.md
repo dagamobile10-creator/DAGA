@@ -4,7 +4,7 @@ Do not use production data, real customer accounts, or real payment records duri
 
 ## Prerequisites
 - [ ] Dedicated D1 database is created and bound as `DAGA_APP_DB`.
-- [ ] Migrations 0001–0010 are applied in order; review migration 0010 and back up the dedicated staging database first.
+- [ ] Migrations 0001–0016 are applied in order; review security/data migrations and back up the dedicated staging database first.
 - [ ] Worker secrets are set in Cloudflare: bootstrap token, OTP pepper, Resend API key, and verified sender.
 - [ ] `DAGA_ALLOWED_ORIGINS` is set to the exact staging frontend origin.
 - [ ] `DAGA_APP_BASE_URL` is set to the trusted HTTPS staging frontend origin/path used to create invitation links; it is never derived from the request Host header.
@@ -50,6 +50,10 @@ Do not use production data, real customer accounts, or real payment records duri
 - [ ] Payment submission alone does not activate entitlement; owner confirmation is required.
 - [ ] Duplicate payment review cannot create duplicate entitlement/word credits.
 - [ ] LIVE DAGA word adjustments use unique request IDs; retries cannot double-credit.
+- [ ] Owner can set the LIVE DAGA price per 1000 characters; invalid/zero values are rejected.
+- [ ] Saving the character rate recalculates LIVE DAGA plan prices using proportional character pricing rounded up to one piastre; prior order agreed-price snapshots remain unchanged.
+- [ ] New and edited LIVE DAGA packages use the configured rate; when no rate is configured, legacy/manual plan pricing remains unchanged.
+- [ ] LIVE DAGA is blocked when character balance reaches zero even if the subscription has days remaining, and blocked after expiry even if characters remain.
 - [ ] Column label changes preserve stable keys; regular users cannot edit calculation keys.
 - [ ] Privileged changes create audit events.
 - [ ] Tenant isolation is tested before enabling store/manager/employee data routes.
