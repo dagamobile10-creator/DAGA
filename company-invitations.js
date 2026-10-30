@@ -26,6 +26,8 @@ export async function handleCompanyInvitations(request, env, url) {
 
   try {
     if (path === "/api/company/invitations" && request.method === "POST") return createInvitation(request, env, db, account);
+    const permissionRoute = path.match(/^\\/api\\/company\\/members\\/([0-9a-f-]{36})\\/permissions$/i);
+    if (permissionRoute && request.method === "PATCH") return updateMemberPermissions(request, env, db, account, permissionRoute[1]);
     if (path === "/api/company/invitations" && request.method === "GET") return listInvitations(url, db, account);
     if (path === "/api/company/invitations/accept" && request.method === "POST") return acceptInvitation(request, env, db, account);
     const revoke = path.match(/^\/api\/company\/invitations\/([0-9a-f-]{36})\/revoke$/i);
@@ -40,6 +42,8 @@ export async function handleCompanyInvitations(request, env, url) {
 }
 
 
+const COMPANY_PERMISSION_KEYS = ["inviteEmployees","manageUsers","manageInventory","viewReports","useSmartAssistant","useLiveDaga"];
+
 async function companyAccountMe(env, db, account) {
   const owned = await db.prepare("SELECT id,public_id,display_name,status,'store_owner' AS role FROM daga_stores WHERE owner_account_id=? AND status='approved' ORDER BY created_at DESC").bind(account.id).all();
   const memberships = await db.prepare("SELECT s.id,s.public_id,s.display_name,s.status,m.role,m.permissions_json,m.status AS membership_status FROM daga_store_memberships m JOIN daga_stores s ON s.id=m.store_id WHERE m.account_id=? AND m.status='active' AND s.status='approved' ORDER BY s.display_name").bind(account.id).all();
@@ -47,11 +51,46 @@ async function companyAccountMe(env, db, account) {
     let permissions = {};
     try { permissions = JSON.parse(row.permissions_json || "{}"); } catch (_) {}
     const safe = {};
-    for (const key of ["inviteEmployees","manageInventory","viewReports"]) safe[key] = permissions[key] === true;
+    for (const key of COMPANY_PERMISSION_KEYS) safe[key] = permissions[key] === true;
     return { id: row.id, publicId: row.public_id || null, displayName: row.display_name, status: row.status, role: row.role, permissions: safe };
   })];
   return json(env, { ok: true, account: { id: account.id, publicId: account.public_id || null, displayName: account.display_name, role: account.role, status: account.status, emailMasked: maskCompanyEmail(account.email) }, companies });
 }
+
+async function updateMemberPermissions(request, env, db, account, memberAccountId) {
+  const body = await safeJson(request);
+  if (!body || typeof body.storeId !== "string" || !body.permissions || typeof body.permissions !== "object" || Array.isArray(body.permissions)) {
+    return json(env, { error: "valid_store_and_permissions_required" }, 400);
+  }
+  const storeId = body.storeId.trim();
+  const store = await db.prepare("SELECT id,owner_account_id,status FROM daga_stores WHERE id=? LIMIT 1").bind(storeId).first();
+  if (!store || store.status !== "approved" || store.owner_account_id !== account.id || account.role !== "store_owner") {
+    return json(env, { error: "company_owner_required" }, 403);
+  }
+  const member = await db.prepare("SELECT role,permissions_json FROM daga_store_memberships WHERE store_id=? AND account_id=? AND status='active' LIMIT 1").bind(storeId, memberAccountId).first();
+  if (!member || !["manager","employee"].includes(member.role)) return json(env, { error: "active_team_member_not_found" }, 404);
+  const allowed = member.role === "manager" ? COMPANY_PERMISSION_KEYS : COMPANY_PERMISSION_KEYS.filter(key => key !== "inviteEmployees");
+  const permissions = {};
+  for (const key of allowed) {
+    if (body.permissions[key] !== undefined && typeof body.permissions[key] !== "boolean") return json(env, { error: "invalid_permission_value", permission: key }, 400);
+    permissions[key] = body.permissions[key] === true;
+  }
+  const before = {};
+  try { Object.assign(before, JSON.parse(member.permissions_json || "{}")); } catch (_) {}
+  const now = new Date().toISOString();
+  const result = await db.prepare("UPDATE daga_store_memberships SET permissions_json=? WHERE store_id=? AND account_id=? AND status='active' AND role=?")
+    .bind(JSON.stringify(permissions), storeId, memberAccountId, member.role).run();
+  if (Number(result?.meta?.changes || 0) !== 1) return json(env, { error: "permissions_update_conflict" }, 409);
+  try {
+    await db.prepare("INSERT INTO daga_audit_log (id,actor_account_id,action,target_type,target_id,details_json,created_at) VALUES (?,?,?,?,?,?,?)")
+      .bind(crypto.randomUUID(), account.id, "company_member_permissions_updated", "daga_store_memberships", memberAccountId,
+        JSON.stringify({ storeId, role: member.role, before, after: permissions }), now).run();
+  } catch (_) {
+    return json(env, { error: "permissions_audit_failed" }, 500);
+  }
+  return json(env, { ok: true, memberAccountId, role: member.role, permissions });
+}
+
 async function companyAccountLogout(request, env, db) {
   const header = request.headers.get("Authorization") || "";
   const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
@@ -296,14 +335,14 @@ async function getAuthority(db, account, store) {
   let stored = {};
   try { stored = JSON.parse(membership.permissions_json || "{}"); } catch (_) {}
   const permissions = {};
-  for (const key of ["inviteEmployees", "manageInventory", "viewReports"]) permissions[key] = Boolean(stored && stored[key] === true);
+  for (const key of COMPANY_PERMISSION_KEYS) permissions[key] = stored && stored[key] === true;
   return { role: membership.role, permissions };
 }
 
 function normalizePermissions(value, intendedRole, authority) {
   if (value == null) value = {};
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const allowed = intendedRole === "manager" ? ["inviteEmployees", "manageInventory", "viewReports"] : ["manageInventory", "viewReports"];
+  const allowed = intendedRole === "manager" ? COMPANY_PERMISSION_KEYS : COMPANY_PERMISSION_KEYS.filter(key => key !== "inviteEmployees");
   const out = {};
   for (const key of allowed) {
     if (value[key] !== undefined && typeof value[key] !== "boolean") return null;
@@ -318,7 +357,7 @@ function normalizePermissions(value, intendedRole, authority) {
 }
 
 function safeStoredPermissions(value, role) {
-  const allowed = role === "manager" ? ["inviteEmployees", "manageInventory", "viewReports"] : ["manageInventory", "viewReports"];
+  const allowed = role === "manager" ? COMPANY_PERMISSION_KEYS : COMPANY_PERMISSION_KEYS.filter(key => key !== "inviteEmployees");
   const out = {};
   for (const key of allowed) out[key] = value && value[key] === true;
   return out;
@@ -352,5 +391,5 @@ function json(env, data, status = 200) {
 function cors(env, extra = {}) {
   const allowed = String(env?.DAGA_ALLOWED_ORIGINS || "").split(",").map(x => x.trim()).filter(Boolean);
   const origin = allowed.includes("*") ? "*" : allowed.length === 1 ? allowed[0] : allowed.includes("null") ? "null" : "";
-  return { ...(origin ? { "Access-Control-Allow-Origin": origin } : {}), "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS", "Access-Control-Allow-Headers": "Content-Type,Authorization", "Access-Control-Max-Age": "600", Vary: "Origin", ...extra };
+  return { ...(origin ? { "Access-Control-Allow-Origin": origin } : {}), "Access-Control-Allow-Methods": "GET,POST,PATCH,DELETE,OPTIONS", "Access-Control-Allow-Headers": "Content-Type,Authorization", "Access-Control-Max-Age": "600", Vary: "Origin", ...extra };
 }
