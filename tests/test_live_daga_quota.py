@@ -100,6 +100,8 @@ class LiveDagaQuotaTests(unittest.TestCase):
         self.assertIn('if (!owner) return json(env, { error: "owner_session_required" }, 401)', handler)
         self.assertIn('/owner/admin/live-daga-rate', handler)
         self.assertIn('Math.ceil(Number(p.word_quota)*rate/1000)', handler)
+        self.assertIn('live_daga_pricing_rate_not_configured', handler)
+        self.assertIn('price = Math.ceil(Number(quota)*rate/1000)', handler)
         self.assertIn('daga_app_settings', migration)
         self.assertIn('agreed_price_minor', (root / "company-orders.js").read_text(encoding="utf-8"))
 

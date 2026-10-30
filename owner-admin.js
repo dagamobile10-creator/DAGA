@@ -58,7 +58,14 @@ export async function handleOwnerAdmin(request, env, url) {
       let price = Number(b.priceMinor);
       const duration = Number(b.durationDays ?? 30);
       const quota = b.wordQuota == null ? null : Number(b.wordQuota);
-      if (service === "live_daga" && quota !== null) { const rate=await db.prepare("SELECT setting_value FROM daga_app_settings WHERE setting_key='live_daga_price_per_1000_minor'").first(); if(rate) price=Math.ceil(quota*Number(rate.setting_value)/1000); }
+      if (service === "live_daga") {
+        if (quota === null || !Number.isSafeInteger(quota) || quota < 1) return json(env, { error: "live_daga_character_quota_required" }, 400);
+        const rateRow = await db.prepare("SELECT setting_value FROM daga_app_settings WHERE setting_key='live_daga_price_per_1000_minor'").first();
+        const rate = Number(rateRow?.setting_value);
+        if (!rateRow || !Number.isSafeInteger(rate) || rate < 1) return json(env, { error: "live_daga_pricing_rate_not_configured" }, 409);
+        price = Math.ceil(Number(quota)*rate/1000);
+        if (!Number.isSafeInteger(price) || price < 1) return json(env, { error: "calculated_plan_price_invalid" }, 400);
+      }
       if (!["store","live_daga"].includes(service) || !name || !Number.isSafeInteger(price) || price < 0 || !Number.isInteger(duration) || duration < 1 || duration > 3650 || (service === "live_daga" && quota === null) || (quota !== null && (!Number.isSafeInteger(quota) || quota < 1))) return json(env, { error: "invalid_plan_fields" }, 400);
       const id = crypto.randomUUID(), now = new Date().toISOString();
       const features = safeObjectJson(b.features);
@@ -77,7 +84,14 @@ export async function handleOwnerAdmin(request, env, url) {
       const duration = b.durationDays === undefined ? existing.duration_days : Number(b.durationDays);
       const quota = b.wordQuota === undefined ? existing.word_quota : (b.wordQuota === null ? null : Number(b.wordQuota));
       const active = b.isActive === undefined ? existing.is_active : (b.isActive ? 1 : 0);
-      if (existing.service === "live_daga" && quota !== null) { const rate=await db.prepare("SELECT setting_value FROM daga_app_settings WHERE setting_key='live_daga_price_per_1000_minor'").first(); if(rate) price=Math.ceil(quota*Number(rate.setting_value)/1000); }
+      if (existing.service === "live_daga") {
+        if (quota === null || !Number.isSafeInteger(quota) || quota < 1) return json(env, { error: "live_daga_character_quota_required" }, 400);
+        const rateRow = await db.prepare("SELECT setting_value FROM daga_app_settings WHERE setting_key='live_daga_price_per_1000_minor'").first();
+        const rate = Number(rateRow?.setting_value);
+        if (!rateRow || !Number.isSafeInteger(rate) || rate < 1) return json(env, { error: "live_daga_pricing_rate_not_configured" }, 409);
+        price = Math.ceil(Number(quota)*rate/1000);
+        if (!Number.isSafeInteger(price) || price < 1) return json(env, { error: "calculated_plan_price_invalid" }, 400);
+      }
       if (!name || !Number.isSafeInteger(price) || price<0 || !Number.isInteger(duration) || duration<1 || duration>3650 || (existing.service === "live_daga" && quota === null) || (quota!==null&&(!Number.isSafeInteger(quota)||quota<1))) return json(env, {error:"invalid_plan_fields"},400);
       await db.prepare("UPDATE daga_plans SET name=?,price_minor=?,duration_days=?,word_quota=?,is_active=?,version=version+1,updated_by=?,updated_at=? WHERE id=?")
         .bind(name,price,duration,quota,active,owner.id,new Date().toISOString(),planMatch[1]).run();
