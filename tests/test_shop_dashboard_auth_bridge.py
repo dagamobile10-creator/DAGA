@@ -55,6 +55,17 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn("window.DAGA_SESSION_TOKEN=token", dashboard)
         self.assertIn('path === "/api/company/invitations" && request.method === "POST"', invitations)
 
+    def test_live_daga_requires_both_smart_store_plan_and_live_entitlement_server_side(self):
+        worker = (ROOT / "worker.js").read_text(encoding="utf-8")
+        self.assertIn("smart_store_subscription_required", worker)
+        self.assertIn("json_extract(p.features_json,'$.tier')='smart'", worker)
+        self.assertIn("live_daga_subscription_required", worker)
+        self.assertIn("live_daga_quota_insufficient", worker)
+
+    def test_standard_plan_overrides_legacy_smart_flags(self):
+        admin = (ROOT / "owner-admin.js").read_text(encoding="utf-8")
+        self.assertIn('source.tier !== "standard" && (source.smartAssistantEnabled === true || source.historyEnabled === true)', admin)
+
     def test_smart_entitlement_enables_assistant_and_history_separately_from_live_daga(self):
         auth = (ROOT / "shop-auth.js").read_text(encoding="utf-8")
         dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
@@ -63,8 +74,10 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn('features.historyEnabled===true||features.tier==="smart"', auth)
         self.assertIn("smartAssistantEnabled:company.smartAssistantEnabled===true", dashboard)
         self.assertIn("historyEnabled:company.historyEnabled===true", dashboard)
-        self.assertIn("b.hidden=!window.DAGA_AUTH_USER.smartAssistantEnabled", dashboard)
-        self.assertIn("b.hidden=!window.DAGA_AUTH_USER.historyEnabled", dashboard)
+        self.assertIn("b.hidden=false;b.disabled=!smartAllowed", dashboard)
+        self.assertIn("b.hidden=false;b.disabled=!liveAllowed", dashboard)
+        self.assertIn("b.hidden=false;b.disabled=!window.DAGA_AUTH_USER.historyEnabled", dashboard)
+        self.assertIn("smartAllowed&&window.DAGA_AUTH_USER.liveDagaEnabled===true", dashboard)
 
 
 if __name__ == "__main__":
