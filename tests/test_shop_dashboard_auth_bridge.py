@@ -44,6 +44,17 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn("features={tier:smart?'smart':'standard',smartAssistantEnabled:smart,historyEnabled:smart}", console)
         self.assertIn("مستوى اشتراك المحل:", console)
 
+
+    def test_team_invites_use_email_only_and_real_invitation_api(self):
+        dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
+        invitations = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
+        self.assertIn('id="teamEmail" type="email"', dashboard)
+        self.assertNotIn("teamCountryCode", dashboard)
+        self.assertNotIn("teamPhone", dashboard)
+        self.assertIn("fetch('/api/company/invitations'", dashboard)
+        self.assertIn("window.DAGA_SESSION_TOKEN=token", dashboard)
+        self.assertIn('path === "/api/company/invitations" && request.method === "POST"', invitations)
+
     def test_smart_entitlement_enables_assistant_and_history_separately_from_live_daga(self):
         auth = (ROOT / "shop-auth.js").read_text(encoding="utf-8")
         dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
