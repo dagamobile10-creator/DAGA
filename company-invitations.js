@@ -8,7 +8,8 @@ export async function handleCompanyInvitations(request, env, url) {
   const accountPaths = ["/api/company/auth/me", "/api/company/auth/logout"];
   const isInvitationIdPath = /^\/api\/company\/invitations\/[0-9a-f-]{36}(?:\/revoke)?$/i.test(path);
   const isMemberPermissionPath = /^\/api\/company\/members\/[0-9a-f-]{36}\/permissions$/i.test(path);
-  if (!publicPaths.includes(path) && !accountPaths.includes(path) && !["/api/company/invitations", "/api/company/invitations/accept"].includes(path) && !isInvitationIdPath && !isMemberPermissionPath) return null;
+  const isMembersPath = path === "/api/company/members";
+  if (!publicPaths.includes(path) && !accountPaths.includes(path) && !["/api/company/invitations", "/api/company/invitations/accept"].includes(path) && !isInvitationIdPath && !isMemberPermissionPath && !isMembersPath) return null;
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors(env) });
   const db = env.DAGA_APP_DB;
   if (!db) return json(env, { error: "application_database_not_configured" }, 503);
@@ -30,6 +31,7 @@ export async function handleCompanyInvitations(request, env, url) {
     const permissionRoute = path.match(/^\/api\/company\/members\/([0-9a-f-]{36})\/permissions$/i);
     if (permissionRoute && request.method === "PATCH") return updateMemberPermissions(request, env, db, account, permissionRoute[1]);
     if (path === "/api/company/invitations" && request.method === "GET") return listInvitations(url, db, account);
+    if (isMembersPath && request.method === "GET") return listCompanyMembers(url, env, db, account);
     if (path === "/api/company/invitations/accept" && request.method === "POST") return acceptInvitation(request, env, db, account);
     const revoke = path.match(/^\/api\/company\/invitations\/([0-9a-f-]{36})\/revoke$/i);
     if (revoke && request.method === "POST") return revokeInvitation(db, account, revoke[1]);
@@ -56,6 +58,20 @@ async function companyAccountMe(env, db, account) {
     return { id: row.id, publicId: row.public_id || null, displayName: row.display_name, status: row.status, role: row.role, permissions: safe };
   })];
   return json(env, { ok: true, account: { id: account.id, publicId: account.public_id || null, displayName: account.display_name, role: account.role, status: account.status, emailMasked: maskCompanyEmail(account.email) }, companies });
+}
+
+async function listCompanyMembers(url, env, db, account) {
+  const storeId = String(url.searchParams.get("storeId") || "").trim();
+  if (!storeId) return json(env, { error: "storeId_required" }, 400);
+  const store = await db.prepare("SELECT id,owner_account_id,status FROM daga_stores WHERE id=? LIMIT 1").bind(storeId).first();
+  if (!store || store.status !== "approved" || store.owner_account_id !== account.id || account.role !== "store_owner") return json(env, { error: "company_owner_required" }, 403);
+  const rows = await db.prepare("SELECT a.id AS accountId,a.display_name AS displayName,a.email,m.role,m.permissions_json AS permissionsJson FROM daga_store_memberships m JOIN daga_accounts a ON a.id=m.account_id WHERE m.store_id=? AND m.status='active' AND m.role IN ('manager','employee') ORDER BY m.role,a.display_name").bind(storeId).all();
+  const members = (rows.results || []).map(row => {
+    let stored = {};
+    try { stored = JSON.parse(row.permissionsJson || "{}"); } catch (_) {}
+    return { accountId: row.accountId, displayName: row.displayName || "", emailMasked: maskCompanyEmail(row.email), role: row.role, permissions: safeStoredPermissions(stored, row.role) };
+  });
+  return json(env, { ok: true, members });
 }
 
 async function updateMemberPermissions(request, env, db, account, memberAccountId) {
