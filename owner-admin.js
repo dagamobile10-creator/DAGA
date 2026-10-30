@@ -68,7 +68,7 @@ export async function handleOwnerAdmin(request, env, url) {
       }
       if (!["store","live_daga"].includes(service) || !name || !Number.isSafeInteger(price) || price < 0 || !Number.isInteger(duration) || duration < 1 || duration > 3650 || (service === "live_daga" && quota === null) || (quota !== null && (!Number.isSafeInteger(quota) || quota < 1))) return json(env, { error: "invalid_plan_fields" }, 400);
       const id = crypto.randomUUID(), now = new Date().toISOString();
-      const features = safeObjectJson(b.features);
+      const features = service === "store" ? normalizeStoreFeatures(b.features) : safeObjectJson(b.features);
       await db.prepare("INSERT INTO daga_plans (id,service,name,price_minor,currency,duration_days,word_quota,features_json,is_active,version,updated_by,updated_at) VALUES (?,?,?,?,?,?,?,?,1,1,?,?)")
         .bind(id,service,name,price,String(b.currency || "EGP").slice(0,8),duration,quota,features,owner.id,now).run();
       await audit(db,owner.id,"plan_created","daga_plans",id,{service,name,priceMinor:price});
@@ -84,6 +84,9 @@ export async function handleOwnerAdmin(request, env, url) {
       const duration = b.durationDays === undefined ? existing.duration_days : Number(b.durationDays);
       const quota = b.wordQuota === undefined ? existing.word_quota : (b.wordQuota === null ? null : Number(b.wordQuota));
       const active = b.isActive === undefined ? existing.is_active : (b.isActive ? 1 : 0);
+      const features = existing.service === "store"
+        ? normalizeStoreFeatures(b.features === undefined ? (() => { try { return JSON.parse(existing.features_json || "{}"); } catch (_) { return {}; } })() : b.features)
+        : existing.features_json;
       if (existing.service === "live_daga") {
         if (quota === null || !Number.isSafeInteger(quota) || quota < 1) return json(env, { error: "live_daga_character_quota_required" }, 400);
         const rateRow = await db.prepare("SELECT setting_value FROM daga_app_settings WHERE setting_key='live_daga_price_per_1000_minor'").first();
@@ -93,9 +96,9 @@ export async function handleOwnerAdmin(request, env, url) {
         if (!Number.isSafeInteger(price) || price < 1) return json(env, { error: "calculated_plan_price_invalid" }, 400);
       }
       if (!name || !Number.isSafeInteger(price) || price<0 || !Number.isInteger(duration) || duration<1 || duration>3650 || (existing.service === "live_daga" && quota === null) || (quota!==null&&(!Number.isSafeInteger(quota)||quota<1))) return json(env, {error:"invalid_plan_fields"},400);
-      await db.prepare("UPDATE daga_plans SET name=?,price_minor=?,duration_days=?,word_quota=?,is_active=?,version=version+1,updated_by=?,updated_at=? WHERE id=?")
-        .bind(name,price,duration,quota,active,owner.id,new Date().toISOString(),planMatch[1]).run();
-      await audit(db,owner.id,"plan_updated","daga_plans",planMatch[1],{version:existing.version+1});
+      await db.prepare("UPDATE daga_plans SET name=?,price_minor=?,duration_days=?,word_quota=?,features_json=?,is_active=?,version=version+1,updated_by=?,updated_at=? WHERE id=?")
+        .bind(name,price,duration,quota,features,active,owner.id,new Date().toISOString(),planMatch[1]).run();
+      await audit(db,owner.id,"plan_updated","daga_plans",planMatch[1],{version:existing.version+1,storeTier:existing.service==="store"?(JSON.parse(features).tier||"standard"):null});
       return json(env, {ok:true,version:existing.version+1});
     }
 
@@ -357,6 +360,11 @@ export async function handleOwnerAdmin(request, env, url) {
 }
 
 async function readJson(request){try{return await request.json()}catch(_){return null}}
+function normalizeStoreFeatures(value) {
+  const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const smart = source.tier === "smart" || source.smartAssistantEnabled === true || source.historyEnabled === true;
+  return JSON.stringify({ tier: smart ? "smart" : "standard", smartAssistantEnabled: smart, historyEnabled: smart });
+}
 function safeObjectJson(value){return JSON.stringify(value&&typeof value==="object"&&!Array.isArray(value)?value:{}) .slice(0,10000)}
 async function audit(db,actor,action,targetType,targetId,details){
   try{await db.prepare("INSERT INTO daga_audit_log (actor_account_id,action,target_type,target_id,details_json) VALUES (?,?,?,?,?)").bind(actor,action,targetType,targetId,JSON.stringify(details||{}).slice(0,4000)).run()}catch(_){}
