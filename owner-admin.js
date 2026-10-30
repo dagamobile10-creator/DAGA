@@ -362,7 +362,7 @@ export async function handleOwnerAdmin(request, env, url) {
 async function readJson(request){try{return await request.json()}catch(_){return null}}
 function normalizeStoreFeatures(value) {
   const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
-  const smart = source.tier === "smart" || source.smartAssistantEnabled === true || source.historyEnabled === true;
+  const smart = source.tier === "smart" || (source.tier !== "standard" && (source.smartAssistantEnabled === true || source.historyEnabled === true));
   return JSON.stringify({ tier: smart ? "smart" : "standard", smartAssistantEnabled: smart, historyEnabled: smart });
 }
 function safeObjectJson(value){return JSON.stringify(value&&typeof value==="object"&&!Array.isArray(value)?value:{}) .slice(0,10000)}
