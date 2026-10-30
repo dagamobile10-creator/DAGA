@@ -182,7 +182,7 @@ function showEntryHistory(ci,ei){
  open(`<h2>كشف حساب البند</h2><p class="small">البند: <b>${esc(name)}</b> — العمود: <b>${esc(col.name)}</b></p><div class="reconMini"><div>القيمة الحالية <b>${fmt(num(entry[1]))} ج.م</b></div><div>وقت فتح الكشف <b>${esc(localStamp())}</b></div></div><h3>الحركات المسجلة</h3>${rows}<button class="primary" onclick="editEntry(${ci},${ei})">تعديل البند</button><button onclick="closeModal()">إغلاق</button>`);
 }
 function deleteEntry(i,j){confirmDelete(i,j)}
-function voiceDaga(){pendingOrder=null;open('<h2>كلم ضجه — تنفيذ الأوامر</h2><p class="small">اضغط الميكروفون وقل الأمر بالمصري، أو اكتبه للتجربة. ضجه تعرض التغيير المقترح، ولا تسجله إلا بعد تأكيدك. أمثلة طبيعية: «ارفع كاش خمسة جنيه»، «اكتب في الخارج أوبشن 500»، «فوري خد الألفين بتوعه». راجع كل حركة قبل اعتمادها.</p><button class="primary" onclick="startVoice()">🎙️ ابدأ الكلام</button><div id="st" class="status">جاهز أسمعك.</div><label>الأوردر</label><input id="cmd" placeholder="اكتب الأوردر هنا"><button class="primary" onclick="review()">مراجعة الأوردر</button><div id="orderPreview"></div>')}
+function voiceDaga(){if(!window.DAGA_AUTH_USER||window.DAGA_AUTH_USER.smartAssistantEnabled!==true){alert('ميزة كلم ضجه متاحة في الاشتراك الذكي فقط.');return;}pendingOrder=null;open('<h2>كلم ضجه — تنفيذ الأوامر</h2><p class="small">اضغط الميكروفون وقل الأمر بالمصري، أو اكتبه للتجربة. ضجه تعرض التغيير المقترح، ولا تسجله إلا بعد تأكيدك. أمثلة طبيعية: «ارفع كاش خمسة جنيه»، «اكتب في الخارج أوبشن 500»، «فوري خد الألفين بتوعه». راجع كل حركة قبل اعتمادها.</p><button class="primary" onclick="startVoice()">🎙️ ابدأ الكلام</button><div id="st" class="status">جاهز أسمعك.</div><label>الأوردر</label><input id="cmd" placeholder="اكتب الأوردر هنا"><button class="primary" onclick="review()">مراجعة الأوردر</button><div id="orderPreview"></div>')}
 function startVoice(){const S=window.SpeechRecognition||window.webkitSpeechRecognition;if(!S){document.getElementById('st').textContent='المتصفح المفتوح من ملف على الجهاز لا يدعم التقاط الصوت هنا. جرّب النسخة المنشورة عبر HTTPS واسمح بالميكروفون، أو اكتب الأمر في الحقل واضغط مراجعة الأوردر.';return}rec=new S();rec.lang='ar-EG';rec.interimResults=false;rec.onstart=()=>document.getElementById('st').textContent=pendingClarification?'ضجه بتسمع ردك على السؤال الحالي…':'ضجه بتسمعك…';rec.onresult=e=>{const said=e.results[0][0].transcript;document.getElementById('cmd').value=said;if(pendingClarification){document.getElementById('st').textContent='سمعت ردك على السؤال…';answerClarificationFromText(said);return}document.getElementById('st').textContent='سمعتك. اضغط مراجعة الأوردر.'};rec.onerror=(e)=>document.getElementById('st').textContent=(e.error==='not-allowed'?'إذن الميكروفون مرفوض. اسمح للمتصفح باستخدام الميكروفون من إعدادات الموقع.':e.error==='network'?'التعرف على الصوت يحتاج اتصالًا بالإنترنت في هذا المتصفح.':'تعذر التقاط الصوت ('+e.error+'). جرّب النسخة المنشورة عبر HTTPS أو اكتب الأمر.');try{rec.start()}catch(e){document.getElementById('st').textContent='المتصفح لم يبدأ الاستماع. افتح النسخة المنشورة عبر HTTPS واسمح بالميكروفون، أو اكتب الأمر.'}}
 function parseOrder(t){
  const raw=String(t||'').trim();
@@ -488,7 +488,10 @@ function executeOrder(){
 }
 let dagaLiveSnapshotTimer=null;
 function showLiveComingSoon(){
-  // Open LIVE DAGA as a top-level HTTPS page so Android Chrome can request speech recognition/microphone permissions reliably.
+  const user=window.DAGA_AUTH_USER||{};
+  if(user.smartAssistantEnabled!==true){alert('تشغيل LIVE DAGA يتطلب الاشتراك الذكي أولًا.');return;}
+  if(user.liveDagaEnabled!==true){alert('الاشتراك الذكي مفعّل. لإضافة LIVE DAGA، اشترك في الإضافة المدفوعة أولًا.');return;}
+  // Open LIVE DAGA only after both server entitlements are confirmed.
   window.location.assign('https://dagamobile10-creator.github.io/DAGA/');
 }
 function closeDagaLiveFullscreen(){
@@ -607,9 +610,12 @@ async function bootAuthenticatedDashboard(token,selectedCompanyId){
   if(role==='owner')role='store_owner';
   if(!['store_owner','manager','employee'].includes(role)){window.location.replace('/shop-access/');return;}
   window.DAGA_SESSION_TOKEN=token;window.DAGA_AUTH_USER={id:data.account.id,displayName:data.account.displayName||'',role:role,storeId:company.id,storeName:company.displayName||'ضجه',permissions:company.permissions||{},smartAssistantEnabled:company.smartAssistantEnabled===true,historyEnabled:company.historyEnabled===true,liveDagaEnabled:company.liveDagaEnabled===true};
-  document.querySelectorAll('button[onclick="voiceDaga()"]').forEach(b=>{b.hidden=!window.DAGA_AUTH_USER.smartAssistantEnabled;});
-  document.querySelectorAll('button.liveBtn').forEach(b=>{b.hidden=!window.DAGA_AUTH_USER.liveDagaEnabled;});
-  document.querySelectorAll('button[onclick="showReports()"]').forEach(b=>{b.hidden=!window.DAGA_AUTH_USER.historyEnabled;});
+  // Keep both premium actions visible on every plan; entitlement controls whether they can run.
+  const smartAllowed=window.DAGA_AUTH_USER.smartAssistantEnabled===true;
+  const liveAllowed=smartAllowed&&window.DAGA_AUTH_USER.liveDagaEnabled===true;
+  document.querySelectorAll('button[onclick="voiceDaga()"]').forEach(b=>{b.hidden=false;b.disabled=!smartAllowed;b.title=smartAllowed?'':'متاح في الاشتراك الذكي فقط';b.setAttribute('aria-disabled',String(!smartAllowed));});
+  document.querySelectorAll('button.liveBtn').forEach(b=>{b.hidden=false;b.disabled=!liveAllowed;b.title=liveAllowed?'':'يتطلب الاشتراك الذكي وإضافة LIVE DAGA المدفوعة';b.setAttribute('aria-disabled',String(!liveAllowed));});
+  document.querySelectorAll('button[onclick="showReports()"]').forEach(b=>{b.hidden=false;b.disabled=!window.DAGA_AUTH_USER.historyEnabled;b.title=window.DAGA_AUTH_USER.historyEnabled?'':'تفاصيل الأيام السابقة متاحة في الاشتراك الذكي فقط';});
   loadStoreData(company.id);
   const header=document.querySelector('header.top .row');
   if(header&&!document.getElementById('accountLogout')){const b=document.createElement('button');b.id='accountLogout';b.type='button';b.textContent='تسجيل الخروج';b.style.cssText='margin:0 10px;padding:8px 11px;border:1px solid #4a402c;border-radius:9px;background:#15120c;color:#d7ad57;font:inherit;font-size:12px;cursor:pointer';b.addEventListener('click',async()=>{b.disabled=true;try{await fetch('/api/shop/auth/logout',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:'{}',cache:'no-store',credentials:'omit'});}finally{window.location.replace('/shop-access/');}});header.insertBefore(b,header.lastElementChild);}
