@@ -198,6 +198,8 @@ export default {
         if (!account || account.status !== "approved" || account.role === "program_owner") {
           return json({ error: "authenticated_account_required" }, 401);
         }
+        const permissionDenied = await enforceCompanyVoicePermission(env, account, "useLiveDaga");
+        if (permissionDenied) return permissionDenied;
       }
       if (!env.LIVEAVATAR_API_KEY) return json({ error: "LIVEAVATAR_API_KEY secret is not configured" }, 503);
       try {
@@ -250,6 +252,10 @@ export default {
 
     if (url.pathname === "/chat" && request.method === "POST") {
       try {
+        if (voiceIdentityRequired) {
+          const permissionDenied = await enforceCompanyVoicePermission(env, voiceAccount, "useSmartAssistant");
+          if (permissionDenied) return permissionDenied;
+        }
         const parsed = await readBoundedJson(request, 32768);
         if (!parsed.ok) return json({ error: parsed.error }, parsed.status);
         const body = parsed.value;
@@ -351,6 +357,10 @@ export default {
     if (url.pathname !== "/tts" || request.method !== "POST") return json({ error: "Not found" }, 404);
 
     try {
+      if (voiceIdentityRequired) {
+        const permissionDenied = await enforceCompanyVoicePermission(env, voiceAccount, "useLiveDaga");
+        if (permissionDenied) return permissionDenied;
+      }
       if (!env.ELEVENLABS_API_KEY) return json({ error: "DAGA voice is not configured" }, 503);
       const parsed = await readBoundedJson(request, 16384);
       if (!parsed.ok) return json({ error: parsed.error }, parsed.status);
@@ -503,3 +513,17 @@ function extractModelText(result) {
   }
   return "";
 }
+
+async function enforceCompanyVoicePermission(env, account, permissionKey) {
+  if (!env.DAGA_APP_DB) return json({ error: "company_permission_database_not_configured" }, 503);
+  if (!account || account.status !== "approved" || account.role === "program_owner") return json({ error: "authenticated_account_required" }, 401);
+  if (account.role === "store_owner") return null;
+  if (!["manager", "employee"].includes(account.role) || !account.store_id) return json({ error: "company_membership_required" }, 403);
+  const membership = await env.DAGA_APP_DB.prepare("SELECT permissions_json FROM daga_store_memberships WHERE store_id=? AND account_id=? AND status='active' LIMIT 1").bind(account.store_id, account.id).first();
+  if (!membership) return json({ error: "company_membership_required" }, 403);
+  let permissions = {};
+  try { permissions = JSON.parse(membership.permissions_json || "{}"); } catch (_) {}
+  if (permissions[permissionKey] !== true) return json({ error: "company_voice_permission_denied", permission: permissionKey }, 403);
+  return null;
+}
+
