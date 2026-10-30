@@ -36,6 +36,25 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn("Authorization:'Bearer '+token", dashboard)
         self.assertIn("api/shop/auth/logout", dashboard)
 
+    def test_store_plan_tier_is_saved_and_editable(self):
+        admin = (ROOT / "owner-admin.js").read_text(encoding="utf-8")
+        console = (ROOT / "owner-console.html").read_text(encoding="utf-8")
+        self.assertIn("normalizeStoreFeatures(b.features)", admin)
+        self.assertIn("features_json=?,is_active=?", admin)
+        self.assertIn("features={tier:smart?'smart':'standard',smartAssistantEnabled:smart,historyEnabled:smart}", console)
+        self.assertIn("مستوى اشتراك المحل:", console)
+
+    def test_smart_entitlement_enables_assistant_and_history_separately_from_live_daga(self):
+        auth = (ROOT / "shop-auth.js").read_text(encoding="utf-8")
+        dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
+        self.assertIn("p.features_json", auth)
+        self.assertIn('features.smartAssistantEnabled===true||features.tier==="smart"', auth)
+        self.assertIn('features.historyEnabled===true||features.tier==="smart"', auth)
+        self.assertIn("smartAssistantEnabled:company.smartAssistantEnabled===true", dashboard)
+        self.assertIn("historyEnabled:company.historyEnabled===true", dashboard)
+        self.assertIn("b.hidden=!window.DAGA_AUTH_USER.smartAssistantEnabled", dashboard)
+        self.assertIn("b.hidden=!window.DAGA_AUTH_USER.historyEnabled", dashboard)
+
 
 if __name__ == "__main__":
     unittest.main()
