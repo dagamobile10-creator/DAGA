@@ -101,5 +101,12 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn("اسم الشركة", portal)
         self.assertIn("daga_stores", (ROOT / "company-invitations.js").read_text(encoding="utf-8"))
 
+    def test_voice_routes_enforce_member_permissions_independently(self):
+        worker = (ROOT / "worker.js").read_text(encoding="utf-8")
+        self.assertIn('enforceCompanyVoicePermission(env, voiceAccount, "useSmartAssistant")', worker)
+        self.assertIn('enforceCompanyVoicePermission(env, voiceAccount, "useLiveDaga")', worker)
+        self.assertIn('permissions[permissionKey] !== true', worker)
+        self.assertIn('company_voice_permission_denied', worker)
+
 if __name__ == "__main__":
     unittest.main()
