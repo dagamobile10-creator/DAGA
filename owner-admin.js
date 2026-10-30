@@ -181,6 +181,30 @@ export async function handleOwnerAdmin(request, env, url) {
       return json(env,{ok:true,displayName});
     }
 
+    const finalizeMatch=path.match(/^\/owner\/admin\/stores\/([a-f0-9-]{36})\/finalize$/i);
+    if(finalizeMatch&&request.method==="POST"){
+      const b=await readJson(request);if(!b)return json(env,{error:"invalid_json"},400);
+      if(b.paymentConfirmed!==true)return json(env,{error:"payment_confirmation_required"},409);
+      const store=await db.prepare("SELECT id,owner_account_id,status,onboarding_status,onboarding_order_id FROM daga_stores WHERE id=?").bind(finalizeMatch[1]).first();
+      if(!store)return json(env,{error:"store_not_found"},404);
+      if(store.status!=="pending"||store.onboarding_status!=="preliminary_approved"||store.onboarding_order_id)return json(env,{error:"store_not_ready_for_final_activation"},409);
+      const plan=await db.prepare("SELECT id,service,name,price_minor,currency,duration_days,version,is_active FROM daga_plans WHERE id=?").bind(String(b.planId||"")).first();
+      if(!plan||plan.service!=="store"||!plan.is_active)return json(env,{error:"active_store_plan_required"},400);
+      const price=Number(b.agreedPriceMinor);
+      if(!Number.isSafeInteger(price)||price<0)return json(env,{error:"valid_agreed_price_required"},400);
+      const now=new Date().toISOString(),orderId=crypto.randomUUID(),entitlementId=crypto.randomUUID();
+      const expires=new Date(Date.now()+Number(plan.duration_days)*86400000).toISOString();
+      const results=await db.batch([
+        db.prepare("INSERT INTO daga_plan_orders (id,account_id,store_id,plan_id,plan_version,agreed_price_minor,currency,status,created_at,updated_at) SELECT ?,?,?,?,?,?,?,'paid_approved',?,? WHERE EXISTS (SELECT 1 FROM daga_stores WHERE id=? AND owner_account_id=? AND status='pending' AND onboarding_status='preliminary_approved' AND onboarding_order_id IS NULL)").bind(orderId,store.owner_account_id,store.id,plan.id,plan.version,price,plan.currency||"EGP",now,now,store.id,store.owner_account_id),
+        db.prepare("UPDATE daga_stores SET status='approved',onboarding_status='approved',onboarding_order_id=?,onboarding_payment_method_id=NULL,onboarding_offer_name=?,updated_at=? WHERE id=? AND owner_account_id=? AND status='pending' AND onboarding_status='preliminary_approved' AND onboarding_order_id IS NULL AND EXISTS (SELECT 1 FROM daga_plan_orders WHERE id=? AND status='paid_approved')").bind(orderId,String(b.offerName||"").trim().slice(0,120)||null,now,store.id,store.owner_account_id,orderId),
+        db.prepare("UPDATE daga_accounts SET status='approved',updated_at=? WHERE id=? AND role='store_owner' AND status='pending' AND EXISTS (SELECT 1 FROM daga_stores WHERE id=? AND status='approved' AND onboarding_order_id=?)").bind(now,store.owner_account_id,store.id,orderId),
+        db.prepare("INSERT INTO daga_entitlements (id,account_id,store_id,service,order_id,starts_at,expires_at,status,created_at) SELECT ?,?,?, 'store',?,?,?,'active',? WHERE EXISTS (SELECT 1 FROM daga_stores WHERE id=? AND status='approved' AND onboarding_order_id=?)").bind(entitlementId,store.owner_account_id,store.id,orderId,now,expires,now,store.id,orderId)
+      ]);
+      if(results.some(r=>Number(r?.meta?.changes||0)!==1))return json(env,{error:"store_final_activation_conflict_retry"},409);
+      await audit(db,owner.id,"store_final_activation_completed","daga_stores",store.id,{orderId,planId:plan.id,agreedPriceMinor:price,paymentManuallyConfirmed:true});
+      return json(env,{ok:true,status:"approved",orderId,entitlementId,planName:plan.name,agreedPriceMinor:price,expiresAt:expires});
+    }
+
     const onboardingMatch=path.match(/^\/owner\/admin\/stores\/([a-f0-9-]{36})\/onboarding$/i);
     if(onboardingMatch&&request.method==="POST"){
       const b=await readJson(request);if(!b)return json(env,{error:"invalid_json"},400);
