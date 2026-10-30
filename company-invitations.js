@@ -6,8 +6,9 @@ export async function handleCompanyInvitations(request, env, url) {
   const path = url.pathname.replace(/\/+$/, "") || "/";
   const publicPaths = ["/api/company/auth/register", "/api/company/auth/register/verify", "/api/company/auth/login", "/api/company/auth/setup/start", "/api/company/auth/setup/verify", "/api/company/auth/recovery/start", "/api/company/auth/recovery/complete"];
   const accountPaths = ["/api/company/auth/me", "/api/company/auth/logout"];
-  if (!publicPaths.includes(path) && !accountPaths.includes(path) && !["/api/company/invitations", "/api/company/invitations/accept"].includes(path) &&
-      !/^\/api\/company\/invitations\/[0-9a-f-]{36}(?:\/revoke)?$/i.test(path)) return null;
+  const isInvitationIdPath = /^\/api\/company\/invitations\/[0-9a-f-]{36}(?:\/revoke)?$/i.test(path);
+  const isMemberPermissionPath = /^\/api\/company\/members\/[0-9a-f-]{36}\/permissions$/i.test(path);
+  if (!publicPaths.includes(path) && !accountPaths.includes(path) && !["/api/company/invitations", "/api/company/invitations/accept"].includes(path) && !isInvitationIdPath && !isMemberPermissionPath) return null;
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors(env) });
   const db = env.DAGA_APP_DB;
   if (!db) return json(env, { error: "application_database_not_configured" }, 503);
@@ -26,7 +27,7 @@ export async function handleCompanyInvitations(request, env, url) {
 
   try {
     if (path === "/api/company/invitations" && request.method === "POST") return createInvitation(request, env, db, account);
-    const permissionRoute = path.match(/^\\/api\\/company\\/members\\/([0-9a-f-]{36})\\/permissions$/i);
+    const permissionRoute = path.match(/^\/api\/company\/members\/([0-9a-f-]{36})\/permissions$/i);
     if (permissionRoute && request.method === "PATCH") return updateMemberPermissions(request, env, db, account, permissionRoute[1]);
     if (path === "/api/company/invitations" && request.method === "GET") return listInvitations(url, db, account);
     if (path === "/api/company/invitations/accept" && request.method === "POST") return acceptInvitation(request, env, db, account);
