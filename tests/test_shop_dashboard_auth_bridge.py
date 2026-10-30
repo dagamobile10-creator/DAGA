@@ -80,5 +80,26 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn("smartAllowed&&window.DAGA_AUTH_USER.liveDagaEnabled===true", dashboard)
 
 
+    def test_company_owner_can_list_members_and_update_individual_permissions(self):
+        invitations = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
+        dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
+        self.assertIn('path === "/api/company/members"', invitations)
+        self.assertIn('request.method === "PATCH"', invitations)
+        self.assertIn("company_owner_required", invitations)
+        self.assertIn("company_member_permissions_updated", invitations)
+        self.assertIn("manageUsers", invitations)
+        self.assertIn("useSmartAssistant", invitations)
+        self.assertIn("useLiveDaga", invitations)
+        self.assertIn("fetch('/api/company/members?storeId='", dashboard)
+        self.assertIn("saveTeamMemberPermissions", dashboard)
+        self.assertIn("data-team-permission", dashboard)
+
+    def test_company_visible_labels_are_updated_without_changing_storage_identifiers(self):
+        portal = (ROOT / "company" / "portal.html").read_text(encoding="utf-8")
+        self.assertIn("تسجيل شركة جديدة", portal)
+        self.assertIn("اسم صاحب الشركة", portal)
+        self.assertIn("اسم الشركة", portal)
+        self.assertIn("daga_stores", (ROOT / "company-invitations.js").read_text(encoding="utf-8"))
+
 if __name__ == "__main__":
     unittest.main()
