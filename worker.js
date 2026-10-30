@@ -371,6 +371,8 @@ export default {
         const account = voiceAccount || await authenticatedAccount(request, env.DAGA_APP_DB);
         if (!account || account.status !== "approved" || account.role === "program_owner" || !account.store_id) return json({ error: "approved_shop_account_required" }, 401);
         const quotaNow = new Date().toISOString();
+        const smartPlan = await env.DAGA_APP_DB.prepare("SELECT e.id FROM daga_entitlements e JOIN daga_plan_orders o ON o.id=e.order_id JOIN daga_plans p ON p.id=o.plan_id WHERE e.account_id=? AND e.store_id=? AND e.service='store' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? AND (json_extract(p.features_json,'$.tier')='smart' OR json_extract(p.features_json,'$.smartAssistantEnabled')=1) LIMIT 1").bind(account.id, account.store_id, quotaNow, quotaNow).first();
+        if (!smartPlan) return json({ error: "smart_store_subscription_required" }, 402);
         const entitlement = await env.DAGA_APP_DB.prepare("SELECT id FROM daga_entitlements WHERE store_id=? AND service='live_daga' AND status='active' AND starts_at<=? AND expires_at>? LIMIT 1").bind(account.store_id, quotaNow, quotaNow).first();
         if (!entitlement) return json({ error: "live_daga_subscription_required" }, 402);
 
