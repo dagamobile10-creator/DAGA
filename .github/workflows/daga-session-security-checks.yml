@@ -1,0 +1,78 @@
+name: DAGA V30 session security regression checks
+
+on:
+  push:
+    branches: [daga-v30-implementation]
+  pull_request:
+    branches: [main, daga-v30-implementation]
+
+jobs:
+  session-security-regressions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify owner session expiry, revocation, and privilege boundaries
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          auth = Path("owner-auth.js").read_text(encoding="utf-8")
+          admin = Path("owner-admin.js").read_text(encoding="utf-8")
+          worker = Path("worker.js").read_text(encoding="utf-8")
+
+          def section(source, start, end):
+              assert start in source, f"Missing section start: {start}"
+              assert end in source, f"Missing section end: {end}"
+              return source[source.index(start):source.index(end, source.index(start))]
+
+          checks = {
+              "owner sessions have a finite eight-hour TTL":
+                  "const SESSION_TTL_SECONDS = 60 * 60 * 8" in auth,
+              "owner authentication checks session expiry and revocation":
+                  "s.revoked_at IS NULL AND s.expires_at>?" in section(auth, "export async function authenticatedOwner", "async function createSession"),
+              "owner session lookup is bound to the singleton owner identity":
+                  "JOIN daga_program_owner o ON o.account_id=a.id" in section(auth, "export async function authenticatedOwner", "async function createSession") and "o.singleton_id=1" in section(auth, "export async function authenticatedOwner", "async function createSession"),
+              "logout revokes only the matching active session token hash":
+                  "UPDATE daga_auth_sessions SET revoked_at=? WHERE token_hash=? AND revoked_at IS NULL" in section(auth, "async function ownerLogout", "export async function authenticatedAccount"),
+              "session token is hashed before persistence":
+                  "await sha256(token)" in section(auth, "async function createSession", "async function consumeChallenge"),
+              "recovery revokes prior sessions":
+                  "UPDATE daga_auth_sessions SET revoked_at" in section(auth, "async function recoveryComplete", "async function ownerLogin"),
+              "bootstrap requires the out-of-band bearer token":
+                  'constantTimeEqual(auth,"Bearer "+env.DAGA_OWNER_BOOTSTRAP_TOKEN)' in section(auth, "async function bootstrapStart", "async function bootstrapVerify") and 'constantTimeEqual(auth,"Bearer "+env.DAGA_OWNER_BOOTSTRAP_TOKEN)' in section(auth, "async function bootstrapVerify", "async function recoveryStart"),
+              "bootstrap provisions a singleton owner atomically":
+                  'INSERT INTO daga_program_owner (singleton_id,account_id) VALUES (1,?)' in section(auth, "async function bootstrapVerify", "async function recoveryStart") and 'INSERT INTO daga_owner_bootstrap_state (singleton_id,consumed_at,consumed_account_id)' in section(auth, "async function bootstrapVerify", "async function recoveryStart"),
+              "OTP challenge attempts are bounded and expiry checked":
+                  "attempts<5 AND expires_at>?" in section(auth, "async function consumeChallenge", "async function rateLimit") and "consumed_at IS NULL" in section(auth, "async function consumeChallenge", "async function rateLimit"),
+              "OTP verification claims a challenge once before validating code":
+                  "UPDATE daga_auth_challenges SET attempts=attempts+1 WHERE id=? AND consumed_at IS NULL AND attempts<5 AND expires_at>? RETURNING attempts" in section(auth, "async function consumeChallenge", "async function rateLimit") and "SET consumed_at=? WHERE id=? AND consumed_at IS NULL" in section(auth, "async function consumeChallenge", "async function rateLimit"),
+              "owner recovery requires the current recovery code and rotates it":
+                  "constantTimeEqual(oldHash,owner.recovery_code_hash)" in section(auth, "async function recoveryComplete", "async function ownerLogin") and "recovery_code_hash=?,updated_at=?" in section(auth, "async function recoveryComplete", "async function ownerLogin"),
+              "invalid owner recovery code does not consume the email OTP":
+                  section(auth, "async function recoveryComplete", "async function ownerLogin").index("if(!owner.recovery_code_hash||!constantTimeEqual(oldHash,owner.recovery_code_hash))") < section(auth, "async function recoveryComplete", "async function ownerLogin").index('consumeChallenge(db,env,"password_reset"'),
+              "company recovery validates both codes before consuming the challenge":
+                  (lambda src: src.index("if(!codeValid||!account.recovery_code_hash") < src.index("results=await db.batch([") and src.index("results=await db.batch([") < src.index("UPDATE daga_company_login_challenges SET consumed_at=?,claim_id=?"))(open("company-invitations.js", encoding="utf-8").read()[open("company-invitations.js", encoding="utf-8").read().index("async function companyRecoveryComplete"):open("company-invitations.js", encoding="utf-8").read().index("async function registerStart")]),
+              "owner admin routes require an authenticated owner":
+                  "authenticatedOwner(request, db)" in admin,
+              "legacy memory endpoint remains identified as a separate authorization gate":
+                  'url.pathname === "/memory"' in worker,
+              "memory auth mode derives ownership from a verified account session":
+                  'env.DAGA_MEMORY_REQUIRE_AUTH' in worker and 'authenticatedAccount(request, env.DAGA_APP_DB)' in worker,
+              "authenticated memory mode rejects unapproved or owner-only sessions":
+                  'account.status !== "approved" || account.role === "program_owner"' in worker,
+              "authenticated memory mode does not use caller-supplied userId":
+                  'userId = String(account.id || "").trim()' in worker,
+              "voice identity gate covers chat, TTS, and LiveAvatar token routes":
+                  'const voiceIdentityRequired = String(env.DAGA_VOICE_REQUIRE_AUTH || "").toLowerCase() === "true"' in worker and 'if (voiceIdentityRequired && ["/chat", "/tts", "/liveavatar/token"].includes(url.pathname))' in worker,
+              "LiveAvatar token route has an early auth gate before provider calls":
+                  'if (String(env.DAGA_VOICE_REQUIRE_AUTH || "").toLowerCase() === "true")' in worker and 'if (!account || account.status !== "approved" || account.role === "program_owner")' in worker and worker.find('if (String(env.DAGA_VOICE_REQUIRE_AUTH || "").toLowerCase() === "true")') < worker.find('if (!env.LIVEAVATAR_API_KEY)', worker.find('if (url.pathname === "/liveavatar/token"')),
+              "voice identity gate fails closed when app database is missing":
+                  'if (!env.DAGA_APP_DB) return json({ error: "authenticated_voice_not_configured" }, 503)' in worker,
+              "voice identity gate rejects unapproved and program-owner sessions":
+                  'if (!voiceAccount || voiceAccount.status !== "approved" || voiceAccount.role === "program_owner")' in worker,
+          }
+
+          for name, passed in checks.items():
+              print(("PASS" if passed else "FAIL") + ": " + name)
+          assert all(checks.values()), "Session security regression check failed"
+          PY

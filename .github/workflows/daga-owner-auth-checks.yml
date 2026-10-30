@@ -1,0 +1,411 @@
+name: DAGA V30 owner-auth checks
+
+on:
+  push:
+    branches: [daga-v30-implementation, daga-email-only-auth]
+  pull_request:
+    branches: [main, daga-v30-implementation, daga-email-only-auth]
+
+jobs:
+  syntax-and-schema:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Guard staging readiness fail-closed behavior
+        run: |
+          python3 - <<'PY'
+          workflow = open(".github/workflows/daga-staging-setup.yml", encoding="utf-8").read()
+          worker = open("worker.js", encoding="utf-8").read()
+          checks = {
+              "LIVE DAGA quota uses one explicit UTC timestamp for entitlement checks":
+                  'const quotaNow = new Date().toISOString();' in worker
+                  and 'starts_at<=? AND expires_at>?' in worker
+                  and 'account.store_id, quotaNow, quotaNow' in worker
+                  and 'account.store_id, quotaNow, quotaNow).run()' in worker,
+              "LIVE DAGA refunds quota after provider failures":
+                  "const refundQuota = async () =>" in worker
+                  and "await refundQuota();" in worker,
+              "LIVE DAGA quota requires an approved authenticated shop account":
+                  'account.status !== "approved"' in worker
+                  and 'account.role === "program_owner"' in worker
+                  and "approved_shop_account_required" in worker,
+              "LIVE DAGA plan creation requires a positive character quota":
+                  '(service === "live_daga" && quota === null)' in open("owner-admin.js", encoding="utf-8").read()
+                  and "Number.isSafeInteger(quota)" in open("owner-admin.js", encoding="utf-8").read(),
+              "LIVE DAGA plan edits cannot remove the character quota":
+                  '(existing.service === "live_daga" && quota === null)' in open("owner-admin.js", encoding="utf-8").read(),
+              "owner pricing API allows PUT through CORS":
+                  '"Access-Control-Allow-Methods":"GET,POST,PUT,PATCH,OPTIONS"' in open("owner-admin.js", encoding="utf-8").read(),
+              "owner can configure LIVE DAGA price per 1000 characters and audit changes":
+                  'path === "/owner/admin/live-daga-rate" && request.method === "PUT"' in open("owner-admin.js", encoding="utf-8").read()
+                  and "live_daga_character_rate_updated" in open("owner-admin.js", encoding="utf-8").read()
+                  and "Math.ceil(Number(p.word_quota)*rate/1000)" in open("owner-admin.js", encoding="utf-8").read(),
+              "pricing setting migration is applied by staging setup":
+                  "migrations/0016_live_daga_character_rate.sql" in open(".github/workflows/daga-staging-setup.yml", encoding="utf-8").read()
+                  and "CREATE TABLE IF NOT EXISTS daga_app_settings" in open("migrations/0016_live_daga_character_rate.sql", encoding="utf-8").read(),
+              "owner console includes character-rate control":
+                  "id=\"liveRateForm\"" in open("owner-console.html", encoding="utf-8").read()
+                  and "/owner/admin/live-daga-rate" in open("owner-console.html", encoding="utf-8").read(),
+              "owner can add character credit with unique request ID and audit":
+                  'path==="/owner/admin/words/adjust"' in open("owner-admin.js", encoding="utf-8").read()
+                  and 'requestId.length<12' in open("owner-admin.js", encoding="utf-8").read()
+                  and 'request_id=?' in open("owner-admin.js", encoding="utf-8").read()
+                  and '"live_words_credited"' in open("owner-admin.js", encoding="utf-8").read(),
+              "approved LIVE DAGA purchase credits the plan quota exactly once":
+                  'if(sub.service==="live_daga"&&Number(sub.word_quota)>0)' in open("owner-admin.js", encoding="utf-8").read()
+                  and '"order:"+sub.order_id' in open("owner-admin.js", encoding="utf-8").read(),
+              "LIVE DAGA worker blocks generation when quota is insufficient":
+                  'live_daga_quota_insufficient' in worker
+                  and 'INSERT INTO daga_live_word_ledger' in worker
+                  and '>= ?' in worker
+                  and 'requiredCharacters: characters, remainingCharacters: remaining' in worker,
+              "LIVE DAGA worker checks entitlement start and expiry before debit":
+                  'starts_at<=? AND expires_at>?' in worker
+                  and 'error: "live_daga_subscription_required"' in worker,
+              "owner console labels LIVE DAGA quota as characters and requires it":
+                  "رصيد الحروف (إلزامي لباقة LIVE DAGA)" in open("owner-console.html", encoding="utf-8").read()
+                  and "$('planQuota').required=$('planService').value==='live_daga'" in open("owner-console.html", encoding="utf-8").read(),
+              "owner top-up uses approved shop-owner dropdown and generates a unique request ID":
+                  '<select id="wordAccount" required>' in open("owner-console.html", encoding="utf-8").read()
+                  and "p.role==='store_owner'&&p.status==='approved'" in open("owner-console.html", encoding="utf-8").read()
+                  and "const requestId='credit-'+crypto.randomUUID()" in open("owner-console.html", encoding="utf-8").read()
+                  and '<input id="wordRequest" type="hidden">' in open("owner-console.html", encoding="utf-8").read(),
+              "staging deploy targets dedicated worker": 'name = "daga-app-staging"' in workflow,
+              "staging database is separately named": 'database_name = "daga-app-staging"' in workflow,
+              "staging memory gate enabled": 'DAGA_MEMORY_REQUIRE_AUTH = "true"' in workflow,
+              "staging voice authentication is enforced": 'DAGA_VOICE_REQUIRE_AUTH = "true"' in workflow and 'DAGA_LIVE_QUOTA_ENFORCE = "true"' in workflow,
+              "missing auth secrets mark readiness false": 'echo "auth_ready=false" >> "$GITHUB_OUTPUT"' in workflow,
+              "configured auth secrets mark readiness true": 'echo "auth_ready=true" >> "$GITHUB_OUTPUT"' in workflow,
+              "missing secrets cannot yield a green staging run": 'Require owner-auth secrets for a green staging run' in workflow and 'if [ "$AUTH_READY" != "true" ]; then' in workflow,
+              "production worker is not the staging target": 'name = "daga-voice"' not in workflow,
+              "production deploy workflow is main-only": "if: github.ref == 'refs/heads/main'" in open(".github/workflows/deploy-worker.yml", encoding="utf-8").read(),
+          }
+          for name, ok in checks.items():
+              print(("PASS" if ok else "FAIL") + ": " + name)
+          assert all(checks.values()), "Staging readiness fail-closed guard failed"
+          PY
+      - name: Check Worker module syntax
+        run: node --input-type=module --check < worker.js
+      - name: Check owner-auth module syntax
+        run: node --input-type=module --check < owner-auth.js
+      - name: Check company invitation module syntax
+        run: node --input-type=module --check < company-invitations.js
+      - name: Check company order module syntax
+        run: node --input-type=module --check < company-orders.js
+      - name: Check owner-admin module syntax
+        run: node --input-type=module --check < owner-admin.js
+      - name: Check shop-auth module syntax
+        run: node --input-type=module --check < shop-auth.js
+      - name: Run shop self-registration regression tests
+        run: python3 tests/test_shop_self_registration.py
+      - name: Run LIVE DAGA quota debit regression tests
+        run: python3 tests/test_live_daga_quota.py
+      - name: Check owner console inline JavaScript syntax
+        run: |
+          python3 - <<'PY'
+          import re
+          html = open("owner-console.html", encoding="utf-8").read()
+          scripts = re.findall(r"<script>(.*?)</script>", html, re.S)
+          assert len(scripts) == 1, f"Expected one inline script, found {len(scripts)}"
+          open("/tmp/owner-console.js", "w", encoding="utf-8").write(scripts[0])
+          PY
+          node --check /tmp/owner-console.js
+      - name: Guard email-only owner setup UI and secret handling
+        run: |
+          python3 - <<'PY'
+          html = open("owner-console.html", encoding="utf-8").read()
+          auth = open("owner-auth.js", encoding="utf-8").read()
+          checks = {
+              "first-time setup form exists": 'id="bootstrapStartForm"' in html and 'id="bootstrapVerifyForm"' in html,
+              "first-time setup is visible without opening details": '<details id="ownerBootstrap" open' in html,
+              "bootstrap is protected by a server-side setup token": "DAGA_OWNER_BOOTSTRAP_TOKEN" in auth and "constantTimeEqual(auth,\"Bearer \"+env.DAGA_OWNER_BOOTSTRAP_TOKEN)" in auth,
+              "bootstrap verification has a separate handler": "async function bootstrapVerify" in auth and "owner_bootstrap_email" in auth,
+              "setup token is sent only in Authorization header": "'Authorization':'Bearer '+bootstrapTokenInMemory" in html,
+              "setup token is not persisted in browser storage": "localStorage.setItem('bootstrapToken'" not in html and "sessionStorage.setItem('bootstrapToken'" not in html,
+              "bootstrap uses email verification only": 'id="bootstrapEmailCode"' in html and 'id="bootstrapPhoneCode"' not in html and "owner_bootstrap_email" in auth,
+              "strong password and recovery code are collected": 'id="bootstrapPassword"' in html and 'id="bootstrapRecoveryCode"' in html,
+              "login is email and password without SMS": 'id="loginVerifyForm"' not in html and 'id="loginPhoneCode"' not in html and "function validPassword" in auth,
+              "cancel clears setup fields and in-memory token": "bootstrapTokenInMemory='';$('bootstrapToken').value=''" in html,
+          }
+          for name, ok in checks.items():
+              print(("PASS" if ok else "FAIL") + ": " + name)
+          assert all(checks.values()), "Email-only owner setup UI security guard failed"
+          PY
+      - name: Check company portal inline JavaScript syntax
+        run: |
+          python3 - <<'PY'
+          import re
+          html = open("company/portal.html", encoding="utf-8").read()
+          scripts = re.findall(r"<script>(.*?)</script>", html, re.S)
+          assert len(scripts) >= 2, f"Expected bundled QR library and company portal script, found {len(scripts)}"
+          open("/tmp/company-portal.js", "w", encoding="utf-8").write("\n".join(scripts))
+          PY
+          node --check /tmp/company-portal.js
+      - name: Check original V30 shop dashboard JavaScript syntax
+        run: |
+          python3 - <<'PY'
+          import re
+          html = open("shop-dashboard-v30.html", encoding="utf-8").read()
+          scripts = re.findall(r"<script>(.*?)</script>", html, re.S)
+          assert len(scripts) == 1, f"Expected one dashboard script, found {len(scripts)}"
+          open("/tmp/shop-dashboard-v30.js", "w", encoding="utf-8").write(scripts[0])
+          PY
+          node --check /tmp/shop-dashboard-v30.js
+      - name: Run V30 dashboard authentication bridge regression tests
+        run: python3 tests/test_shop_dashboard_auth_bridge.py
+      - name: Check official DAGA QR page JavaScript syntax
+        run: |
+          python3 - <<'PY'
+          import re
+          html = open("go/index.html", encoding="utf-8").read()
+          scripts = re.findall(r"<script>(.*?)</script>", html, re.S)
+          assert len(scripts) >= 2, f"Expected bundled QR library and official QR script, found {len(scripts)}"
+          assert "api.qrserver.com" not in html and "quickchart.io" not in html, "QR tokens/URLs must not be sent to third-party QR services"
+          open("/tmp/daga-official-qr.js", "w", encoding="utf-8").write("\n".join(scripts))
+          PY
+          node --check /tmp/daga-official-qr.js
+      - name: Guard company invitation role and permission boundaries
+        run: |
+          python3 - <<'PY'
+          source = open("company-invitations.js", encoding="utf-8").read()
+          authority = source[source.index("async function getAuthority"):source.index("function normalizePermissions")]
+          normalize = source[source.index("function normalizePermissions"):source.index("function safeStoredPermissions")]
+          create = source[source.index("async function createInvitation"):source.index("async function listInvitations")]
+          accept = source[source.index("async function acceptInvitation"):]
+          checks = {
+              "owner authority is scoped to the exact company owner": 'store.owner_account_id === account.id' in authority,
+              "membership authority requires active membership": 'membership.status !== "active"' in authority,
+              "manager cannot invite another manager": 'authority.role === "manager" && intendedRole !== "employee"' in create,
+              "manager cannot escalate permissions": 'if (out[key] && !authority.permissions[key]) return null' in normalize,
+              "only company owner can issue manager invitation": 'intendedRole === "manager" && authority.role !== "store_owner"' in normalize,
+              "employee invite cannot grant invitation permission": 'intendedRole === "employee" && out.inviteEmployees' in normalize,
+              "invitation token is stored only as a hash": 'const tokenHash = await sha256(token)' in create and 'token_hash' in create,
+              "invitation is single-use and expiry-checked": "use_count=0" in accept and "expires_at>?" in accept,
+          }
+          for name, passed in checks.items():
+              print(("PASS" if passed else "FAIL") + ": " + name)
+          assert all(checks.values()), "Company invitation privilege-boundary guard failed"
+          PY
+      - name: Guard provider error redaction
+        run: |
+          python3 - <<'PY'
+          worker = open("worker.js", encoding="utf-8").read()
+          assert 'error: "liveavatar_avatar_lookup_failed"' in worker
+          assert 'error: "liveavatar_session_token_failed"' in worker
+          assert 'error: "liveavatar_session_token_invalid"' in worker, "Missing LiveAvatar token/session ID must fail closed"
+          assert 'typeof data?.data?.session_token === "string"' in worker, "LiveAvatar session token must be a string"
+          assert 'typeof data?.data?.session_id === "string"' in worker, "LiveAvatar session ID must be a string"
+          assert 'if (!sessionToken || !sessionId)' in worker, "LiveAvatar session response must fail closed when fields are missing"
+          assert 'return json({ ok: true, sessionToken, sessionId })' in worker, "Only validated LiveAvatar session fields may be returned"
+          assert 'error: "liveavatar_lookup_failed"' in worker
+          assert 'error: "liveavatar_token_failed"' in worker
+          assert 'error: "memory_storage_failed"' in worker
+          assert 'detail: data' not in worker, "Raw provider response must not be returned to clients"
+          assert 'detail: listData' not in worker, "LiveAvatar lookup failures must not expose raw provider payloads"
+          assert "failures.join" not in worker, "Provider error details must not be returned to clients"
+          assert 'All configured chat providers failed", detail:' not in worker, "Chat provider failure details must be redacted"
+          assert 'detail: String(error)' not in worker, "Internal exceptions must not be returned to clients"
+          assert 'new Response(await response.text()' not in worker, "Raw TTS provider errors must not be returned to clients"
+          print("Provider and storage error responses avoid raw upstream details.")
+          PY
+      - name: Guard optional public API rate limits
+        run: |
+          python3 - <<'PY'
+          worker = open("worker.js", encoding="utf-8").read()
+          assert '"/liveavatar/token": [10, 900]' in worker, "LiveAvatar token rate limit missing"
+          assert '"/chat": [30, 300]' in worker, "Chat rate limit missing"
+          assert '"/tts": [30, 300]' in worker, "TTS rate limit missing"
+          assert '"/memory": [60, 300]' in worker, "Memory rate limit missing"
+          assert 'request.method === "POST"' in worker and '["GET", "POST"].includes(request.method)' in worker, "Rate-limit gate must match supported methods"
+          assert 'env.DAGA_PUBLIC_API_RATE_LIMITS' in worker, "Rate-limit feature flag missing"
+          assert 'env.DAGA_APP_DB || !env.DAGA_OTP_PEPPER' in worker, "Rate limits must fail closed when DB/pepper is missing"
+          assert 'error: "rate_limited"' in worker, "Rate limit response missing"
+          assert 'FROM daga_auth_rate_limits' not in worker, "Unexpected rate-limit read path"
+          assert 'applyPublicApiRateLimit' in worker and 'RETURNING attempts' in worker, "Atomic D1 rate-limit claim missing"
+          print("Optional public API D1 rate-limit guards are present.")
+          PY
+      - name: Guard bounded memory persistence payloads
+        run: |
+          python3 - <<'PY'
+          worker = open("worker.js", encoding="utf-8").read()
+          start = worker.index('if (url.pathname === "/memory"')
+          end = worker.index('if (url.pathname === "/liveavatar/avatars"', start)
+          memory = worker[start:end]
+          assert "readBoundedJson(request, 160000)" in memory, "Memory POST must have a bounded JSON body"
+          assert "profileJson.length > 10000" in memory, "Memory profile size limit missing"
+          assert "JSON.stringify(history).length > 120000" in memory, "Memory history aggregate limit missing"
+          assert '["user", "assistant"].includes(x.role)' in memory, "Memory history role allowlist missing"
+          assert 'url.searchParams.get("userId")' in memory, "Legacy userId compatibility path unexpectedly changed"
+          print("Memory payload and history validation guards are present.")
+          PY
+      - name: Guard chat and TTS request size limits
+        run: |
+          python3 - <<'PY'
+          worker = open("worker.js", encoding="utf-8").read()
+          assert "readBoundedJson(request, 32768)" in worker, "Chat must enforce a 32 KiB JSON body limit"
+          assert "readBoundedJson(request, 16384)" in worker, "TTS must enforce a 16 KiB JSON body limit"
+          assert 'userText.length > 2000' in worker, "Chat text limit missing"
+          assert 'text.length > 2500' in worker, "TTS text limit missing"
+          assert 'contentType !== "application/json"' in worker, "JSON content-type validation missing"
+          assert 'error: "invalid_json"' in worker, "Malformed JSON must fail with a bounded client error"
+          print("Chat/TTS request-size and JSON validation guards are present.")
+          PY
+      - name: Guard OTP and password digit validation patterns
+        run: |
+          python3 - <<'PY'
+          auth = open("owner-auth.js", encoding="utf-8").read()
+          assert r'/^\d{6}$/.test(code)' in auth, "Email OTP validation regex missing or over-escaped"
+          assert r'/\d/.test(password)' in auth, "Password digit validation regex missing or over-escaped"
+          assert r'/^\\d{6}$/.test(code)' not in auth, "Found over-escaped OTP regex"
+          print("Email OTP and password digit validation patterns are correctly escaped.")
+          PY
+      - name: Guard payment-review idempotency predicates
+        run: |
+          python3 - <<'PY'
+          admin = open("owner-admin.js", encoding="utf-8").read()
+          start = admin.index('const statements=[', admin.index('const reviewMatch='))
+          end = admin.index('await db.batch(statements);', start)
+          block = admin[start:end]
+          assert "status='pending_review'" in block, "Review update must claim only pending submissions"
+          assert "ps.status='confirmed'" in block, "Entitlement and word credits must require confirmed payment"
+          assert "ps.reviewed_by=?" in block and "ps.reviewed_at=?" in block, "Side effects must match the exact review claim"
+          assert "o.status='paid_approved'" in block, "Side effects must require approved order"
+          assert "AND undefined" not in block, "Incomplete payment review SQL predicate"
+          review = admin[admin.index('const reviewMatch='):admin.index('if(path==="/owner/admin/words/adjust"')]
+          assert 'Number(sub.claimed_amount_minor)!==Number(sub.agreed_price_minor)' in review, "Payment approval must verify claimed amount equals the order snapshot"
+          assert 'Number(reviewResults?.[0]?.meta?.changes || 0) !== 1' in review, "Review must fail unless exactly one pending submission is claimed"
+          assert 'Number(reviewResults?.[1]?.meta?.changes || 0) !== 1' in review, "Order transition must fail unless exactly one order is changed"
+          assert 'if(b.status==="confirmed")' in review, "Entitlement/word-credit statements must only be added for confirmation"
+          assert 'status:"paid_approved"' not in review, "Never return a paid state as a hardcoded successful response"
+          print("Payment review conditional guards are present.")
+          PY
+      - name: Guard owner identity, email-only login, and admin authorization
+        run: |
+          python3 - <<'PY'
+          auth = open("owner-auth.js", encoding="utf-8").read()
+          admin = open("owner-admin.js", encoding="utf-8").read()
+          worker = open("worker.js", encoding="utf-8").read()
+          login = auth[auth.index("async function ownerLogin("):auth.index("function validPassword(")]
+          bootstrap = auth[auth.index("async function bootstrapStart("):auth.index("async function bootstrapVerify(")]
+          checks = {
+              "owner login looks up singleton program-owner record": "JOIN daga_program_owner o ON o.account_id=a.id" in login and "o.singleton_id=1" in login,
+              "owner login verifies email and password and creates session": "lower(a.email)=?" in login and "derivePassword(password" in login and "createSession(db,account.id)" in login,
+              "owner login has no phone or SMS dependency": "phone_e164" not in login and "sendSms" not in login,
+              "owner bootstrap verifies supplied email": "DAGA_OWNER_BOOTSTRAP_TOKEN" in bootstrap and "body.email" in bootstrap and "sendEmail" in bootstrap and "sendSms" not in bootstrap,
+              "owner bootstrap refuses a second owner": "owner_already_provisioned" in bootstrap and "daga_program_owner WHERE singleton_id=1" in bootstrap,
+              "owner admin delegates authorization to authenticatedOwner": "authenticatedOwner(request, db)" in admin,
+              "legacy memory route remains present": 'url.pathname === "/memory"' in worker,
+          }
+          for name, ok in checks.items():
+              print(("PASS" if ok else "FAIL") + ": " + name)
+          assert all(checks.values()), "Email-only owner-auth security regression guard failed"
+          PY
+      - name: Guard OTP consumption against concurrent attempts
+        run: |
+          python3 - <<'PY'
+          auth = open("owner-auth.js", encoding="utf-8").read()
+          start = auth.index("async function consumeChallenge(")
+          end = auth.index("async function rateLimit(", start)
+          block = auth[start:end]
+          assert "attempts<5" in block, "OTP attempts must be bounded in the conditional claim"
+          assert "consumed_at IS NULL" in block, "OTP claim must reject consumed challenges"
+          assert "expires_at>?" in block, "OTP claim must reject expired challenges"
+          assert "RETURNING attempts" in block, "OTP attempt increment must return the conditional claim"
+          assert "UPDATE daga_auth_challenges SET consumed_at=?" in block, "Successful OTP must be consumed conditionally"
+          print("OTP consumption has bounded conditional attempt claims.")
+          PY
+      - name: Invitation authorization and single-use regression guards
+        run: |
+          python3 - <<'PY'
+          import re
+          src = open("company-invitations.js", encoding="utf-8").read()
+          auth = open("owner-auth.js", encoding="utf-8").read()
+          worker = open("worker.js", encoding="utf-8").read()
+          checks = {
+              "company API uses authenticated account sessions": "authenticatedAccount(request, db)" in src and "export async function authenticatedAccount" in auth,
+              "invite token hash is stored, not token": "token_hash" in src and "await sha256(token)" in src,
+              "manager cannot invite managers": 'authority.role === "manager" && intendedRole !== "employee"' in src,
+              "invitation acceptance is conditional and single use": "status='pending' AND use_count=0 AND max_uses=1 AND expires_at>?" in src,
+              "invite acceptance requires explicit token body": 'String(body.token || "").trim()' in src,
+              "trusted HTTPS base URL required": 'u.protocol !== "https:"' in src and "DAGA_APP_BASE_URL" in src,
+              "worker routes invitation module": 'handleCompanyInvitations' in worker and 'company-invitations.js' in worker,
+          }
+          for name, ok in checks.items():
+              print(("PASS" if ok else "FAIL") + ": " + name)
+          assert all(checks.values()), "Invitation security regression guard failed"
+          PY
+      - name: Run company invitation security tests
+        run: python3 tests/test_company_invitations.py
+      - name: Run company order and payment security tests
+        run: python3 tests/test_company_orders.py
+      - name: Apply D1 migrations to a fresh SQLite database
+        run: |
+          python3 - <<'PY'
+          import sqlite3
+          db = sqlite3.connect(":memory:")
+          db.execute("PRAGMA foreign_keys=ON")
+          for path in (
+              "migrations/0001_daga_core.sql",
+              "migrations/0002_daga_owner_auth.sql",
+              "migrations/0003_daga_owner_credentials.sql",
+              "migrations/0004_daga_offers.sql",
+              "migrations/0005_daga_store_identity_invitations.sql",
+              "migrations/0006_daga_public_identity_ids.sql",
+              "migrations/0007_daga_company_registration_challenges.sql",
+              "migrations/0008_daga_company_login_challenges.sql",
+              "migrations/0009_daga_payment_submission_uniqueness.sql",
+              "migrations/0010_email_only_auth.sql",
+              "migrations/0011_email_only_registration_challenges.sql",
+              "migrations/0012_company_email_onboarding.sql",
+              "migrations/0013_shop_email_registration.sql",
+              "migrations/0014_shop_onboarding_contact_and_status.sql",
+              "migrations/0015_preserve_existing_shop_approval_states.sql",
+              "migrations/0016_live_daga_character_rate.sql",
+          ):
+              with open(path, encoding="utf-8") as f:
+                  db.executescript(f.read())
+          names = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+          required = {
+              "daga_accounts", "daga_program_owner", "daga_auth_challenges",
+              "daga_auth_sessions", "daga_security_events", "daga_offers", "daga_order_price_adjustments",
+              "daga_owner_credentials", "daga_owner_bootstrap_state",
+              "daga_auth_rate_limits", "daga_app_settings",
+          }
+          missing = required - names
+          assert not missing, f"Missing tables: {sorted(missing)}"
+          assert "daga_account_credentials" in names, "Email-only company account credentials table is missing"
+          account_columns = {row[1] for row in db.execute("PRAGMA table_info(daga_accounts)")}
+          assert "phone_e164" not in account_columns and "phone_verified_at" not in account_columns, "Migration 0010 must remove legacy phone authentication columns"
+          for table, column in (("daga_entitlements", "order_id"), ("daga_live_word_ledger", "request_id"), ("daga_stores", "public_id"), ("daga_accounts", "public_id"), ("daga_store_invitations", "token_hash")):
+              indexes = db.execute("PRAGMA index_list(" + table + ")").fetchall()
+              unique_columns = []
+              for idx in indexes:
+                  if idx[2]:
+                      unique_columns.append([row[2] for row in db.execute("PRAGMA index_info(" + idx[1] + ")")])
+              assert [column] in unique_columns, table + "." + column + " must be unique to prevent duplicate grants"
+          required_store_tables = {"daga_store_memberships", "daga_store_invitations", "daga_company_registration_challenges", "daga_company_login_challenges"}
+          assert required_store_tables <= names, f"Missing store identity/invitation tables: {sorted(required_store_tables - names)}"
+          pending_indexes = {row[1] for row in db.execute("PRAGMA index_list(daga_payment_submissions)") if row[2]}
+          assert "daga_payment_one_pending_submission_per_order" in pending_indexes, "An order must not have multiple pending payment submissions"
+          pending_index_sql = db.execute("SELECT sql FROM sqlite_master WHERE type='index' AND name='daga_payment_one_pending_submission_per_order'").fetchone()[0]
+          assert "WHERE status = 'pending_review'" in pending_index_sql, "Payment uniqueness must apply to pending review rows only"
+          challenge_sql = db.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='daga_company_registration_challenges'").fetchone()[0]
+          assert "attempts BETWEEN 0 AND 5" in challenge_sql, "Company registration OTP attempts must be bounded"
+          assert "channel = 'email'" in challenge_sql, "Company registration challenges must be email-only after migration 0011"
+          assert "daga_company_onboarding_challenges" in names, "Verified company onboarding challenge table is missing"
+          onboarding_sql = db.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='daga_company_onboarding_challenges'").fetchone()[0]
+          assert "attempts BETWEEN 0 AND 5" in onboarding_sql, "Company onboarding OTP attempts must be bounded"
+          membership_columns = {row[1] for row in db.execute("PRAGMA table_info(daga_store_memberships)")}
+          assert {"store_id", "account_id", "role", "status", "permissions_json"} <= membership_columns
+          invitation_columns = {row[1] for row in db.execute("PRAGMA table_info(daga_store_invitations)")}
+          assert {"store_id", "inviter_account_id", "token_hash", "intended_role", "expires_at", "max_uses", "use_count", "status"} <= invitation_columns
+          # Invitations are single-use; revocation and expiry are explicit states.
+          invite_sql = db.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='daga_store_invitations'").fetchone()[0]
+          assert "max_uses = 1" in invite_sql and "use_count BETWEEN 0 AND max_uses" in invite_sql
+          shop_registration = db.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='daga_shop_registration_challenges'").fetchone()
+          assert shop_registration and "shop_name TEXT NOT NULL" in shop_registration[0], "Shop-only registration challenge table is missing"
+          print("All sixteen migrations applied; email-only authentication, configurable LIVE DAGA character pricing, shop self-registration, invitations, pending-payment uniqueness, and grant uniqueness constraints exist.")
+          PY
