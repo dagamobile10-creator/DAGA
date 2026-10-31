@@ -10,7 +10,7 @@
 .shell{border:1px solid #302e29;border-radius:25px;background:linear-gradient(180deg,#141413,#0c0c0b);box-shadow:0 25px 80px #000b;overflow:hidden}
 .header{height:68px;padding:0 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between}.header h1{margin:0;font-size:20px}.status{color:var(--muted);font-size:13px;display:flex;align-items:center;gap:7px}.dot{width:9px;height:9px;border-radius:50%;background:#777}.live .dot{background:var(--green);box-shadow:0 0 15px #5fd38b}
 .stage{padding:32px 20px 18px;display:flex;flex-direction:column;align-items:center}.avatar{width:min(78vw,500px);height:min(78vw,500px);border-radius:50%;position:relative;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle,rgba(212,166,83,.17),rgba(212,166,83,.06) 37%,rgba(0,0,0,.05) 62%,transparent 70%);box-shadow:0 0 70px rgba(205,157,59,.18),0 0 130px rgba(205,157,59,.08)}.avatar:before{content:"";position:absolute;inset:3px;border-radius:50%;border:2px solid var(--gold2);box-shadow:0 0 18px rgba(240,201,110,.85),0 0 45px rgba(210,166,83,.35);z-index:2}.avatar:after{content:"";position:absolute;inset:18px;border-radius:50%;border:1px solid rgba(240,201,110,.24);z-index:2}.avatar img{width:94%;height:94%;object-fit:contain;position:relative;z-index:1;filter:drop-shadow(0 20px 35px rgba(0,0,0,.55))}.live .avatar:before{animation:glow 1.8s ease-in-out infinite}@keyframes glow{50%{box-shadow:0 0 25px rgba(240,201,110,1),0 0 70px rgba(210,166,83,.55)}}
-.avatar.speaking img{animation:avatarTalk 1.2s ease-in-out infinite;transform-origin:50% 55%}.avatar.speaking:before{animation:glow .8s ease-in-out infinite}.avatar-mouth{position:absolute;left:50%;top:34%;width:13%;height:1.2%;border-radius:50%;background:linear-gradient(180deg,#160b09,#3b1511);opacity:0;transform:translate(-50%,-50%) scaleY(.15);transform-origin:center;z-index:4;box-shadow:0 0 5px #1a0806;pointer-events:none}.avatar.speaking .avatar-mouth{opacity:.92}.avatar.speaking .avatar-mouth:after{content:"";position:absolute;left:18%;right:18%;top:45%;height:1px;background:#c58c7b;border-radius:50%}@keyframes avatarTalk{0%,100%{transform:scale(1)}50%{transform:scale(1.008) translateY(-1px)}}
+.avatar-mouth{position:absolute;left:50%;top:34%;width:13%;height:1.2%;border-radius:50%;background:linear-gradient(180deg,#160b09,#3b1511);opacity:0;transform:translate(-50%,-50%) scaleY(.15);transform-origin:center;z-index:4;box-shadow:0 0 5px #1a0806;pointer-events:none}
 .name{font-size:18px;font-weight:800;margin-top:12px}.state{font-size:13px;color:var(--muted);margin-top:4px}.chat{padding:0 18px 15px}.bubble{border:1px solid #2a2925;background:#151514;border-radius:17px;padding:14px 16px;line-height:1.85;margin-top:9px}.me{background:#20190e;border-color:#4c3b1d}.who{font-size:11px;color:var(--muted);margin-bottom:4px}
 .controls{padding:16px 18px 14px;border-top:1px solid var(--line);display:flex;justify-content:center;gap:10px;flex-wrap:wrap}button{font:inherit;font-weight:800;border:1px solid #3a3935;background:#191918;color:#eee;border-radius:14px;padding:12px 16px;cursor:pointer}.primary{min-width:210px;background:linear-gradient(180deg,#e0b55c,#c99a3f);color:#080706;border-color:#f0c96e;box-shadow:0 8px 28px rgba(205,157,59,.22)}.primary.stop{background:#191918;color:#e56e6e;border-color:#5c3333}button:disabled{opacity:.45}
 .voiceRef{margin:0 18px 15px;padding:11px 13px;border:1px solid #3b3427;border-radius:14px;background:#17130c;color:#cdb47a;font-size:12px;display:flex;align-items:center;justify-content:space-between;gap:10px}.voiceRef button{padding:7px 10px;font-size:12px}
@@ -197,87 +197,7 @@ async function playVoiceTest(){
 }
 function playReference(){audio.currentTime=0;audio.play()}
 </script>
-<script type="module">
-import { LiveAvatarSession } from "https://esm.sh/@heygen/liveavatar-web-sdk@0.0.19";
-let dagaSession=null,dagaSessionPromise=null,dagaStreamReady=null;
-const LIVE_ENDPOINT=DAGA_API_BASE+"/liveavatar/token";
-async function startDagaLiveAvatar(){
- if(dagaSession&&dagaSession.state==="CONNECTED")return dagaSession;
- if(dagaSessionPromise)return dagaSessionPromise;
- dagaSessionPromise=(async()=>{
-  const response=await fetch(LIVE_ENDPOINT,{method:"POST",headers:dagaAuthHeaders({"Content-Type":"application/json"}),body:"{}"});
-  const data=await response.json();
-  if(!response.ok||!data.sessionToken)throw new Error(data.detail||data.error||"LiveAvatar session token unavailable");
-  const session=new LiveAvatarSession(data.sessionToken,{autoKeepAlive:true,voiceChat:{defaultMuted:true}});
-  dagaSession=session;
-  dagaStreamReady=new Promise((resolve,reject)=>{
-   const timer=setTimeout(()=>reject(new Error("LiveAvatar video stream timeout")),30000);
-   session.on("session.stream_ready",()=>{
-    clearTimeout(timer);
-    const video=document.getElementById("dagaLiveVideo");
-    session.attach(video);
-    video.muted=false;
-    video.play().catch(()=>{});
-    document.querySelector(".avatar")?.classList.add("live-stream");
-    resolve();
-   });
-   session.on("session.disconnected",()=>{document.querySelector(".avatar")?.classList.remove("live-stream");dagaSession=null;dagaSessionPromise=null});
-  });
-  await session.start();
-  await dagaStreamReady;
-  return session;
- })().catch(error=>{dagaSession=null;dagaSessionPromise=null;dagaStreamReady=null;throw error});
- return dagaSessionPromise;
-}
-function pcm24kBase64(audioBuffer){
- const length=Math.ceil(audioBuffer.duration*24000);
- const offline=new OfflineAudioContext(1,length,24000);
- const source=offline.createBufferSource();
- const mono=offline.createBuffer(1,audioBuffer.length,audioBuffer.sampleRate);
- const channels=Array.from({length:audioBuffer.numberOfChannels},(_,i)=>audioBuffer.getChannelData(i));
- const out=mono.getChannelData(0);
- for(let i=0;i<out.length;i++){let sample=0;for(const channel of channels)sample+=channel[i]||0;out[i]=sample/channels.length}
- source.buffer=mono;source.connect(offline.destination);source.start(0);
- return offline.startRendering().then(rendered=>{
-  const samples=rendered.getChannelData(0),bytes=new Uint8Array(samples.length*2);
-  const view=new DataView(bytes.buffer);
-  for(let i=0;i<samples.length;i++){const s=Math.max(-1,Math.min(1,samples[i]));view.setInt16(i*2,s<0?s*32768:s*32767,true)}
-  let binary="";const step=0x8000;
-  for(let i=0;i<bytes.length;i+=step)binary+=String.fromCharCode(...bytes.subarray(i,Math.min(i+step,bytes.length)));
-  return btoa(binary);
- });
-}
-window.__dagaAvatarSpeak=async function(blob,text){
- const session=await startDagaLiveAvatar();
- const video=document.getElementById("dagaLiveVideo");
- const avatar=document.querySelector(".avatar");
- const audioUrl=URL.createObjectURL(blob);
- const audio=new Audio(audioUrl);
- audio.preload="auto";
- if(video)video.muted=true;
- try{
-  await new Promise((resolve,reject)=>{
-   const timer=setTimeout(()=>reject(new Error("LiveAvatar speech timeout")),30000);
-   session.once?.("avatar.speak_ended",()=>{clearTimeout(timer);resolve()});
-   session.on?.("avatar.speak_ended",()=>{clearTimeout(timer);resolve()});
-   session.repeat(String(text||""));
-   audio.onended=()=>{if(avatar)avatar.classList.remove("speaking");};
-   audio.onerror=()=>{clearTimeout(timer);reject(new Error("ElevenLabs audio playback failed"))};
-   audio.play().catch(reject);
-  });
-  return {played:true};
- }finally{
-  if(!audio.paused)audio.pause();
-  audio.src="";
-  URL.revokeObjectURL(audioUrl);
- }
-};
-window.__dagaStopLiveAvatar=async function(){
- const s=dagaSession;dagaSession=null;dagaSessionPromise=null;dagaStreamReady=null;
- document.querySelector(".avatar")?.classList.remove("live-stream");
- if(s)try{await s.stop()}catch(e){console.warn(e)}
-};
-</script>
+
 <script>
 (function(){
  const endpoint=DAGA_API_BASE;
