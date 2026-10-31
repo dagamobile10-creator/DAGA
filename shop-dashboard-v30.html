@@ -640,9 +640,9 @@ async function bootAuthenticatedDashboard(token,selectedCompanyId){
   window.DAGA_SESSION_TOKEN=token;window.DAGA_AUTH_USER={id:data.account.id,displayName:data.account.displayName||'',role:role,storeId:company.id,storeName:company.displayName||'ضجه',permissions:company.permissions||{},smartAssistantEnabled:company.smartAssistantEnabled===true,historyEnabled:company.historyEnabled===true,liveDagaEnabled:company.liveDagaEnabled===true};
   // Keep both premium actions visible on every plan; entitlement controls whether they can run.
   const smartAllowed=window.DAGA_AUTH_USER.smartAssistantEnabled===true;
-  const liveAllowed=smartAllowed&&window.DAGA_AUTH_USER.liveDagaEnabled===true;
+  const liveAllowed=window.DAGA_AUTH_USER.liveDagaEnabled===true;
   document.querySelectorAll('button[onclick="voiceDaga()"]').forEach(b=>{b.hidden=false;b.disabled=!smartAllowed;b.title=smartAllowed?'':'متاح في الاشتراك الذكي فقط';b.setAttribute('aria-disabled',String(!smartAllowed));});
-  document.querySelectorAll('button.liveBtn').forEach(b=>{b.hidden=false;b.disabled=!liveAllowed;b.title=liveAllowed?'':'يتطلب الاشتراك الذكي وإضافة LIVE DAGA المدفوعة';b.setAttribute('aria-disabled',String(!liveAllowed));});
+  document.querySelectorAll('button.liveBtn').forEach(b=>{b.hidden=false;b.disabled=!liveAllowed;b.title=liveAllowed?'':'يتطلب اشتراك LIVE DAGA المدفوع فقط بشكل مستقل عن باقة الشركه.';b.setAttribute('aria-disabled',String(!liveAllowed));});
   document.querySelectorAll('button[onclick="showReports()"]').forEach(b=>{b.hidden=false;b.disabled=!window.DAGA_AUTH_USER.historyEnabled;b.title=window.DAGA_AUTH_USER.historyEnabled?'':'تفاصيل الأيام السابقة متاحة في الاشتراك الذكي فقط';});
   loadStoreData(company.id);
   const header=document.querySelector('header.top .row');
