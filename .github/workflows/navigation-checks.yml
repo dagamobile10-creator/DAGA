@@ -52,6 +52,7 @@ jobs:
                   out.write(source)
               print(path)
           PY
+          shopt -s nullglob
           for file in /tmp/daga-live-classic-*.js; do node --check "$file"; done
           for file in /tmp/daga-live-module-*.js; do node --input-type=module --check < "$file"; done
       - name: Check route links and LIVE DAGA compatibility
