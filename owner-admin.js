@@ -244,17 +244,6 @@ export async function handleOwnerAdmin(request, env, url) {
         await db.prepare("UPDATE daga_accounts SET status='pending',updated_at=? WHERE id=? AND role='store_owner'").bind(now,store.owner_account_id).run();
       }else if(b.status==="approved"){
         return json(env,{error:"final_payment_confirmation_required",message:"لا يمكن تفعيل الشركه من قرار الموافقة العام. استخدم إجراء التفعيل النهائي بعد مراجعة إثبات الدفع وتأكيد استلام المبلغ."},409);
-        if(!store.onboarding_order_id)return json(env,{error:"onboarding_plan_payment_not_recorded"},409);
-        const order=await db.prepare("SELECT o.id,o.status,o.plan_id,o.account_id,o.store_id,o.agreed_price_minor,p.duration_days,p.service FROM daga_plan_orders o JOIN daga_plans p ON p.id=o.plan_id WHERE o.id=? AND o.store_id=? AND o.account_id=?").bind(store.onboarding_order_id,store.id,store.owner_account_id).first();
-        if(!order||order.service!=="store"||!["awaiting_payment","under_review","payment_submitted"].includes(order.status))return json(env,{error:"valid_onboarding_payment_order_required"},409);
-        const expires=new Date(Date.now()+Number(order.duration_days)*86400000).toISOString();
-        const entitlementId=crypto.randomUUID();
-        await db.batch([
-          db.prepare("UPDATE daga_plan_orders SET status='paid_approved',updated_at=? WHERE id=? AND status IN ('awaiting_payment','under_review','payment_submitted')").bind(now,order.id),
-          db.prepare("INSERT INTO daga_entitlements (id,account_id,store_id,service,order_id,starts_at,expires_at,status,created_at) VALUES (?,?,?,'store',?,?,?,'active',?)").bind(entitlementId,store.owner_account_id,store.id,order.id,now,expires,now),
-          db.prepare("UPDATE daga_stores SET status='approved',onboarding_status='approved',updated_at=? WHERE id=?").bind(now,store.id),
-          db.prepare("UPDATE daga_accounts SET status='approved',updated_at=? WHERE id=? AND role='store_owner'").bind(now,store.owner_account_id)
-        ]);
       }else{
         await db.batch([
           db.prepare("UPDATE daga_stores SET status=?,onboarding_status=?,updated_at=? WHERE id=?").bind(b.status,b.status,now,store.id),
