@@ -137,5 +137,15 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn("https://wa.me/"+'"+phone+"', dashboard)
 
 
+    def test_shop_registration_uses_email_only_and_company_contact_is_optional(self):
+        auth = (ROOT / "shop-auth.js").read_text(encoding="utf-8")
+        self.assertIn("valid_shop_owner_name_and_email_required", auth)
+        self.assertIn("if(contactPhone&&contactPhone.replace", auth)
+        self.assertNotIn("contactPhone.replace(/[^0-9]/g,\"\").length<10)return", auth)
+        portal = (ROOT / "company" / "portal.html").read_text(encoding="utf-8")
+        self.assertIn("رقم واتساب الشركة للتواصل والدعم (اختياري)", portal)
+        self.assertNotIn('id="onboardingContactPhone" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" required', portal)
+
+
 if __name__ == "__main__":
     unittest.main()
