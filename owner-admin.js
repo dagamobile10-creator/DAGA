@@ -191,6 +191,8 @@ export async function handleOwnerAdmin(request, env, url) {
       const store=await db.prepare("SELECT id,owner_account_id,status,onboarding_status,onboarding_order_id FROM daga_stores WHERE id=?").bind(finalizeMatch[1]).first();
       if(!store)return json(env,{error:"store_not_found"},404);
       if(store.status!=="approved"||store.onboarding_status!=="preliminary_approved"||store.onboarding_order_id)return json(env,{error:"store_not_ready_for_final_activation"},409);
+      const pendingPayment=await db.prepare("SELECT ps.id FROM daga_payment_submissions ps JOIN daga_plan_orders o ON o.id=ps.order_id JOIN daga_plans p ON p.id=o.plan_id WHERE o.store_id=? AND p.service='store' AND ps.status='pending_review' AND o.status IN ('payment_submitted','under_review') LIMIT 1").bind(store.id).first();
+      if(pendingPayment)return json(env,{error:"company_payment_submission_pending_review",message:"الشركة قدمت إثبات دفع بالفعل. راجع طلب الدفع من جدول مراجعة المدفوعات بدل التفعيل اليدوي."},409);
       const plan=await db.prepare("SELECT id,service,name,price_minor,currency,duration_days,version,is_active FROM daga_plans WHERE id=?").bind(String(b.planId||"")).first();
       if(!plan||plan.service!=="store"||!plan.is_active)return json(env,{error:"active_store_plan_required"},400);
       const price=Number(b.agreedPriceMinor);
