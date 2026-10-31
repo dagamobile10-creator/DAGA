@@ -20,14 +20,15 @@ class NavigationRouteTests(unittest.TestCase):
         cls.owner_admin = (ROOT / "owner-admin.js").read_text(encoding="utf-8")
 
     def test_worker_serves_all_navigation_destinations(self):
-        for path in ("/go", "/owner-console", "/company", "/invite"):
+        for path in ("/go", "/owner-console", "/company", "/invite", "/live"):
             with self.subTest(path=path):
                 self.assertIn(path, self.worker)
 
     def test_live_navigation_uses_worker_origin_for_worker_pages(self):
         for path in ("/go/", "/company/", "/owner-console/"):
             with self.subTest(path=path):
-                self.assertIn("https://daga-voice.dagamobile10.workers.dev" + path, self.live)
+                self.assertIn("DAGA_API_BASE" + path, self.live)
+                self.assertIn("DAGA_API_BASE = new URLSearchParams", self.live)
 
     def test_navigation_pages_link_to_each_other(self):
         for page, paths in (
@@ -47,13 +48,13 @@ class NavigationRouteTests(unittest.TestCase):
 
     def test_shop_portal_api_paths_have_server_handlers(self):
         for path in (
-            "/api/shop/auth/me",
-            "/api/shop/auth/login",
-            "/api/shop/auth/setup/start",
-            "/api/shop/auth/setup/verify",
-            "/api/shop/auth/recovery/start",
-            "/api/shop/auth/recovery/complete",
-            "/api/shop/auth/logout",
+            "/api/company/auth/me",
+            "/api/company/auth/login",
+            "/api/company/auth/setup/start",
+            "/api/company/auth/setup/verify",
+            "/api/company/auth/recovery/start",
+            "/api/company/auth/recovery/complete",
+            "/api/company/auth/logout",
             "/api/company/invitations",
             "/api/company/orders",
             "/api/company/plans",
@@ -61,7 +62,7 @@ class NavigationRouteTests(unittest.TestCase):
             "/api/company/offers",
         ):
             with self.subTest(path=path):
-                portal_path = path.replace("/api/shop", "")
+                portal_path = path.replace("/api/company", "")
                 self.assertTrue(path in self.company or portal_path in self.company or path in self.live,
                                 f"no frontend call found for {path}")
                 handler_sources = self.shop_auth + self.company_auth + self.company_orders + self.worker
@@ -162,7 +163,7 @@ class NavigationRouteTests(unittest.TestCase):
         end = self.owner.index("\n})();", start)
         handler = self.owner[start:end]
         self.assertIn("b.dataset.decision==='approved'", handler)
-        self.assertIn("'/api/shop/auth/setup/start'", handler)
+        self.assertIn("'/api/company/auth/setup/start'", handler)
         self.assertIn("JSON.stringify({email:approved.email})", handler)
         self.assertIn("تم تسجيل الخطة والسعر وتأكيد استلام المبلغ وتفعيل الشركه", handler)
         self.assertIn("company-invitations.js", self.worker)
