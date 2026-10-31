@@ -152,10 +152,10 @@ export default {
           if (!account || account.status !== "approved" || account.role === "program_owner") {
             return json({ error: "authenticated_account_required" }, 401);
           }
-          if (!account.store_id) return json(env,{error:"approved_shop_account_required"},401);
+          if (!account.store_id) return json({error:"approved_shop_account_required"},401);
           const now = new Date().toISOString();
           const smartPlan = await env.DAGA_APP_DB.prepare("SELECT e.id FROM daga_entitlements e JOIN daga_plan_orders o ON o.id=e.order_id JOIN daga_plans p ON p.id=o.plan_id WHERE e.account_id=? AND e.store_id=? AND e.service='store' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? AND (json_extract(p.features_json,'$.tier')='smart' OR json_extract(p.features_json,'$.smartAssistantEnabled')=1) LIMIT 1").bind(account.id, account.store_id, now, now).first();
-          if (!smartPlan) return json(env,{error:"smart_store_subscription_required"},402);
+          if (!smartPlan) return json({error:"smart_store_subscription_required"},402);
           userId = String(account.id || "").trim();
         } else {
           // Temporary compatibility mode for the existing anonymous LIVE DAGA client.
