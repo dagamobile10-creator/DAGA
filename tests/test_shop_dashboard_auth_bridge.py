@@ -30,6 +30,19 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn('shopWindow.location.assign("/shop/")', portal)
         self.assertIn('event.source!==shopWindow', portal)
 
+    def test_live_assistant_uses_v30_shop_auth_and_isolated_staging_api(self):
+        assistant = (ROOT / "index.html").read_text(encoding="utf-8")
+        worker = (ROOT / "worker.js").read_text(encoding="utf-8")
+        self.assertIn("daga-app-staging.dagamobile10.workers.dev", assistant)
+        self.assertNotIn("daga-voice.dagamobile10.workers.dev", assistant)
+        self.assertIn("/api/shop/auth/login", assistant)
+        self.assertIn("/api/shop/auth/me", assistant)
+        self.assertNotIn("/api/company/auth/login", assistant)
+        self.assertIn('url.pathname === "/assistant"', worker)
+        self.assertIn("smart_store_subscription_required", worker)
+        self.assertIn("body?.liveAvatar === true", worker)
+        self.assertIn("live_daga_subscription_required", worker)
+
     def test_role_is_normalized_and_not_used_as_security_boundary(self):
         dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
         self.assertIn("if(role==='owner')role='store_owner';", dashboard)
