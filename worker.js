@@ -398,7 +398,7 @@ export default {
         const characters = Array.from(text).length;
         const requestId = "tts:" + crypto.randomUUID();
         const debit = await env.DAGA_APP_DB.prepare("INSERT INTO daga_live_word_ledger (id,account_id,store_id,event_type,words,request_id,note) SELECT ?,?,?,'debit',?,?,? WHERE (SELECT COALESCE(SUM(CASE WHEN event_type IN ('credit','adjustment','refund') THEN words ELSE -words END),0) FROM daga_live_word_ledger WHERE store_id=?) >= ? AND EXISTS (SELECT 1 FROM daga_entitlements WHERE store_id=? AND service='live_daga' AND status='active' AND starts_at<=? AND expires_at>?)")
-          .bind(crypto.randomUUID(), account.id, storeId, characters, requestId, "LIVE DAGA generated text characters", account.store_id, characters, storeId, quotaNow, quotaNow).run();
+          .bind(crypto.randomUUID(), account.id, storeId, characters, requestId, "LIVE DAGA generated text characters", storeId, characters, storeId, quotaNow, quotaNow).run();
         if (!debit.meta || debit.meta.changes !== 1) {
           const ledger = await env.DAGA_APP_DB.prepare("SELECT COALESCE(SUM(CASE WHEN event_type IN ('credit','adjustment','refund') THEN words ELSE -words END),0) AS remaining FROM daga_live_word_ledger WHERE store_id=?").bind(storeId).first();
           const remaining = Number(ledger && ledger.remaining || 0);
