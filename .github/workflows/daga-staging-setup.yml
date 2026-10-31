@@ -136,12 +136,25 @@ jobs:
           LIVEAVATAR_AVATAR_ID: ${{ secrets.LIVEAVATAR_AVATAR_ID }}
         run: |
           set -euo pipefail
-          # Configure optional voice providers independently of OTP readiness.
-          # A missing live SMS provider must not prevent staging voice secrets from being applied.
+          # Use the same pinned Wrangler version and staging config as the deployment.
+          # Cloudflare may briefly report the new version as not fully deployed; retry safely.
+          put_staging_secret() {
+            local name="$1" attempt=1
+            while [ "$attempt" -le 6 ]; do
+              if printf '%s' "${!name}" | npx --yes wrangler@3.90.0 secret put "$name" --name daga-app-staging --config wrangler.staging.toml; then
+                return 0
+              fi
+              echo "::warning::Staging secret $name could not be applied yet (attempt $attempt/6)."
+              sleep 5
+              attempt=$((attempt + 1))
+            done
+            echo "::error::Unable to apply staging secret $name after retries."
+            return 1
+          }
           voice_missing=()
           for name in ELEVENLABS_API_KEY OPENAI_API_KEY GROQ_API_KEY LIVEAVATAR_API_KEY LIVEAVATAR_AVATAR_ID; do
             if [ -n "${!name:-}" ]; then
-              printf '%s' "${!name}" | npx --yes wrangler@3 secret put "$name" --name daga-app-staging
+              put_staging_secret "$name"
             else
               voice_missing+=("$name")
             fi
@@ -170,7 +183,7 @@ jobs:
           fi
           for name in DAGA_OTP_PEPPER DAGA_OWNER_BOOTSTRAP_TOKEN RESEND_API_KEY DAGA_EMAIL_FROM; do
             if [ -n "${!name:-}" ]; then
-              printf '%s' "${!name}" | npx --yes wrangler@3 secret put "$name" --name daga-app-staging
+              put_staging_secret "$name"
             fi
           done
           echo "auth_ready=true" >> "$GITHUB_OUTPUT"
