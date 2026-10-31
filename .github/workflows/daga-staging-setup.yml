@@ -3,7 +3,7 @@ name: DAGA isolated staging setup
 on:
   workflow_dispatch:
   push:
-    branches: [daga-v30-implementation, daga-email-only-auth, feat/v30-original-ui-unified-review]
+    branches: [daga-v30-implementation, daga-email-only-auth, feat/v30-original-ui-unified-review, daga-v30-permissions-and-company-labels]
     paths:
       - ".github/workflows/daga-staging-setup.yml"
       - "worker.js"
@@ -109,11 +109,18 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p staging-migrations
-          for file in migrations/0001_daga_core.sql migrations/0002_daga_owner_auth.sql migrations/0003_daga_owner_credentials.sql migrations/0004_daga_offers.sql migrations/0005_daga_store_identity_invitations.sql migrations/0006_daga_public_identity_ids.sql migrations/0007_daga_company_registration_challenges.sql migrations/0008_daga_company_login_challenges.sql migrations/0009_daga_payment_submission_uniqueness.sql migrations/0010_email_only_auth.sql migrations/0011_email_only_registration_challenges.sql migrations/0012_company_email_onboarding.sql migrations/0013_shop_email_registration.sql migrations/0014_shop_onboarding_contact_and_status.sql migrations/0015_preserve_existing_shop_approval_states.sql migrations/0016_live_daga_character_rate.sql; do
+          for file in migrations/0001_daga_core.sql migrations/0002_daga_owner_auth.sql migrations/0003_daga_owner_credentials.sql migrations/0004_daga_offers.sql migrations/0005_daga_store_identity_invitations.sql migrations/0006_daga_public_identity_ids.sql migrations/0007_daga_company_registration_challenges.sql migrations/0008_daga_company_login_challenges.sql migrations/0009_daga_payment_submission_uniqueness.sql migrations/0010_email_only_auth.sql migrations/0011_email_only_registration_challenges.sql migrations/0012_company_email_onboarding.sql migrations/0013_shop_email_registration.sql migrations/0014_shop_onboarding_contact_and_status.sql migrations/0015_preserve_existing_shop_approval_states.sql migrations/0016_live_daga_character_rate.sql migrations/0017_daga_authenticated_memory.sql; do
             clean="staging-migrations/$(basename "$file")"
             grep -v '^[[:space:]]*PRAGMA foreign_keys' "$file" > "$clean"
           done
           npx --yes wrangler@3 d1 migrations apply daga-app-staging --remote --config wrangler.staging.toml
+      - name: Check staging subscription and payment configuration counts
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@3.90.0 d1 execute daga-app-staging --remote --config wrangler.staging.toml --command "SELECT service AS item, COUNT(*) AS count FROM daga_plans WHERE is_active=1 GROUP BY service UNION ALL SELECT 'active_payment_methods', COUNT(*) FROM daga_payment_methods WHERE is_active=1;"
       - name: Deploy isolated staging Worker
         uses: cloudflare/wrangler-action@v3
         with:
@@ -136,12 +143,25 @@ jobs:
           LIVEAVATAR_AVATAR_ID: ${{ secrets.LIVEAVATAR_AVATAR_ID }}
         run: |
           set -euo pipefail
-          # Configure optional voice providers independently of OTP readiness.
-          # A missing live SMS provider must not prevent staging voice secrets from being applied.
+          # Use the same pinned Wrangler version and staging config as the deployment.
+          # Cloudflare may briefly report the new version as not fully deployed; retry safely.
+          put_staging_secret() {
+            local name="$1" attempt=1
+            while [ "$attempt" -le 6 ]; do
+              if printf '%s' "${!name}" | npx --yes wrangler@3.90.0 secret put "$name" --name daga-app-staging --config wrangler.staging.toml; then
+                return 0
+              fi
+              echo "::warning::Staging secret $name could not be applied yet (attempt $attempt/6)."
+              sleep 5
+              attempt=$((attempt + 1))
+            done
+            echo "::error::Unable to apply staging secret $name after retries."
+            return 1
+          }
           voice_missing=()
           for name in ELEVENLABS_API_KEY OPENAI_API_KEY GROQ_API_KEY LIVEAVATAR_API_KEY LIVEAVATAR_AVATAR_ID; do
             if [ -n "${!name:-}" ]; then
-              printf '%s' "${!name}" | npx --yes wrangler@3 secret put "$name" --name daga-app-staging
+              put_staging_secret "$name"
             else
               voice_missing+=("$name")
             fi
@@ -170,7 +190,7 @@ jobs:
           fi
           for name in DAGA_OTP_PEPPER DAGA_OWNER_BOOTSTRAP_TOKEN RESEND_API_KEY DAGA_EMAIL_FROM; do
             if [ -n "${!name:-}" ]; then
-              printf '%s' "${!name}" | npx --yes wrangler@3 secret put "$name" --name daga-app-staging
+              put_staging_secret "$name"
             fi
           done
           echo "auth_ready=true" >> "$GITHUB_OUTPUT"
@@ -178,7 +198,7 @@ jobs:
             echo "## DAGA staging readiness"
             echo "- Email-only owner authentication and email OTP delivery secrets: present and configured on the isolated staging Worker. The staging bootstrap token is sourced from the dedicated DAGA_STAGING_OWNER_BOOTSTRAP_TOKEN GitHub secret, separate from production."
             echo "- Owner bootstrap and real email delivery still require end-to-end verification with the designated owner."
-            echo "- Voice/chat/TTS remain explicitly in legacy compatibility mode until the client sends verified sessions; do not treat these smoke tests as authenticated voice validation."
+            echo "- LIVE DAGA client now passes the approved company session and selected company ID; chat/avatar access checks the separate LIVE DAGA entitlement and TTS enforces the character ledger. Full interactive session/audio still requires an approved test company."
             echo "- Production Worker and main branch were not targeted."
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Verify staging health without printing secrets
@@ -189,7 +209,7 @@ jobs:
             sleep 5
           done
           jq -e '.ok == true' /tmp/health.json >/dev/null || { echo "::error::Staging health endpoint did not report ok=true"; cat /tmp/health.json; exit 1; }
-          jq '{ok,voiceConfigured,chatConfigured,freeChatConfigured,liveAvatarConfigured}' /tmp/health.json
+          jq '{ok,voiceConfigured,chatConfigured,freeChatConfigured,liveAvatarConfigured,liveAvatarIdConfigured}' /tmp/health.json
           voice_ready="$(jq -r '.voiceConfigured == true' /tmp/health.json)"
           if [ "$voice_ready" != "true" ]; then
             echo "::warning::ElevenLabs is not configured; continuing security smoke tests. Voice/TTS readiness remains blocked."
@@ -234,7 +254,7 @@ jobs:
             echo "::error::Owner API returned an allow-origin header for an untrusted origin"; exit 1
           fi
           echo "Staging company and owner API CORS checks passed: no wildcard origin was returned."
-          for path in /go/ /shop-access/ /company/ /invite/ /owner/ /owner-console/ /shop/; do
+          for path in /go/ /shop-access/ /company/ /invite/ /owner/ /owner-console/ /shop/ /live/; do
             code="$(curl -sS -o "/tmp/page-$(echo "$path" | tr '/' '_').html" -w '%{http_code}' --max-time 15 "https://daga-app-staging.dagamobile10.workers.dev$path")"
             if [ "$code" != "200" ]; then echo "::error::Staging page $path returned HTTP $code"; exit 1; fi
             echo "Staging page $path returned HTTP 200."
@@ -243,12 +263,13 @@ jobs:
           grep -q 'const API=window.location.origin;' /tmp/page-_owner_.html || { echo "::error::Owner console is not configured to use its same-origin Worker API"; exit 1; }
           grep -q 'الاشتراكات والمدفوعات' /tmp/page-_company_.html || { echo "::error::Company portal checkout UI is missing from the served HTML"; exit 1; }
           grep -q '/api/company/offers?service=' /tmp/page-_company_.html || { echo "::error::Company portal offer selection is missing from the served HTML"; exit 1; }
+          grep -q 'DAGA_API_BASE' /tmp/page-_live_.html || { echo "::error::LIVE DAGA staging route did not serve the authenticated app"; exit 1; }
           if grep -q 'const API=.https://daga-voice.dagamobile10.workers.dev' /tmp/page-_owner_.html; then
             echo "::error::Owner console must not hard-code the production voice Worker"; exit 1
           fi
           code="$(curl -sS -o /tmp/me.json -w '%{http_code}' --max-time 15 https://daga-app-staging.dagamobile10.workers.dev/api/company/auth/me)"
           test "$code" = "401" || { echo "::error::Unauthenticated company account endpoint returned HTTP $code"; exit 1; }
-          # Staging memory must reject anonymous callers even before its storage binding is configured.
+          # Staging memory must reject anonymous callers and is stored in the isolated app D1.
           code="$(curl -sS -o /tmp/memory-anon.json -w '%{http_code}' --max-time 15 'https://daga-app-staging.dagamobile10.workers.dev/memory?userId=00000000-0000-4000-8000-000000000000')"
           test "$code" = "401" || { echo "::error::Unauthenticated memory endpoint returned HTTP $code"; exit 1; }
           grep -q 'authenticated_account_required' /tmp/memory-anon.json || { echo "::error::Memory endpoint did not reject anonymous identity"; exit 1; }
@@ -272,6 +293,17 @@ jobs:
           if [ "$voice_ready" != "true" ]; then
             echo "::error::Security smoke tests completed, but voice/TTS is not ready: ELEVENLABS_API_KEY is missing."
             exit 1
+          fi
+          if jq -e '.liveAvatarIdConfigured == true' /tmp/health.json >/dev/null; then
+            echo "Staging explicit MH LiveAvatar ID is configured."
+          else
+            avatar_code="$(curl -sS -o /tmp/liveavatar-smoke.json -w '%{http_code}' --max-time 20 https://daga-app-staging.dagamobile10.workers.dev/liveavatar/avatars)"
+            if [ "$avatar_code" = "200" ]; then
+              jq -e '.ok == true and (.hasActiveDaga == true or .activeCount == 1)' /tmp/liveavatar-smoke.json >/dev/null || { echo "::error::No uniquely identifiable active MH/DAGA avatar was found; configure LIVEAVATAR_AVATAR_ID for staging."; cat /tmp/liveavatar-smoke.json; exit 1; }
+              echo "Staging MH LiveAvatar discovery passed."
+            else
+              echo "::error::Staging LiveAvatar discovery returned HTTP $avatar_code"; cat /tmp/liveavatar-smoke.json; exit 1
+            fi
           fi
       - name: Require owner-auth secrets for a green staging run
         if: always()

@@ -190,7 +190,9 @@ export async function handleOwnerAdmin(request, env, url) {
       if(b.paymentConfirmed!==true)return json(env,{error:"payment_confirmation_required"},409);
       const store=await db.prepare("SELECT id,owner_account_id,status,onboarding_status,onboarding_order_id FROM daga_stores WHERE id=?").bind(finalizeMatch[1]).first();
       if(!store)return json(env,{error:"store_not_found"},404);
-      if(store.status!=="pending"||store.onboarding_status!=="preliminary_approved"||store.onboarding_order_id)return json(env,{error:"store_not_ready_for_final_activation"},409);
+      if(store.status!=="approved"||store.onboarding_status!=="preliminary_approved"||store.onboarding_order_id)return json(env,{error:"store_not_ready_for_final_activation"},409);
+      const pendingPayment=await db.prepare("SELECT ps.id FROM daga_payment_submissions ps JOIN daga_plan_orders o ON o.id=ps.order_id JOIN daga_plans p ON p.id=o.plan_id WHERE o.store_id=? AND p.service='store' AND ps.status='pending_review' AND o.status IN ('payment_submitted','under_review') LIMIT 1").bind(store.id).first();
+      if(pendingPayment)return json(env,{error:"company_payment_submission_pending_review",message:"الشركة قدمت إثبات دفع بالفعل. راجع طلب الدفع من جدول مراجعة المدفوعات بدل التفعيل اليدوي."},409);
       const plan=await db.prepare("SELECT id,service,name,price_minor,currency,duration_days,version,is_active FROM daga_plans WHERE id=?").bind(String(b.planId||"")).first();
       if(!plan||plan.service!=="store"||!plan.is_active)return json(env,{error:"active_store_plan_required"},400);
       const price=Number(b.agreedPriceMinor);
@@ -198,9 +200,9 @@ export async function handleOwnerAdmin(request, env, url) {
       const now=new Date().toISOString(),orderId=crypto.randomUUID(),entitlementId=crypto.randomUUID();
       const expires=new Date(Date.now()+Number(plan.duration_days)*86400000).toISOString();
       const results=await db.batch([
-        db.prepare("INSERT INTO daga_plan_orders (id,account_id,store_id,plan_id,plan_version,agreed_price_minor,currency,status,created_at,updated_at) SELECT ?,?,?,?,?,?,?,'paid_approved',?,? WHERE EXISTS (SELECT 1 FROM daga_stores s JOIN daga_accounts a ON a.id=s.owner_account_id WHERE s.id=? AND s.owner_account_id=? AND s.status='pending' AND s.onboarding_status='preliminary_approved' AND s.onboarding_order_id IS NULL AND a.role='store_owner' AND a.status='pending')").bind(orderId,store.owner_account_id,store.id,plan.id,plan.version,price,plan.currency||"EGP",now,now,store.id,store.owner_account_id),
+        db.prepare("INSERT INTO daga_plan_orders (id,account_id,store_id,plan_id,plan_version,agreed_price_minor,currency,status,created_at,updated_at) SELECT ?,?,?,?,?,?,?,'paid_approved',?,? WHERE EXISTS (SELECT 1 FROM daga_stores s JOIN daga_accounts a ON a.id=s.owner_account_id WHERE s.id=? AND s.owner_account_id=? AND s.status='approved' AND s.onboarding_status='preliminary_approved' AND s.onboarding_order_id IS NULL AND a.role='store_owner' AND a.status='approved')").bind(orderId,store.owner_account_id,store.id,plan.id,plan.version,price,plan.currency||"EGP",now,now,store.id,store.owner_account_id),
         db.prepare("UPDATE daga_stores SET status='approved',onboarding_status='approved',onboarding_order_id=?,onboarding_payment_method_id=NULL,onboarding_offer_name=?,updated_at=? WHERE id=? AND EXISTS (SELECT 1 FROM daga_plan_orders WHERE id=? AND status='paid_approved')").bind(orderId,String(b.offerName||"").trim().slice(0,120)||null,now,store.id,orderId),
-        db.prepare("UPDATE daga_accounts SET status='approved',updated_at=? WHERE id=? AND role='store_owner' AND status='pending' AND EXISTS (SELECT 1 FROM daga_stores WHERE id=? AND status='approved' AND onboarding_order_id=?)").bind(now,store.owner_account_id,store.id,orderId),
+        db.prepare("UPDATE daga_accounts SET status='approved',updated_at=? WHERE id=? AND role='store_owner' AND status='approved' AND EXISTS (SELECT 1 FROM daga_stores WHERE id=? AND status='approved' AND onboarding_order_id=?)").bind(now,store.owner_account_id,store.id,orderId),
         db.prepare("INSERT INTO daga_entitlements (id,account_id,store_id,service,order_id,starts_at,expires_at,status,created_at) SELECT ?,?,?, 'store',?,?,?,'active',? WHERE EXISTS (SELECT 1 FROM daga_stores s JOIN daga_accounts a ON a.id=s.owner_account_id WHERE s.id=? AND s.status='approved' AND s.onboarding_order_id=? AND a.id=? AND a.status='approved' AND a.role='store_owner')").bind(entitlementId,store.owner_account_id,store.id,orderId,now,expires,now,store.id,orderId,store.owner_account_id)
       ]);
       if(results.some(r=>Number(r?.meta?.changes||0)!==1))return json(env,{error:"store_final_activation_conflict_retry"},409);
@@ -240,20 +242,13 @@ export async function handleOwnerAdmin(request, env, url) {
       if(b.status==="preliminary_approved" && store.onboarding_status!=="pending")return json(env,{error:"store_not_pending_preliminary_approval"},409);
       const now=new Date().toISOString();
       if(b.status==="preliminary_approved"){
-        await db.prepare("UPDATE daga_stores SET onboarding_status='preliminary_approved',updated_at=? WHERE id=?").bind(now,store.id).run();
-        await db.prepare("UPDATE daga_accounts SET status='pending',updated_at=? WHERE id=? AND role='store_owner'").bind(now,store.owner_account_id).run();
-      }else if(b.status==="approved"){
-        if(!store.onboarding_order_id)return json(env,{error:"onboarding_plan_payment_not_recorded"},409);
-        const order=await db.prepare("SELECT o.id,o.status,o.plan_id,o.account_id,o.store_id,o.agreed_price_minor,p.duration_days,p.service FROM daga_plan_orders o JOIN daga_plans p ON p.id=o.plan_id WHERE o.id=? AND o.store_id=? AND o.account_id=?").bind(store.onboarding_order_id,store.id,store.owner_account_id).first();
-        if(!order||order.service!=="store"||!["awaiting_payment","under_review","payment_submitted"].includes(order.status))return json(env,{error:"valid_onboarding_payment_order_required"},409);
-        const expires=new Date(Date.now()+Number(order.duration_days)*86400000).toISOString();
-        const entitlementId=crypto.randomUUID();
-        await db.batch([
-          db.prepare("UPDATE daga_plan_orders SET status='paid_approved',updated_at=? WHERE id=? AND status IN ('awaiting_payment','under_review','payment_submitted')").bind(now,order.id),
-          db.prepare("INSERT INTO daga_entitlements (id,account_id,store_id,service,order_id,starts_at,expires_at,status,created_at) VALUES (?,?,?,'store',?,?,?,'active',?)").bind(entitlementId,store.owner_account_id,store.id,order.id,now,expires,now),
-          db.prepare("UPDATE daga_stores SET status='approved',onboarding_status='approved',updated_at=? WHERE id=?").bind(now,store.id),
-          db.prepare("UPDATE daga_accounts SET status='approved',updated_at=? WHERE id=? AND role='store_owner'").bind(now,store.owner_account_id)
+        const approvalResults=await db.batch([
+          db.prepare("UPDATE daga_stores SET status='approved',onboarding_status='preliminary_approved',updated_at=? WHERE id=? AND status='pending'").bind(now,store.id),
+          db.prepare("UPDATE daga_accounts SET status='approved',updated_at=? WHERE id=? AND role='store_owner' AND status='pending'").bind(now,store.owner_account_id)
         ]);
+        if(approvalResults.some(result=>Number(result?.meta?.changes||0)!==1))return json(env,{error:"company_preliminary_approval_conflict_retry"},409);
+      }else if(b.status==="approved"){
+        return json(env,{error:"final_payment_confirmation_required",message:"لا يمكن تفعيل الشركه من قرار الموافقة العام. استخدم إجراء التفعيل النهائي بعد مراجعة إثبات الدفع وتأكيد استلام المبلغ."},409);
       }else{
         await db.batch([
           db.prepare("UPDATE daga_stores SET status=?,onboarding_status=?,updated_at=? WHERE id=?").bind(b.status,b.status,now,store.id),
@@ -285,9 +280,12 @@ export async function handleOwnerAdmin(request, env, url) {
         const entitlementId=crypto.randomUUID(), starts=now, expires=new Date(Date.now()+Number(sub.duration_days)*86400000).toISOString();
         statements.push(db.prepare("INSERT INTO daga_entitlements (id,account_id,store_id,service,order_id,starts_at,expires_at,status) SELECT ?,?,?,?,?,?,?,'active' WHERE EXISTS (SELECT 1 FROM daga_payment_submissions ps JOIN daga_plan_orders o ON o.id=ps.order_id WHERE ps.id=? AND ps.status='confirmed' AND ps.reviewed_by=? AND ps.reviewed_at=? AND o.status='paid_approved')").bind(entitlementId,sub.account_id,sub.store_id,sub.service,sub.order_id,starts,expires,sub.id,owner.id,now));
         if(sub.service==="live_daga"&&Number(sub.word_quota)>0) statements.push(db.prepare("INSERT INTO daga_live_word_ledger (id,account_id,store_id,order_id,event_type,words,request_id,note) SELECT ?,?,?,?,'credit',?,?,? WHERE EXISTS (SELECT 1 FROM daga_payment_submissions ps JOIN daga_plan_orders o ON o.id=ps.order_id WHERE ps.id=? AND ps.status='confirmed' AND ps.reviewed_by=? AND ps.reviewed_at=? AND o.status='paid_approved')").bind(crypto.randomUUID(),sub.account_id,sub.store_id,sub.order_id,Number(sub.word_quota),"order:"+sub.order_id,"Owner-confirmed LIVE DAGA purchase",sub.id,owner.id,now));
+        if(sub.service==="store") statements.push(db.prepare("UPDATE daga_stores SET onboarding_status=CASE WHEN onboarding_status='preliminary_approved' THEN 'approved' ELSE onboarding_status END,onboarding_order_id=CASE WHEN onboarding_status='preliminary_approved' AND onboarding_order_id IS NULL THEN ? ELSE onboarding_order_id END,updated_at=? WHERE id=? AND status='approved' AND EXISTS (SELECT 1 FROM daga_plan_orders WHERE id=? AND status='paid_approved')").bind(sub.order_id,now,sub.store_id,sub.order_id));
       }
       const reviewResults = await db.batch(statements);
-      if (Number(reviewResults?.[0]?.meta?.changes || 0) !== 1 || Number(reviewResults?.[1]?.meta?.changes || 0) !== 1) {
+      if (Number(reviewResults?.[0]?.meta?.changes || 0) !== 1 ||
+          Number(reviewResults?.[1]?.meta?.changes || 0) !== 1 ||
+          reviewResults.slice(2).some(result => Number(result?.meta?.changes || 0) !== 1)) {
         return json(env, {error:"payment_review_state_changed_retry"},409);
       }
       await audit(db,owner.id,"payment_reviewed","daga_payment_submissions",sub.id,{status:b.status,orderId:sub.order_id});

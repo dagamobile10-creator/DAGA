@@ -16,7 +16,7 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn("DAGA_SHOP_READY", dashboard)
         self.assertIn("bootAuthenticatedDashboard(event.data.token,event.data.companyId)", dashboard)
         self.assertNotIn("sessionStorage", dashboard)
-        self.assertIn("fetch('/api/shop/auth/me'", dashboard)
+        self.assertIn("fetch('/api/company/auth/me'", dashboard)
         self.assertIn("window.location.replace('/shop-access/')", dashboard)
         self.assertIn("if(window.opener)", dashboard)
         self.assertIn("loadStoreData(company.id)", dashboard)
@@ -34,7 +34,7 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
         self.assertIn("if(role==='owner')role='store_owner';", dashboard)
         self.assertIn("Authorization:'Bearer '+token", dashboard)
-        self.assertIn("api/shop/auth/logout", dashboard)
+        self.assertIn("api/company/auth/logout", dashboard)
 
     def test_store_plan_tier_is_saved_and_editable(self):
         admin = (ROOT / "owner-admin.js").read_text(encoding="utf-8")
@@ -42,7 +42,7 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn("normalizeStoreFeatures(b.features)", admin)
         self.assertIn("features_json=?,is_active=?", admin)
         self.assertIn("features={tier:smart?'smart':'standard',smartAssistantEnabled:smart,historyEnabled:smart}", console)
-        self.assertIn("مستوى اشتراك المحل:", console)
+        self.assertIn("مستوى اشتراك الشركه:", console)
 
 
     def test_team_invites_use_email_only_and_real_invitation_api(self):
@@ -55,11 +55,14 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn("window.DAGA_SESSION_TOKEN=token", dashboard)
         self.assertIn('path === "/api/company/invitations" && request.method === "POST"', invitations)
 
-    def test_live_daga_requires_both_smart_store_plan_and_live_entitlement_server_side(self):
+    def test_live_daga_requires_live_entitlement_without_smart_plan_dependency(self):
         worker = (ROOT / "worker.js").read_text(encoding="utf-8")
-        self.assertIn("smart_store_subscription_required", worker)
+        self.assertIn("smart_store_subscription_required", worker)  # Internal assistant route only
         self.assertIn("json_extract(p.features_json,'$.tier')='smart'", worker)
-        self.assertIn("live_daga_subscription_required", worker)
+        tts = worker[worker.index('if (url.pathname !== "/tts"'):]
+        self.assertNotIn("smart_store_subscription_required", tts)
+        self.assertIn("live_daga_subscription_required", tts)
+        self.assertIn('resolveCompanyVoiceContext(env, account, request.headers.get("X-DAGA-Company-ID") || "")', tts)
         self.assertIn("live_daga_quota_insufficient", worker)
 
     def test_standard_plan_overrides_legacy_smart_flags(self):
@@ -72,13 +75,58 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn("p.features_json", auth)
         self.assertIn('features.smartAssistantEnabled===true||features.tier==="smart"', auth)
         self.assertIn('features.historyEnabled===true||features.tier==="smart"', auth)
-        self.assertIn("smartAssistantEnabled:company.smartAssistantEnabled===true", dashboard)
+        self.assertIn("smartAssistantEnabled:company.smartAssistantEnabled===true&&(role==='store_owner'||company.permissions?.useSmartAssistant===true)", dashboard)
         self.assertIn("historyEnabled:company.historyEnabled===true", dashboard)
-        self.assertIn("b.hidden=false;b.disabled=!smartAllowed", dashboard)
-        self.assertIn("b.hidden=false;b.disabled=!liveAllowed", dashboard)
-        self.assertIn("b.hidden=false;b.disabled=!window.DAGA_AUTH_USER.historyEnabled", dashboard)
-        self.assertIn("smartAllowed&&window.DAGA_AUTH_USER.liveDagaEnabled===true", dashboard)
+        self.assertIn("b.hidden=false;b.disabled=false", dashboard)
+        self.assertIn("b.hidden=false;b.disabled=false", dashboard)
+        self.assertIn("b.hidden=false;b.disabled=false", dashboard)
+        self.assertIn("const liveAllowed=window.DAGA_AUTH_USER.liveDagaEnabled===true", dashboard)
+        self.assertNotIn("smartAllowed&&window.DAGA_AUTH_USER.liveDagaEnabled===true", dashboard)
 
+
+    def test_company_owner_can_list_members_and_update_individual_permissions(self):
+        invitations = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
+        dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
+        self.assertIn('path === "/api/company/members"', invitations)
+        self.assertIn('request.method === "PATCH"', invitations)
+        self.assertIn("company_owner_required", invitations)
+        self.assertIn("company_member_permissions_updated", invitations)
+        self.assertIn("manageUsers", invitations)
+        self.assertIn("useSmartAssistant", invitations)
+        self.assertIn("useLiveDaga", invitations)
+        self.assertIn("fetch('/api/company/members?storeId='", dashboard)
+        self.assertIn("saveTeamMemberPermissions", dashboard)
+        self.assertIn("data-team-permission", dashboard)
+
+    def test_company_visible_labels_are_updated_without_changing_storage_identifiers(self):
+        portal = (ROOT / "company" / "portal.html").read_text(encoding="utf-8")
+        self.assertIn("تسجيل شركة جديدة", portal)
+        self.assertIn("اسم صاحب الشركه", portal)
+        self.assertIn("اسم الشركه", portal)
+        self.assertIn("daga_stores", (ROOT / "company-invitations.js").read_text(encoding="utf-8"))
+
+    def test_preliminary_store_approval_cannot_activate_before_payment_confirmation(self):
+        admin = (ROOT / "owner-admin.js").read_text(encoding="utf-8")
+        self.assertIn('final_payment_confirmation_required', admin)
+        self.assertIn('paymentManuallyConfirmed:true', admin)
+        self.assertIn('paymentConfirmed!==true', admin)
+
+    def test_live_daga_chat_uses_live_entitlement_not_smart_plan(self):
+        worker = (ROOT / "worker.js").read_text(encoding="utf-8")
+        live = (ROOT / "index.html").read_text(encoding="utf-8")
+        chat = worker[worker.index('if (url.pathname === "/chat"'):worker.index('if (url.pathname !== "/tts"')]
+        self.assertIn("body?.mode === \"live_daga\"", chat)
+        self.assertIn('permission = liveMode ? "useLiveDaga" : "useSmartAssistant"', chat)
+        self.assertIn("service='live_daga'", chat)
+        self.assertIn("smart_store_subscription_required", chat)
+        self.assertIn("mode:'live_daga'", live)
+
+    def test_voice_routes_enforce_member_permissions_independently(self):
+        worker = (ROOT / "worker.js").read_text(encoding="utf-8")
+        self.assertIn('const permission = liveMode ? "useLiveDaga" : "useSmartAssistant"', worker)
+        self.assertIn('company.permissions.useLiveDaga !== true', worker)
+        self.assertIn('context.permissions[permissionKey] !== true', worker)
+        self.assertIn('company_voice_permission_denied', worker)
 
 if __name__ == "__main__":
     unittest.main()

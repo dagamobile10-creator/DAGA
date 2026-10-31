@@ -209,7 +209,7 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertIn("authenticatedOwner(request, db)", admin)
         self.assertNotIn("companyOwnerForm", console)
         self.assertNotIn("معرّف الشركة", console)
-        self.assertIn("طلبات تسجيل المحلات", console)
+        self.assertIn("طلبات تسجيل الشركات", console)
 
     def test_company_approval_and_owner_account_status_change_together(self):
         admin = (ROOT / "owner-admin.js").read_text(encoding="utf-8")
@@ -217,16 +217,31 @@ class InvitationSchemaTests(unittest.TestCase):
         end = admin.index('if(path==="/owner/admin/payments"', start)
         handler = admin[start:end]
         self.assertIn('db.prepare("UPDATE daga_stores SET status=?,onboarding_status=?,updated_at=? WHERE id=?")', handler)
-        self.assertIn('db.prepare("UPDATE daga_stores SET onboarding_status=\'preliminary_approved\',updated_at=? WHERE id=?")', handler)
+        self.assertIn('db.prepare("UPDATE daga_stores SET status=\'approved\',onboarding_status=\'preliminary_approved\',updated_at=? WHERE id=? AND status=\'pending\'")', handler)
         self.assertIn('store.onboarding_status!=="preliminary_approved"', handler)
-        self.assertIn('db.prepare("UPDATE daga_accounts SET status=?,updated_at=? WHERE id=? AND role=\'store_owner\'")', handler)
+        self.assertIn('db.prepare("UPDATE daga_accounts SET status=\'approved\',updated_at=? WHERE id=? AND role=\'store_owner\' AND status=\'pending\'")', handler)
         self.assertIn("await db.batch([", handler)
         self.assertIn('["preliminary_approved","approved","rejected","suspended"]', handler)
 
+    def test_preliminary_approval_allows_payment_portal_but_not_dashboard_access(self):
+        admin = (ROOT / "owner-admin.js").read_text(encoding="utf-8")
+        auth = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
+        dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
+        self.assertIn("status='approved',onboarding_status='preliminary_approved'", admin)
+        self.assertIn("a.status='approved'", admin)
+        self.assertIn("s.status='approved' AND s.onboarding_status='preliminary_approved'", admin)
+        self.assertIn("WHERE id=? AND role='store_owner' AND status='approved'", admin)
+        self.assertIn("WHERE owner_account_id=? AND status='approved'", auth)
+        self.assertIn("company.ledgerEnabled!==true", dashboard)
+        self.assertIn("onboarding_order_id=CASE WHEN onboarding_status='preliminary_approved'", admin)
+        self.assertIn("company_payment_submission_pending_review", admin)
+        self.assertIn("ps.status='pending_review'", admin)
+        self.assertIn("reviewResults.slice(2).some(result => Number(result?.meta?.changes || 0) !== 1)", admin)
+
     def test_company_portal_supports_invite_creation_and_revocation(self):
         portal = (ROOT / "company" / "portal.html").read_text(encoding="utf-8")
-        self.assertIn("/api/shop/auth/login", portal)
-        self.assertIn("/api/shop/auth/me", portal)
+        self.assertIn("/api/company/auth/login", portal)
+        self.assertIn("/api/company/auth/me", portal)
         self.assertIn("/api/company/invitations", portal)
         self.assertIn("/revoke", portal)
         self.assertIn("navigator.share", portal)
@@ -308,7 +323,7 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertIn("WHERE store_id=? AND account_id=? LIMIT 1", handler)
         self.assertIn('membership.status !== "active"', handler)
         self.assertIn('!["manager", "employee"].includes(membership.role)', handler)
-        self.assertIn('permissions[key] = Boolean(stored && stored[key] === true)', handler)
+        self.assertIn('permissions[key] = stored && stored[key] === true', handler)
 
     def test_managers_cannot_create_manager_invitations_or_escalate_permissions(self):
         source = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
@@ -344,7 +359,7 @@ class InvitationSchemaTests(unittest.TestCase):
         end = source.index("\n}", start) + 2
         handler = source[start:end]
         self.assertIn('allowed.includes("*") ? "*" :', handler)
-        self.assertTrue(handler.rstrip().endswith(' : "";\n  return { ...(origin ? { "Access-Control-Allow-Origin": origin } : {}), "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS", "Access-Control-Allow-Headers": "Content-Type,Authorization", "Access-Control-Max-Age": "600", Vary: "Origin", ...extra };\n}'))
+        self.assertTrue(handler.rstrip().endswith(' : "";\n  return { ...(origin ? { "Access-Control-Allow-Origin": origin } : {}), "Access-Control-Allow-Methods": "GET,POST,PATCH,DELETE,OPTIONS", "Access-Control-Allow-Headers": "Content-Type,Authorization", "Access-Control-Max-Age": "600", Vary: "Origin", ...extra };\n}'))
         self.assertNotIn('allowed.length === 0 ? "*" :', handler)
 
     def test_company_and_invitation_pages_set_no_store_and_security_headers(self):
@@ -707,6 +722,8 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertIn('authenticatedAccount(request, env.DAGA_APP_DB)', route)
         self.assertIn('account.status !== "approved"', route)
         self.assertIn('account.role === "program_owner"', route)
+        self.assertIn('https://api.liveavatar.com/v1/avatars/public', route)
+        self.assertIn('LIVEAVATAR_AVATAR_ID', route)
         self.assertLess(route.index('DAGA_VOICE_REQUIRE_AUTH'), route.index('if (!env.LIVEAVATAR_API_KEY)'))
 
 
