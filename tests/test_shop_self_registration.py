@@ -32,9 +32,9 @@ class ShopSelfRegistrationTests(unittest.TestCase):
         self.assertIn('"preliminary_approved"', admin)
         self.assertIn("onboarding_status", admin)
         self.assertIn("contact_phone", auth)  # legacy storage column retained for compatibility
-        self.assertNotIn("b.contactPhone", auth)
-        self.assertIn('.bind(id,email,owner,name,"",internalIdentity,destinationHash,codeHash,expires).run();', auth)
-        self.assertNotIn("onboardingContactPhone", (ROOT / "company" / "portal.html").read_text(encoding="utf-8"))
+        self.assertIn("b.contactPhone", auth)  # company support contact, not login
+        self.assertIn('.bind(id,email,owner,name,contactPhone,internalIdentity,destinationHash,codeHash,expires).run();', auth)
+        self.assertIn("onboardingContactPhone", (ROOT / "company" / "portal.html").read_text(encoding="utf-8"))
         self.assertIn("data-wa-store", (ROOT / "owner-console.html").read_text(encoding="utf-8"))
         self.assertIn("company.ledgerEnabled!==true", dashboard)
         self.assertIn("daga_entitlements", auth)
