@@ -190,7 +190,7 @@ export default {
         if (!response.ok) return json({ error: "liveavatar_avatar_lookup_failed", status: response.status }, response.status);
         const avatars = data?.data?.results || [];
         const active = avatars.filter(a => a.status === "ACTIVE");
-        let publicActiveCount = 0;
+        let publicActiveCount = 0, publicHasDaga = false;
         try {
           const publicResponse = await fetch("https://api.liveavatar.com/v1/avatars/public?page=1&page_size=100", {
             headers: { "X-API-KEY": env.LIVEAVATAR_API_KEY, "Accept": "application/json" },
@@ -198,10 +198,13 @@ export default {
           });
           if (publicResponse.ok) {
             const publicData = await publicResponse.json();
-            publicActiveCount = (publicData?.data?.results || []).filter(a => a.status === "ACTIVE" && !a.is_expired).length;
+            const publicActive = (publicData?.data?.results || []).filter(a => a.status === "ACTIVE" && !a.is_expired);
+            publicActiveCount = publicActive.length;
+            publicHasDaga = publicActive.some(a => /daga|ضجه|ضجّة|\bmh\b|محمد\s*حامد/i.test(String(a.name || "")));
           }
         } catch (_) {}
-        return json({ ok: true, count: data?.data?.count ?? avatars.length, activeCount: active.length, hasActiveDaga: active.some(a => /daga|ضجه|ضجّة|\bmh\b|محمد\s*حامد/i.test(String(a.name || ""))), publicActiveCount });
+        const privateHasDaga = active.some(a => /daga|ضجه|ضجّة|\bmh\b|محمد\s*حامد/i.test(String(a.name || "")));
+        return json({ ok: true, count: data?.data?.count ?? avatars.length, activeCount: active.length, hasActiveDaga: privateHasDaga || publicHasDaga, publicActiveCount });
       } catch (_) { return json({ error: "liveavatar_lookup_failed" }, 502); }
     }
 
@@ -232,7 +235,20 @@ export default {
           const listData = await listResponse.json();
           if (!listResponse.ok) return json({ error: "liveavatar_avatar_lookup_failed", status: listResponse.status }, listResponse.status);
           const avatars = listData?.data?.results || [];
-          const chosen = avatars.find(a => /daga|ضجه|ضجّة|\bmh\b|محمد\s*حامد/i.test(String(a.name || "")) && a.status === "ACTIVE") || (avatars.length === 1 && avatars[0].status === "ACTIVE" ? avatars[0] : null);
+          let chosen = avatars.find(a => /daga|ضجه|ضجّة|\bmh\b|محمد\s*حامد/i.test(String(a.name || "")) && a.status === "ACTIVE") || (avatars.length === 1 && avatars[0].status === "ACTIVE" ? avatars[0] : null);
+          if (!chosen) {
+            try {
+              const publicResponse = await fetch("https://api.liveavatar.com/v1/avatars/public?page=1&page_size=100", {
+                headers: { "X-API-KEY": env.LIVEAVATAR_API_KEY, "Accept": "application/json" },
+                signal: AbortSignal.timeout(10000)
+              });
+              if (publicResponse.ok) {
+                const publicData = await publicResponse.json();
+                const publicAvatars = publicData?.data?.results || [];
+                chosen = publicAvatars.find(a => /daga|ضجه|ضجّة|\bmh\b|محمد\s*حامد/i.test(String(a.name || "")) && a.status === "ACTIVE" && !a.is_expired) || null;
+              }
+            } catch (_) {}
+          }
           if (chosen) {
             avatarId = chosen.id;
           } else {
