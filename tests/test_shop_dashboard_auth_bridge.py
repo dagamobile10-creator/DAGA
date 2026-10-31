@@ -42,7 +42,7 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn("normalizeStoreFeatures(b.features)", admin)
         self.assertIn("features_json=?,is_active=?", admin)
         self.assertIn("features={tier:smart?'smart':'standard',smartAssistantEnabled:smart,historyEnabled:smart}", console)
-        self.assertIn("مستوى اشتراك المحل:", console)
+        self.assertIn("مستوى اشتراك الشركة:", console)
 
 
     def test_team_invites_use_email_only_and_real_invitation_api(self):
