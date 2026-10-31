@@ -201,7 +201,7 @@ export default {
             publicActiveCount = (publicData?.data?.results || []).filter(a => a.status === "ACTIVE" && !a.is_expired).length;
           }
         } catch (_) {}
-        return json({ ok: true, count: data?.data?.count ?? avatars.length, activeCount: active.length, hasActiveDaga: active.some(a => /daga|ضجه|ضجّة/i.test(String(a.name || ""))), publicActiveCount });
+        return json({ ok: true, count: data?.data?.count ?? avatars.length, activeCount: active.length, hasActiveDaga: active.some(a => /daga|ضجه|ضجّة|\bmh\b|محمد\s*حامد/i.test(String(a.name || ""))), publicActiveCount });
       } catch (_) { return json({ error: "liveavatar_lookup_failed" }, 502); }
     }
 
@@ -232,7 +232,7 @@ export default {
           const listData = await listResponse.json();
           if (!listResponse.ok) return json({ error: "liveavatar_avatar_lookup_failed", status: listResponse.status }, listResponse.status);
           const avatars = listData?.data?.results || [];
-          const chosen = avatars.find(a => /daga|ضجه|ضجّة/i.test(String(a.name || "")) && a.status === "ACTIVE") || (avatars.length === 1 && avatars[0].status === "ACTIVE" ? avatars[0] : null);
+          const chosen = avatars.find(a => /daga|ضجه|ضجّة|\bmh\b|محمد\s*حامد/i.test(String(a.name || "")) && a.status === "ACTIVE") || (avatars.length === 1 && avatars[0].status === "ACTIVE" ? avatars[0] : null);
           if (chosen) {
             avatarId = chosen.id;
           } else {
