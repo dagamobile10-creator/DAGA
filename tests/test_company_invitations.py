@@ -217,11 +217,24 @@ class InvitationSchemaTests(unittest.TestCase):
         end = admin.index('if(path==="/owner/admin/payments"', start)
         handler = admin[start:end]
         self.assertIn('db.prepare("UPDATE daga_stores SET status=?,onboarding_status=?,updated_at=? WHERE id=?")', handler)
-        self.assertIn('db.prepare("UPDATE daga_stores SET onboarding_status=\'preliminary_approved\',updated_at=? WHERE id=?")', handler)
+        self.assertIn('db.prepare("UPDATE daga_stores SET status=\'approved\',onboarding_status=\'preliminary_approved\',updated_at=? WHERE id=? AND status=\'pending\'")', handler)
         self.assertIn('store.onboarding_status!=="preliminary_approved"', handler)
-        self.assertIn('db.prepare("UPDATE daga_accounts SET status=?,updated_at=? WHERE id=? AND role=\'store_owner\'")', handler)
+        self.assertIn('db.prepare("UPDATE daga_accounts SET status=\'approved\',updated_at=? WHERE id=? AND role=\'store_owner\' AND status=\'pending\'")', handler)
         self.assertIn("await db.batch([", handler)
         self.assertIn('["preliminary_approved","approved","rejected","suspended"]', handler)
+
+    def test_preliminary_approval_allows_payment_portal_but_not_dashboard_access(self):
+        admin = (ROOT / "owner-admin.js").read_text(encoding="utf-8")
+        auth = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
+        dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
+        self.assertIn("status='approved',onboarding_status='preliminary_approved'", admin)
+        self.assertIn("a.status='approved'", admin)
+        self.assertIn("status='approved' AND onboarding_status='preliminary_approved'", admin)
+        self.assertIn("WHERE id=? AND role='store_owner' AND status='approved'", admin)
+        self.assertIn("WHERE id=? AND status='approved'", auth)
+        self.assertIn("company.ledgerEnabled!==true", dashboard)
+        self.assertIn("onboarding_order_id=CASE WHEN onboarding_status='preliminary_approved'", admin)
+        self.assertIn("reviewResults.some(result => Number(result?.meta?.changes || 0) !== 1)", admin)
 
     def test_company_portal_supports_invite_creation_and_revocation(self):
         portal = (ROOT / "company" / "portal.html").read_text(encoding="utf-8")
