@@ -128,6 +128,15 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn('context.permissions[permissionKey] !== true', worker)
         self.assertIn('company_voice_permission_denied', worker)
 
+    def test_shop_registration_uses_email_only_and_company_contact_is_optional(self):
+        auth = (ROOT / "shop-auth.js").read_text(encoding="utf-8")
+        self.assertIn("valid_shop_owner_name_and_email_required", auth)
+        self.assertIn("if(contactPhone&&contactPhone.replace", auth)
+        self.assertIn("valid_optional_company_contact_phone_required", auth)
+        portal = (ROOT / "company" / "portal.html").read_text(encoding="utf-8")
+        self.assertIn("رقم واتساب الشركة للتواصل والدعم (اختياري)", portal)
+        self.assertNotIn('id="onboardingContactPhone" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" required', portal)
+
     def test_company_support_whatsapp_uses_selected_company_contact_not_app_owner(self):
         profile = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
         self.assertIn("s.contact_phone", profile)
