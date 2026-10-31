@@ -43,10 +43,34 @@ function toggleLive(){live=!live;shell.classList.toggle('live',live);start.class
 if(live){muted=false;mic.textContent='🎙️';status.textContent='Live شغال';startListening()}else{stopListening();stopVoice();status.textContent='جاهز';state.textContent='اضغط «ابدأ Live» للتحدث'}}
 function toggleMicControl(){if(live){toggleMute();return}if(singleMode){singleMode=false;stopListening();status.textContent='جاهز';state.textContent='اتلغى تسجيل الأمر';mic.textContent='🎙️';return}singleMode=true;muted=false;mic.textContent='🎙️';status.textContent='تسجيل أمر واحد';state.textContent='اتكلم دلوقتي، والمايك هيقف بعد ما تخلص';startListening()}
 function toggleMute(){muted=!muted;mic.textContent=muted?'🔇':'🎙️';if(muted){stopListening();state.textContent='الميكروفون مكتوم'}else if(live)startListening()}
-function startListening(){
-if((!live&&!singleMode)||muted||rec||replying)return;
+let micPermissionGranted=false,micPermissionPending=false;
+async function requestMicPermission(){
+if(micPermissionGranted)return true;
+if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+status.textContent='الميكروفون غير متاح';
+state.textContent='افتح ضجه من متصفح Chrome أو اسمح بالميكروفون للموقع.';
+return false;
+}
+micPermissionPending=true;
+try{
+const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+stream.getTracks().forEach(track=>track.stop());
+micPermissionGranted=true;
+return true;
+}catch(error){
+const denied=error&&['NotAllowedError','PermissionDeniedError','SecurityError'].includes(error.name);
+status.textContent='إذن الميكروفون مطلوب';
+state.textContent=denied?'اسمح لـ Chrome باستخدام الميكروفون من إعدادات الموقع، ثم ارجع واضغط المايك مرة تانية.':'تعذر فتح الميكروفون: '+(error&&error.message||'خطأ غير معروف');
+if(singleMode){singleMode=false;mic.textContent='🎙️'}
+return false;
+}finally{micPermissionPending=false}
+}
+async function startListening(){
+if((!live&&!singleMode)||muted||rec||replying||micPermissionPending)return;
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
 if(!SR){status.textContent='التعرف الصوتي غير متاح';state.textContent='المتصفح لا يدعم الاستماع الصوتي';return}
+if(!await requestMicPermission())return;
+if((!live&&!singleMode)||muted||rec||replying)return;
 rec=new SR();rec.lang='ar-EG';rec.continuous=false;rec.interimResults=true;rec.maxAlternatives=1;
 let finalGot=false;
 rec.onstart=()=>state.textContent='أنا ضجه، سامعك دلوقتي…';
