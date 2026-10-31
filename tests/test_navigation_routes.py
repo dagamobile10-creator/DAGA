@@ -163,7 +163,7 @@ class NavigationRouteTests(unittest.TestCase):
         handler = self.owner[start:end]
         self.assertIn("b.dataset.decision==='approved'", handler)
         self.assertIn("'/api/shop/auth/setup/start'", handler)
-        self.assertIn("JSON.stringify({email:approvedStore.email})", handler)
+        self.assertIn("JSON.stringify({email:approved.email})", handler)
         self.assertIn("تمت الموافقة المبدئية على المحل", handler)
         self.assertIn("company-invitations.js", self.worker)
 
