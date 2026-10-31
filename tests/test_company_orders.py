@@ -243,8 +243,8 @@ class LiveClientSessionForwardingTests(unittest.TestCase):
     def test_existing_live_api_calls_forward_optional_session(self):
         self.assertIn("headers:dagaAuthHeaders({'Content-Type':'application/json'})", self.client)
         self.assertIn('headers:dagaAuthHeaders({"Content-Type":"application/json"})', self.client)
-        self.assertIn("daga-voice.dagamobile10.workers.dev/chat", self.client)
-        self.assertIn("daga-voice.dagamobile10.workers.dev/tts", self.client)
+        self.assertIn("daga-app-staging.dagamobile10.workers.dev/chat", self.client)
+        self.assertIn("daga-app-staging.dagamobile10.workers.dev/tts", self.client)
         self.assertIn("LIVE_ENDPOINT", self.client)
         self.assertIn("headers:dagaAuthHeaders()", self.client)
 
