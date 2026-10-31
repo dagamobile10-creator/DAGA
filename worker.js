@@ -515,19 +515,24 @@ function extractModelText(result) {
 }
 
 async function enforceCompanyVoicePermission(env, account, permissionKey) {
-  if (!env.DAGA_APP_DB) return json({ error: "company_permission_database_not_configured" }, 503);
+  const db = env.DAGA_APP_DB;
+  if (!db) return json({ error: "company_permission_database_not_configured" }, 503);
   if (!account || account.status !== "approved" || account.role === "program_owner") return json({ error: "authenticated_account_required" }, 401);
-  if (!account.store_id) return json({ error: "company_membership_required" }, 403);
-  const store = await env.DAGA_APP_DB.prepare("SELECT id,owner_account_id,status FROM daga_stores WHERE id=? LIMIT 1").bind(account.store_id).first();
-  if (!store || store.status !== "approved") return json({ error: "company_membership_required" }, 403);
+
+  // Resolve only an unambiguous active company. Never trust a client-supplied
+  // store id or silently pick one membership when an account belongs to many.
   if (account.role === "store_owner") {
-    return store.owner_account_id === account.id ? null : json({ error: "company_membership_required" }, 403);
+    const owned = await db.prepare("SELECT id FROM daga_stores WHERE owner_account_id=? AND status='approved' ORDER BY created_at DESC LIMIT 2").bind(account.id).all();
+    const stores = owned.results || [];
+    if (stores.length !== 1) return json({ error: "company_selection_required" }, 403);
+    return null;
   }
   if (!["manager", "employee"].includes(account.role)) return json({ error: "company_membership_required" }, 403);
-  const membership = await env.DAGA_APP_DB.prepare("SELECT role,permissions_json FROM daga_store_memberships WHERE store_id=? AND account_id=? AND status='active' LIMIT 1").bind(store.id, account.id).first();
-  if (!membership || membership.role !== account.role) return json({ error: "company_membership_required" }, 403);
+  const rows = await db.prepare("SELECT m.role,m.permissions_json FROM daga_store_memberships m JOIN daga_stores s ON s.id=m.store_id WHERE m.account_id=? AND m.status='active' AND m.role IN ('manager','employee') AND s.status='approved' ORDER BY m.created_at DESC LIMIT 2").bind(account.id).all();
+  const memberships = rows.results || [];
+  if (memberships.length !== 1 || memberships[0].role !== account.role) return json({ error: memberships.length > 1 ? "company_selection_required" : "company_membership_required" }, 403);
   let permissions = {};
-  try { permissions = JSON.parse(membership.permissions_json || "{}"); } catch (_) {}
+  try { permissions = JSON.parse(memberships[0].permissions_json || "{}"); } catch (_) {}
   if (permissions[permissionKey] !== true) return json({ error: "company_voice_permission_denied", permission: permissionKey }, 403);
   return null;
 }
