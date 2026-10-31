@@ -213,7 +213,7 @@ export default {
       if (String(env.DAGA_VOICE_REQUIRE_AUTH || "").toLowerCase() === "true") {
         if (!env.DAGA_APP_DB) return json({ error: "authenticated_voice_not_configured" }, 503);
         const account = await authenticatedAccount(request, env.DAGA_APP_DB);
-        if (!account || account.status !== "approved" || account.role !== "store_owner" || !account.store_id) {
+        if (!account || account.status !== "approved" || account.role === "program_owner" || account.role !== "store_owner" || !account.store_id) {
           return json({ error: "authenticated_account_required" }, 401);
         }
         const now = new Date().toISOString();
