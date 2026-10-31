@@ -55,11 +55,14 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn("window.DAGA_SESSION_TOKEN=token", dashboard)
         self.assertIn('path === "/api/company/invitations" && request.method === "POST"', invitations)
 
-    def test_live_daga_requires_both_smart_store_plan_and_live_entitlement_server_side(self):
+    def test_live_daga_requires_live_entitlement_without_smart_plan_dependency(self):
         worker = (ROOT / "worker.js").read_text(encoding="utf-8")
-        self.assertIn("smart_store_subscription_required", worker)
+        self.assertIn("smart_store_subscription_required", worker)  # Internal assistant route only
         self.assertIn("json_extract(p.features_json,'$.tier')='smart'", worker)
-        self.assertIn("live_daga_subscription_required", worker)
+        tts = worker[worker.index('if (url.pathname !== "/tts"'):]
+        self.assertNotIn("smart_store_subscription_required", tts)
+        self.assertIn("live_daga_subscription_required", tts)
+        self.assertIn("resolveCompanyVoiceContext(env, account)", tts)
         self.assertIn("live_daga_quota_insufficient", worker)
 
     def test_standard_plan_overrides_legacy_smart_flags(self):
@@ -103,9 +106,9 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
 
     def test_voice_routes_enforce_member_permissions_independently(self):
         worker = (ROOT / "worker.js").read_text(encoding="utf-8")
-        self.assertIn('enforceCompanyVoicePermission(env, voiceAccount, "useSmartAssistant")', worker)
-        self.assertIn('enforceCompanyVoicePermission(env, voiceAccount, "useLiveDaga")', worker)
-        self.assertIn('permissions[permissionKey] !== true', worker)
+        self.assertIn('company.permissions.useSmartAssistant !== true', worker)
+        self.assertIn('company.permissions.useLiveDaga !== true', worker)
+        self.assertIn('context.permissions[permissionKey] !== true', worker)
         self.assertIn('company_voice_permission_denied', worker)
 
 if __name__ == "__main__":
