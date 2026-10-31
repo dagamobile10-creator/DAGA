@@ -191,7 +191,7 @@ jobs:
             echo "## DAGA staging readiness"
             echo "- Email-only owner authentication and email OTP delivery secrets: present and configured on the isolated staging Worker. The staging bootstrap token is sourced from the dedicated DAGA_STAGING_OWNER_BOOTSTRAP_TOKEN GitHub secret, separate from production."
             echo "- Owner bootstrap and real email delivery still require end-to-end verification with the designated owner."
-            echo "- Voice/chat/TTS remain explicitly in legacy compatibility mode until the client sends verified sessions; do not treat these smoke tests as authenticated voice validation."
+            echo "- LIVE DAGA client now passes the approved company session and selected company ID; chat/avatar access checks the separate LIVE DAGA entitlement and TTS enforces the character ledger. Full interactive session/audio still requires an approved test company."
             echo "- Production Worker and main branch were not targeted."
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Verify staging health without printing secrets
