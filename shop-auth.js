@@ -155,7 +155,7 @@ async function recoveryComplete(request,env,db){
 async function me(request,env,db){
   const account=await authenticatedAccount(request,db);
   if(!account||account.role!=="store_owner"||account.status!=="approved")return json(env,{error:"authentication_required"},401);
-  const store=await db.prepare("SELECT id,public_id,display_name,status FROM daga_stores WHERE id=? AND owner_account_id=? AND status='approved'").bind(account.store_id,account.id).first();
+  const store=await db.prepare("SELECT id,public_id,display_name,contact_phone,status FROM daga_stores WHERE id=? AND owner_account_id=? AND status='approved'").bind(account.store_id,account.id).first();
   if(!store)return json(env,{error:"shop_not_approved"},403);
   const now=new Date().toISOString();
   const entitlement=await db.prepare("SELECT e.id,p.features_json FROM daga_entitlements e LEFT JOIN daga_plan_orders o ON o.id=e.order_id LEFT JOIN daga_plans p ON p.id=o.plan_id WHERE e.account_id=? AND e.store_id=? AND e.service='store' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? ORDER BY e.starts_at DESC,e.created_at DESC LIMIT 1").bind(account.id,store.id,now,now).first();
@@ -163,7 +163,7 @@ async function me(request,env,db){
   let features={};try{features=JSON.parse(entitlement?.features_json||"{}");if(!features||typeof features!=="object"||Array.isArray(features))features={};}catch(_){features={};}
   const smartAssistantEnabled=Boolean(entitlement&&(features.smartAssistantEnabled===true||features.tier==="smart"));
   const historyEnabled=Boolean(entitlement&&(features.historyEnabled===true||features.tier==="smart"));
-  return json(env,{ok:true,account:{id:account.id,role:account.role,displayName:account.display_name,emailMasked:maskEmail(account.email)},shops:[{id:store.id,publicId:store.public_id,displayName:store.display_name,role:"store_owner",permissions:{},ledgerEnabled:Boolean(entitlement),smartAssistantEnabled,historyEnabled,liveDagaEnabled:Boolean(liveEntitlement)}]});
+  return json(env,{ok:true,account:{id:account.id,role:account.role,displayName:account.display_name,emailMasked:maskEmail(account.email)},shops:[{id:store.id,publicId:store.public_id,displayName:store.display_name,contactPhone:store.contact_phone||"",role:"store_owner",permissions:{},ledgerEnabled:Boolean(entitlement),smartAssistantEnabled,historyEnabled,liveDagaEnabled:Boolean(liveEntitlement)}]});
 }
 
 async function logout(request,env,db){
