@@ -202,13 +202,17 @@ jobs:
             sleep 5
           done
           jq -e '.ok == true' /tmp/health.json >/dev/null || { echo "::error::Staging health endpoint did not report ok=true"; cat /tmp/health.json; exit 1; }
-          jq '{ok,voiceConfigured,chatConfigured,freeChatConfigured,liveAvatarConfigured}' /tmp/health.json
-          avatar_code="$(curl -sS -o /tmp/liveavatar-smoke.json -w '%{http_code}' --max-time 20 https://daga-app-staging.dagamobile10.workers.dev/liveavatar/avatars)"
-          if [ "$avatar_code" = "200" ]; then
-            jq -e '.ok == true and (.hasActiveDaga == true or .activeCount == 1)' /tmp/liveavatar-smoke.json >/dev/null || { echo "::error::No uniquely identifiable active MH/DAGA avatar was found; configure LIVEAVATAR_AVATAR_ID for staging."; cat /tmp/liveavatar-smoke.json; exit 1; }
-            echo "Staging MH LiveAvatar discovery passed."
+          jq '{ok,voiceConfigured,chatConfigured,freeChatConfigured,liveAvatarConfigured,liveAvatarIdConfigured}' /tmp/health.json
+          if jq -e '.liveAvatarIdConfigured == true' /tmp/health.json >/dev/null; then
+            echo "Staging explicit MH LiveAvatar ID is configured."
           else
-            echo "::error::Staging LiveAvatar discovery returned HTTP $avatar_code"; cat /tmp/liveavatar-smoke.json; exit 1
+            avatar_code="$(curl -sS -o /tmp/liveavatar-smoke.json -w '%{http_code}' --max-time 20 https://daga-app-staging.dagamobile10.workers.dev/liveavatar/avatars)"
+            if [ "$avatar_code" = "200" ]; then
+              jq -e '.ok == true and (.hasActiveDaga == true or .activeCount == 1)' /tmp/liveavatar-smoke.json >/dev/null || { echo "::error::No uniquely identifiable active MH/DAGA avatar was found; configure LIVEAVATAR_AVATAR_ID for staging."; cat /tmp/liveavatar-smoke.json; exit 1; }
+              echo "Staging MH LiveAvatar discovery passed."
+            else
+              echo "::error::Staging LiveAvatar discovery returned HTTP $avatar_code"; cat /tmp/liveavatar-smoke.json; exit 1
+            fi
           fi
           voice_ready="$(jq -r '.voiceConfigured == true' /tmp/health.json)"
           if [ "$voice_ready" != "true" ]; then
