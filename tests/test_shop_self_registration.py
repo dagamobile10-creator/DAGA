@@ -36,6 +36,8 @@ class ShopSelfRegistrationTests(unittest.TestCase):
         self.assertIn('.bind(id,email,owner,name,contactPhone,internalIdentity,destinationHash,codeHash,expires).run();', auth)
         self.assertIn("onboardingContactPhone", (ROOT / "company" / "portal.html").read_text(encoding="utf-8"))
         self.assertIn("data-wa-store", (ROOT / "owner-console.html").read_text(encoding="utf-8"))
+        self.assertIn("company.contactPhone", dashboard)
+        self.assertNotIn('const phone="201020124846"', dashboard)
         self.assertIn("company.ledgerEnabled!==true", dashboard)
         self.assertIn("daga_entitlements", auth)
 
