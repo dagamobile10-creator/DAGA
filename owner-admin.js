@@ -280,7 +280,9 @@ export async function handleOwnerAdmin(request, env, url) {
         if(sub.service==="store") statements.push(db.prepare("UPDATE daga_stores SET onboarding_status=CASE WHEN onboarding_status='preliminary_approved' THEN 'approved' ELSE onboarding_status END,onboarding_order_id=CASE WHEN onboarding_status='preliminary_approved' AND onboarding_order_id IS NULL THEN ? ELSE onboarding_order_id END,updated_at=? WHERE id=? AND status='approved' AND EXISTS (SELECT 1 FROM daga_plan_orders WHERE id=? AND status='paid_approved')").bind(sub.order_id,now,sub.store_id,sub.order_id));
       }
       const reviewResults = await db.batch(statements);
-      if (reviewResults.some(result => Number(result?.meta?.changes || 0) !== 1)) {
+      if (Number(reviewResults?.[0]?.meta?.changes || 0) !== 1 ||
+          Number(reviewResults?.[1]?.meta?.changes || 0) !== 1 ||
+          reviewResults.slice(2).some(result => Number(result?.meta?.changes || 0) !== 1)) {
         return json(env, {error:"payment_review_state_changed_retry"},409);
       }
       await audit(db,owner.id,"payment_reviewed","daga_payment_submissions",sub.id,{status:b.status,orderId:sub.order_id});
