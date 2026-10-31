@@ -7,6 +7,7 @@ import { authenticatedAccount } from "./owner-auth.js";
 import inviteHtml from "./invite/index.html";
 import shopPortalHtml from "./company/portal.html";
 import shopDashboardHtml from "./shop-dashboard-v30.html";
+import liveAssistantHtml from "./index.html";
 import officialLandingHtml from "./go/index.html";
 import ownerConsoleHtml from "./owner-console.html";
 const VOICE_ID = "NG9zqiTuEbX3Nw0gjYcc"; // Previous voice ID backup: PF3gVGPrCr6Dw1WaSSiy
@@ -36,6 +37,19 @@ export default {
           "Referrer-Policy": "no-referrer",
           "X-Content-Type-Options": "nosniff",
           "Content-Security-Policy": "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+        }
+      });
+    }
+
+    if ((url.pathname === "/assistant" || url.pathname === "/assistant/") && request.method === "GET") {
+      return new Response(liveAssistantHtml, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/html; charset=utf-8",
+          "Cache-Control": "no-store",
+          "Referrer-Policy": "no-referrer",
+          "X-Content-Type-Options": "nosniff",
+          "Content-Security-Policy": "default-src 'self' data: blob:; script-src 'self' 'unsafe-inline' https://esm.sh; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' https://esm.sh; worker-src 'self' blob:; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"
         }
       });
     }
@@ -138,6 +152,10 @@ export default {
           if (!account || account.status !== "approved" || account.role === "program_owner") {
             return json({ error: "authenticated_account_required" }, 401);
           }
+          if (!account.store_id) return json(env,{error:"approved_shop_account_required"},401);
+          const now = new Date().toISOString();
+          const smartPlan = await env.DAGA_APP_DB.prepare("SELECT e.id FROM daga_entitlements e JOIN daga_plan_orders o ON o.id=e.order_id JOIN daga_plans p ON p.id=o.plan_id WHERE e.account_id=? AND e.store_id=? AND e.service='store' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? AND (json_extract(p.features_json,'$.tier')='smart' OR json_extract(p.features_json,'$.smartAssistantEnabled')=1) LIMIT 1").bind(account.id, account.store_id, now, now).first();
+          if (!smartPlan) return json(env,{error:"smart_store_subscription_required"},402);
           userId = String(account.id || "").trim();
         } else {
           // Temporary compatibility mode for the existing anonymous LIVE DAGA client.
@@ -195,9 +213,14 @@ export default {
       if (String(env.DAGA_VOICE_REQUIRE_AUTH || "").toLowerCase() === "true") {
         if (!env.DAGA_APP_DB) return json({ error: "authenticated_voice_not_configured" }, 503);
         const account = await authenticatedAccount(request, env.DAGA_APP_DB);
-        if (!account || account.status !== "approved" || account.role === "program_owner") {
+        if (!account || account.status !== "approved" || account.role !== "store_owner" || !account.store_id) {
           return json({ error: "authenticated_account_required" }, 401);
         }
+        const now = new Date().toISOString();
+        const smartPlan = await env.DAGA_APP_DB.prepare("SELECT e.id FROM daga_entitlements e JOIN daga_plan_orders o ON o.id=e.order_id JOIN daga_plans p ON p.id=o.plan_id WHERE e.account_id=? AND e.store_id=? AND e.service='store' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? AND (json_extract(p.features_json,'$.tier')='smart' OR json_extract(p.features_json,'$.smartAssistantEnabled')=1) LIMIT 1").bind(account.id, account.store_id, now, now).first();
+        if (!smartPlan) return json({ error: "smart_store_subscription_required" }, 402);
+        const liveEntitlement = await env.DAGA_APP_DB.prepare("SELECT id FROM daga_entitlements WHERE account_id=? AND store_id=? AND service='live_daga' AND status='active' AND starts_at<=? AND expires_at>? LIMIT 1").bind(account.id, account.store_id, now, now).first();
+        if (!liveEntitlement) return json({ error: "live_daga_subscription_required" }, 402);
       }
       if (!env.LIVEAVATAR_API_KEY) return json({ error: "LIVEAVATAR_API_KEY secret is not configured" }, 503);
       try {
@@ -250,6 +273,12 @@ export default {
 
     if (url.pathname === "/chat" && request.method === "POST") {
       try {
+        if (voiceIdentityRequired) {
+          if (!voiceAccount?.store_id) return json({ error: "approved_shop_account_required" }, 401);
+          const now = new Date().toISOString();
+          const smartPlan = await env.DAGA_APP_DB.prepare("SELECT e.id FROM daga_entitlements e JOIN daga_plan_orders o ON o.id=e.order_id JOIN daga_plans p ON p.id=o.plan_id WHERE e.account_id=? AND e.store_id=? AND e.service='store' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? AND (json_extract(p.features_json,'$.tier')='smart' OR json_extract(p.features_json,'$.smartAssistantEnabled')=1) LIMIT 1").bind(voiceAccount.id, voiceAccount.store_id, now, now).first();
+          if (!smartPlan) return json({ error: "smart_store_subscription_required" }, 402);
+        }
         const parsed = await readBoundedJson(request, 32768);
         if (!parsed.ok) return json({ error: parsed.error }, parsed.status);
         const body = parsed.value;
@@ -358,6 +387,12 @@ export default {
       let text = String(body?.text || "").trim();
       if (!text) return json({ error: "text is required" }, 400);
       if (text.length > 2500) return json({ error: "text_too_long", maxLength: 2500 }, 413);
+      if (voiceIdentityRequired) {
+        if (!voiceAccount?.store_id || voiceAccount.role !== "store_owner") return json({ error: "approved_shop_account_required" }, 401);
+        const now = new Date().toISOString();
+        const smartPlan = await env.DAGA_APP_DB.prepare("SELECT e.id FROM daga_entitlements e JOIN daga_plan_orders o ON o.id=e.order_id JOIN daga_plans p ON p.id=o.plan_id WHERE e.account_id=? AND e.store_id=? AND e.service='store' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? AND (json_extract(p.features_json,'$.tier')='smart' OR json_extract(p.features_json,'$.smartAssistantEnabled')=1) LIMIT 1").bind(voiceAccount.id, voiceAccount.store_id, now, now).first();
+        if (!smartPlan) return json({ error: "smart_store_subscription_required" }, 402);
+      }
 
       // Keep the generated text unchanged; pronunciation should follow general language rules.
       // No word-specific phonetic substitutions or pronunciation exceptions.
@@ -366,7 +401,7 @@ export default {
       text = text.replace(/ضَجَّة|ضَجّة|ضجّة|ضجه/gu, "ضَگَّة").replace(/\s{2,}/g, " ").trim();
 
       let quota = null;
-      if (String(env.DAGA_LIVE_QUOTA_ENFORCE || "").toLowerCase() === "true") {
+      if (String(env.DAGA_LIVE_QUOTA_ENFORCE || "").toLowerCase() === "true" && body?.liveAvatar === true) {
         if (!env.DAGA_APP_DB) return json({ error: "live_quota_not_configured" }, 503);
         const account = voiceAccount || await authenticatedAccount(request, env.DAGA_APP_DB);
         if (!account || account.status !== "approved" || account.role === "program_owner" || !account.store_id) return json({ error: "approved_shop_account_required" }, 401);
