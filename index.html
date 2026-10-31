@@ -61,15 +61,18 @@ stopListening();replying=true;state.textContent='ضجه بيجهز الرد…';
 respond(text)
 }
 function normalizeArabicInput(value){ return String(value||'').replace(/\bplus\b/gi,' زائد ').replace(/\bminus\b/gi,' ناقص ').replace(/\bequals?\b/gi,' يساوي ').replace(/\bmultipl(?:y|ied|ication)\b/gi,' ضرب ').replace(/\bdivid(?:e|ed|ing)\b/gi,' قسمة ').replace(/\bDAGA\b/gi,'ضجه').replace(/\bMH\b/gi,'المساعد').replace(/\s{2,}/g,' ').trim(); }
+// Select the isolated staging Worker only when explicitly launched from the V30 staging dashboard.
+const DAGA_API_BASE = new URLSearchParams(location.search).get('api') === 'staging' ? 'https://daga-app-staging.dagamobile10.workers.dev' : 'https://daga-voice.dagamobile10.workers.dev';
 // Optional authenticated session bridge. Existing LIVE DAGA remains compatible when no session is present.
 const DAGA_SESSION_KEY='daga_account_session_v1';
+try{const links=document.querySelectorAll('.app-nav a');if(links[0])links[0].href=DAGA_API_BASE+'/go/';if(links[1])links[1].href=DAGA_API_BASE+'/company/';if(links[2])links[2].href=DAGA_API_BASE+'/owner-console/';}catch(_){}
 function dagaAuthHeaders(extra={}){const headers={...extra};try{const token=sessionStorage.getItem(DAGA_SESSION_KEY);if(token&&token.length<=4096)headers.Authorization='Bearer '+token}catch(e){}return headers}
 const DAGA_MEMORY_KEY='daga_mh_memory_v1';
 const DAGA_PROFILE_KEY='daga_mh_long_memory_v1';
 const DAGA_SERVER_USER_KEY='daga_mh_server_user_v1';
 function dagaServerUserId(){try{let id=localStorage.getItem(DAGA_SERVER_USER_KEY);if(!id){id=crypto.randomUUID();localStorage.setItem(DAGA_SERVER_USER_KEY,id)}return id}catch(e){return ''}}
-async function loadServerMemory(){const userId=dagaServerUserId();if(!userId)return null;try{const r=await fetch('https://daga-voice.dagamobile10.workers.dev/memory?userId='+encodeURIComponent(userId),{signal:AbortSignal.timeout(2500),headers:dagaAuthHeaders()});if(!r.ok)return null;const d=await r.json();return d&&d.ok&&d.persistent?d.memory:null}catch(e){return null}}
-async function saveServerMemory(profile,history){const userId=dagaServerUserId();if(!userId)return false;try{const r=await fetch('https://daga-voice.dagamobile10.workers.dev/memory',{method:'POST',signal:AbortSignal.timeout(2500),headers:dagaAuthHeaders({'Content-Type':'application/json'}),body:JSON.stringify({userId,profile,history})});return r.ok}catch(e){return false}}
+async function loadServerMemory(){const userId=dagaServerUserId();if(!userId)return null;try{const r=await fetch(DAGA_API_BASE+'/memory?userId='+encodeURIComponent(userId),{signal:AbortSignal.timeout(2500),headers:dagaAuthHeaders()});if(!r.ok)return null;const d=await r.json();return d&&d.ok&&d.persistent?d.memory:null}catch(e){return null}}
+async function saveServerMemory(profile,history){const userId=dagaServerUserId();if(!userId)return false;try{const r=await fetch(DAGA_API_BASE+'/memory',{method:'POST',signal:AbortSignal.timeout(2500),headers:dagaAuthHeaders({'Content-Type':'application/json'}),body:JSON.stringify({userId,profile,history})});return r.ok}catch(e){return false}}
 function loadDagaMemory(){
 try{
 const value=JSON.parse(localStorage.getItem(DAGA_MEMORY_KEY)||'[]');
@@ -125,7 +128,7 @@ const spokenText=normalizeArabicInput(text);
 const nextHistory=[...workingHistory,{role:'user',content:spokenText}].slice(-100);
 saveDagaMemory(nextHistory);
 try{
-const r=await fetch('https://daga-voice.dagamobile10.workers.dev/chat',{
+const r=await fetch(DAGA_API_BASE+'/chat',{
 method:'POST',
 signal:AbortSignal.timeout(16000),
 headers:dagaAuthHeaders({'Content-Type':'application/json'}),
@@ -154,7 +157,7 @@ function stopLipSync(){if(avatar)avatar.classList.remove('speaking');if(window._
 stopLipSync();
 if(window.__dagaAudio){try{window.__dagaAudio.pause();window.__dagaAudio.currentTime=0}catch(e){}window.__dagaAudio=null}
 if('speechSynthesis' in window)speechSynthesis.cancel();
-fetch('https://daga-voice.dagamobile10.workers.dev/tts',{method:'POST',headers:dagaAuthHeaders({'Content-Type':'application/json'}),body:JSON.stringify({text})})
+fetch(DAGA_API_BASE+'/tts',{method:'POST',headers:dagaAuthHeaders({'Content-Type':'application/json'}),body:JSON.stringify({text})})
 .then(async r=>{if(!r.ok)throw new Error(await r.text());const blob=await r.blob();if(token!==speechToken)return;state.textContent='ضجه بيتكلم…';
 if(typeof window.__dagaAvatarSpeak==='function'){
  try{
@@ -176,7 +179,7 @@ async function playVoiceTest(){
     stopVoice();
     status.textContent='بيجهّز اختبار الصوت…';
     state.textContent='جاري توليد الكلام بالصوت المتصل بالمساعد';
-    const r=await fetch('https://daga-voice.dagamobile10.workers.dev/tts',{
+    const r=await fetch(DAGA_API_BASE+'/tts',{
       method:'POST',headers:dagaAuthHeaders({'Content-Type':'application/json'}),body:JSON.stringify({text:testText})
     });
     if(!r.ok) throw new Error(await r.text());
@@ -197,7 +200,7 @@ function playReference(){audio.currentTime=0;audio.play()}
 <script type="module">
 import { LiveAvatarSession } from "https://esm.sh/@heygen/liveavatar-web-sdk@0.0.19";
 let dagaSession=null,dagaSessionPromise=null,dagaStreamReady=null;
-const LIVE_ENDPOINT="https://daga-voice.dagamobile10.workers.dev/liveavatar/token";
+const LIVE_ENDPOINT=DAGA_API_BASE+"/liveavatar/token";
 async function startDagaLiveAvatar(){
  if(dagaSession&&dagaSession.state==="CONNECTED")return dagaSession;
  if(dagaSessionPromise)return dagaSessionPromise;
@@ -277,7 +280,7 @@ window.__dagaStopLiveAvatar=async function(){
 </script>
 <script>
 (function(){
- const endpoint='https://daga-voice.dagamobile10.workers.dev';
+ const endpoint=DAGA_API_BASE;
  const $=id=>document.getElementById(id);
  const state=$('dagaAuthState'), send=$('dagaAuthSend'), logout=$('dagaAuthLogout');
  async function authApi(path,body,method,auth){
@@ -291,6 +294,16 @@ window.__dagaStopLiveAvatar=async function(){
  function messageFor(error){const map={company_login_not_configured:'تسجيل الدخول مش متجهز على الخادم.',company_account_password_setup_required:'الحساب محتاج إنشاء كلمة مرور من بوابة الشركة أولًا.',invalid_credentials:'البريد الإلكتروني أو كلمة المرور غير صحيحة.',rate_limited:'محاولات كتير؛ استنى شوية وجرب تاني.',authenticated_account_required:'الجلسة انتهت أو محتاجة تسجيل دخول.'};return map[error]||('تعذر إكمال العملية: '+error)}
  function busy(button,fn){button.disabled=true;return fn().catch(e=>{state.textContent=messageFor(e.message);state.style.color='var(--red)' }).finally(()=>button.disabled=false)}
  async function refreshIdentity(){let token='';try{token=sessionStorage.getItem('daga_account_session_v1')||''}catch(e){}if(!token){state.textContent='المساعد متاح؛ سجّل الدخول لربط هويتك';state.style.color='var(--muted)';logout.style.display='none';return}try{const data=await authApi('/api/company/auth/me',undefined,'GET',true);state.textContent='الحساب مربوط: '+(data.account?.displayName||data.account?.emailMasked||'تم التحقق');state.style.color='var(--green)';logout.style.display='inline-block';$('dagaAuthFields').style.display='none';send.style.display='none'}catch(e){try{sessionStorage.removeItem('daga_account_session_v1')}catch(_){}state.textContent='الجلسة غير صالحة؛ سجّل الدخول من جديد';state.style.color='var(--red)';logout.style.display='none'}}
+ if(new URLSearchParams(location.search).get('api')==='staging' && window.opener){
+  const stagingOrigin='https://daga-app-staging.dagamobile10.workers.dev';
+  window.addEventListener('message',async event=>{
+   const data=event.data;
+   if(event.origin!==stagingOrigin||event.source!==window.opener||!data||data.type!=='DAGA_AUTH'||typeof data.token!=='string'||data.token.length<20||data.token.length>4096||typeof data.companyId!=='string')return;
+   try{sessionStorage.setItem('daga_account_session_v1',data.token);sessionStorage.setItem('daga_company_id_v1',data.companyId);}catch(_){state.textContent='تعذر حفظ جلسة الشركة على هذا المتصفح';state.style.color='var(--red)';return;}
+   state.textContent='تم استلام جلسة الشركة؛ جاري التحقق…';state.style.color='var(--muted)';await refreshIdentity();
+  });
+  window.addEventListener('load',()=>{try{window.opener.postMessage('DAGA_LIVE_READY','https://dagamobile10-creator.github.io')}catch(_){}});
+ }
  send.addEventListener('click',()=>busy(send,async()=>{const email=$('dagaAuthIdentifier').value.trim(),password=$('dagaAuthPassword').value;if(!email||!password)throw new Error('اكتب البريد الإلكتروني وكلمة المرور');const data=await authApi('/api/company/auth/login',{email,password},'POST',false);if(!data.sessionToken)throw new Error('session_token_missing');sessionStorage.setItem('daga_account_session_v1',data.sessionToken);state.textContent='تم تسجيل الدخول، جاري التحقق…';await refreshIdentity()}));
  logout.addEventListener('click',()=>busy(logout,async()=>{try{await authApi('/api/company/auth/logout',{},'POST',true)}finally{try{sessionStorage.removeItem('daga_account_session_v1')}catch(e){}$('dagaAuthFields').style.display='grid';send.style.display='inline-block';logout.style.display='none';state.textContent='تم فصل الحساب؛ المساعد متاح بدون ربط';state.style.color='var(--muted)'}}));
  refreshIdentity();
