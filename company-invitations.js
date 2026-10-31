@@ -95,15 +95,19 @@ async function updateMemberPermissions(request, env, db, account, memberAccountI
   const before = {};
   try { Object.assign(before, JSON.parse(member.permissions_json || "{}")); } catch (_) {}
   const now = new Date().toISOString();
-  const result = await db.prepare("UPDATE daga_store_memberships SET permissions_json=? WHERE store_id=? AND account_id=? AND status='active' AND role=?")
-    .bind(JSON.stringify(permissions), storeId, memberAccountId, member.role).run();
-  if (Number(result?.meta?.changes || 0) !== 1) return json(env, { error: "permissions_update_conflict" }, 409);
+  // Keep the permission change and its audit record in one D1 transaction.
+  // D1 batch is atomic: if either statement fails, neither change is committed.
   try {
-    await db.prepare("INSERT INTO daga_audit_log (id,actor_account_id,action,target_type,target_id,details_json,created_at) VALUES (?,?,?,?,?,?,?)")
-      .bind(crypto.randomUUID(), account.id, "company_member_permissions_updated", "daga_store_memberships", memberAccountId,
-        JSON.stringify({ storeId, role: member.role, before, after: permissions }), now).run();
+    const results = await db.batch([
+      db.prepare("UPDATE daga_store_memberships SET permissions_json=? WHERE store_id=? AND account_id=? AND status='active' AND role=?")
+        .bind(JSON.stringify(permissions), storeId, memberAccountId, member.role),
+      db.prepare("INSERT INTO daga_audit_log (id,actor_account_id,action,target_type,target_id,details_json,created_at) VALUES (?,?,?,?,?,?,?)")
+        .bind(crypto.randomUUID(), account.id, "company_member_permissions_updated", "daga_store_memberships", memberAccountId,
+          JSON.stringify({ storeId, role: member.role, before, after: permissions }), now)
+    ]);
+    if (Number(results?.[0]?.meta?.changes || 0) !== 1) return json(env, { error: "permissions_update_conflict" }, 409);
   } catch (_) {
-    return json(env, { error: "permissions_audit_failed" }, 500);
+    return json(env, { error: "permissions_audit_or_update_failed" }, 500);
   }
   return json(env, { ok: true, memberAccountId, role: member.role, permissions });
 }
