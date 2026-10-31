@@ -490,8 +490,20 @@ let dagaLiveSnapshotTimer=null;
 function showLiveComingSoon(){
   const user=window.DAGA_AUTH_USER||{};
   if(user.liveDagaEnabled!==true){alert('تشغيل LIVE DAGA يتطلب اشتراك LIVE DAGA المدفوع. الاشتراك منفصل عن باقة الشركه.');return;}
-  // Open LIVE DAGA only after both server entitlements are confirmed.
-  window.location.assign('https://dagamobile10-creator.github.io/DAGA/');
+  const token=String(window.DAGA_SESSION_TOKEN||'');
+  if(!token){alert('جلسة الشركة انتهت. سجّل الدخول مرة تانية.');return;}
+  const liveOrigin='https://dagamobile10-creator.github.io';
+  const liveWindow=window.open('about:blank','_blank');
+  if(!liveWindow){alert('اسمح بفتح نافذة LIVE DAGA علشان نربط حساب الشركة بأمان.');return;}
+  let completed=false;
+  const onLiveReady=event=>{
+    if(completed||event.origin!==liveOrigin||event.source!==liveWindow||event.data!=='DAGA_LIVE_READY')return;
+    completed=true;window.removeEventListener('message',onLiveReady);
+    liveWindow.postMessage({type:'DAGA_AUTH',token,companyId:String(user.storeId||'')},liveOrigin);
+  };
+  window.addEventListener('message',onLiveReady);
+  liveWindow.location.assign(liveOrigin+'/DAGA/?api=staging');
+  setTimeout(()=>{if(!completed)window.removeEventListener('message',onLiveReady);},15000);
 }
 function closeDagaLiveFullscreen(){
  const screen=document.getElementById('dagaLiveFullscreen');
