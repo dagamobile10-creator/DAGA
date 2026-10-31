@@ -114,6 +114,10 @@ jobs:
             grep -v '^[[:space:]]*PRAGMA foreign_keys' "$file" > "$clean"
           done
           npx --yes wrangler@3 d1 migrations apply daga-app-staging --remote --config wrangler.staging.toml
+      - name: Check staging subscription and payment configuration counts
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@3.90.0 d1 execute daga-app-staging --remote --config wrangler.staging.toml --command "SELECT 'active_plans' AS item, COUNT(*) AS count FROM daga_plans WHERE is_active=1 UNION ALL SELECT 'active_payment_methods', COUNT(*) FROM daga_payment_methods WHERE is_active=1;"
       - name: Deploy isolated staging Worker
         uses: cloudflare/wrangler-action@v3
         with:
