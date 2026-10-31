@@ -209,7 +209,7 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertIn("authenticatedOwner(request, db)", admin)
         self.assertNotIn("companyOwnerForm", console)
         self.assertNotIn("معرّف الشركة", console)
-        self.assertIn("طلبات تسجيل المحلات", console)
+        self.assertIn("طلبات تسجيل الشركات", console)
 
     def test_company_approval_and_owner_account_status_change_together(self):
         admin = (ROOT / "owner-admin.js").read_text(encoding="utf-8")
