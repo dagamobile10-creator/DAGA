@@ -308,7 +308,7 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertIn("WHERE store_id=? AND account_id=? LIMIT 1", handler)
         self.assertIn('membership.status !== "active"', handler)
         self.assertIn('!["manager", "employee"].includes(membership.role)', handler)
-        self.assertIn('permissions[key] = Boolean(stored && stored[key] === true)', handler)
+        self.assertIn('permissions[key] = stored && stored[key] === true', handler)
 
     def test_managers_cannot_create_manager_invitations_or_escalate_permissions(self):
         source = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
@@ -344,7 +344,7 @@ class InvitationSchemaTests(unittest.TestCase):
         end = source.index("\n}", start) + 2
         handler = source[start:end]
         self.assertIn('allowed.includes("*") ? "*" :', handler)
-        self.assertTrue(handler.rstrip().endswith(' : "";\n  return { ...(origin ? { "Access-Control-Allow-Origin": origin } : {}), "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS", "Access-Control-Allow-Headers": "Content-Type,Authorization", "Access-Control-Max-Age": "600", Vary: "Origin", ...extra };\n}'))
+        self.assertTrue(handler.rstrip().endswith(' : "";\n  return { ...(origin ? { "Access-Control-Allow-Origin": origin } : {}), "Access-Control-Allow-Methods": "GET,POST,PATCH,DELETE,OPTIONS", "Access-Control-Allow-Headers": "Content-Type,Authorization", "Access-Control-Max-Age": "600", Vary: "Origin", ...extra };\n}'))
         self.assertNotIn('allowed.length === 0 ? "*" :', handler)
 
     def test_company_and_invitation_pages_set_no_store_and_security_headers(self):
