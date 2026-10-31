@@ -45,7 +45,7 @@ async function registrationStart(request,env,db){
   const internalIdentity="request:"+crypto.randomUUID();
   await db.prepare("INSERT INTO daga_shop_registration_challenges (id,email,owner_name,shop_name,contact_phone,internal_identity,destination_hash,code_hash,expires_at) VALUES (?,?,?,?,?,?,?,?,?)")
     .bind(id,email,owner,name,contactPhone,internalIdentity,destinationHash,codeHash,expires).run();
-  try { await sendEmail(env,email,"DAGA shop registration verification","<p>Your DAGA shop registration code is <strong>"+code+"</strong>.</p><p>It expires in 10 minutes. The shop remains pending until app-owner approval.</p>"); }
+  try { await sendEmail(env,email,"DAGA shop registration verification","<p>Your DAGA company registration code is <strong>"+code+"</strong>.</p><p>It expires in 10 minutes. The company remains pending until app-owner approval.</p>"); }
   catch(e){await db.prepare("UPDATE daga_shop_registration_challenges SET consumed_at=? WHERE id=?").bind(new Date().toISOString(),id).run();const diagnostic={error:"verification_delivery_failed"};if(Number.isInteger(e?.providerStatus))diagnostic.providerStatus=e.providerStatus;if(typeof e?.providerCode==="string")diagnostic.providerCode=e.providerCode;return json(env,diagnostic,502);}
   return json(env,{ok:true,emailMasked:maskEmail(email),expiresInSeconds:OTP_TTL_SECONDS});
 }
@@ -69,7 +69,7 @@ async function registrationVerify(request,env,db){
       db.prepare("INSERT INTO daga_stores (id,public_id,owner_account_id,legal_identity,display_name,contact_phone,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)").bind(storeId,storePublicId,accountId,internalIdentity,ch.shop_name,ch.contact_phone,now,now)
     ]);
   } catch(_) {return json(env,{error:"shop_registration_conflict"},409);}
-  return json(env,{ok:true,status:"pending",message:"تم تأكيد البريد. طلب المحل اتبعت لمالك التطبيق للموافقة المبدئية. هيوصلك تنبيه بعد القرار."},201);
+  return json(env,{ok:true,status:"pending",message:"تم تأكيد البريد. طلب الشركة اتبعت لمالك التطبيق للموافقة المبدئية. هيوصلك تنبيه بعد القرار."},201);
 }
 
 async function setupStart(request,env,db){
