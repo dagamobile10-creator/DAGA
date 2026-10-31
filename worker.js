@@ -272,19 +272,26 @@ export default {
 
     if (url.pathname === "/chat" && request.method === "POST") {
       try {
-        if (voiceIdentityRequired) {
-          const company = await resolveCompanyVoiceContext(env, voiceAccount, request.headers.get("X-DAGA-Company-ID") || "");
-          if (company.error) return company.error;
-          if (company.role !== "store_owner" && company.permissions.useSmartAssistant !== true) {
-            return json({ error: "company_voice_permission_denied", permission: "useSmartAssistant" }, 403);
-          }
-          const now = new Date().toISOString();
-          const smartPlan = await env.DAGA_APP_DB.prepare("SELECT e.id FROM daga_entitlements e JOIN daga_plan_orders o ON o.id=e.order_id JOIN daga_plans p ON p.id=o.plan_id WHERE e.store_id=? AND e.service='store' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? AND (json_extract(p.features_json,'$.tier')='smart' OR json_extract(p.features_json,'$.smartAssistantEnabled')=1) LIMIT 1").bind(company.storeId, now, now).first();
-          if (!smartPlan) return json({ error: "smart_store_subscription_required" }, 402);
-        }
         const parsed = await readBoundedJson(request, 32768);
         if (!parsed.ok) return json({ error: parsed.error }, parsed.status);
         const body = parsed.value;
+        if (voiceIdentityRequired) {
+          const company = await resolveCompanyVoiceContext(env, voiceAccount, request.headers.get("X-DAGA-Company-ID") || "");
+          if (company.error) return company.error;
+          const liveMode = body?.mode === "live_daga";
+          const permission = liveMode ? "useLiveDaga" : "useSmartAssistant";
+          if (company.role !== "store_owner" && company.permissions[permission] !== true) {
+            return json({ error: "company_voice_permission_denied", permission }, 403);
+          }
+          const now = new Date().toISOString();
+          if (liveMode) {
+            const liveEntitlement = await env.DAGA_APP_DB.prepare("SELECT id FROM daga_entitlements WHERE store_id=? AND service='live_daga' AND status='active' AND starts_at<=? AND expires_at>? LIMIT 1").bind(company.storeId, now, now).first();
+            if (!liveEntitlement) return json({ error: "live_daga_subscription_required" }, 402);
+          } else {
+            const smartPlan = await env.DAGA_APP_DB.prepare("SELECT e.id FROM daga_entitlements e JOIN daga_plan_orders o ON o.id=e.order_id JOIN daga_plans p ON p.id=o.plan_id WHERE e.store_id=? AND e.service='store' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? AND (json_extract(p.features_json,'$.tier')='smart' OR json_extract(p.features_json,'$.smartAssistantEnabled')=1) LIMIT 1").bind(company.storeId, now, now).first();
+            if (!smartPlan) return json({ error: "smart_store_subscription_required" }, 402);
+          }
+        }
         const userText = String(body?.text || "").trim();
         if (!userText) return json({ error: "text is required" }, 400);
         if (userText.length > 2000) return json({ error: "text_too_long", maxLength: 2000 }, 413);
