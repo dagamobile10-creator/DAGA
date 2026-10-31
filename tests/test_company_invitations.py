@@ -236,7 +236,7 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertIn("onboarding_order_id=CASE WHEN onboarding_status='preliminary_approved'", admin)
         self.assertIn("company_payment_submission_pending_review", admin)
         self.assertIn("ps.status='pending_review'", admin)
-        self.assertIn("reviewResults.some(result => Number(result?.meta?.changes || 0) !== 1)", admin)
+        self.assertIn("reviewResults.slice(2).some(result => Number(result?.meta?.changes || 0) !== 1)", admin)
 
     def test_company_portal_supports_invite_creation_and_revocation(self):
         portal = (ROOT / "company" / "portal.html").read_text(encoding="utf-8")
