@@ -492,7 +492,7 @@ function showLiveComingSoon(){
   if(user.liveDagaEnabled!==true){alert('تشغيل LIVE DAGA يتطلب اشتراك LIVE DAGA المدفوع. الاشتراك منفصل عن باقة الشركه.');return;}
   const token=String(window.DAGA_SESSION_TOKEN||'');
   if(!token){alert('جلسة الشركة انتهت. سجّل الدخول مرة تانية.');return;}
-  const liveOrigin='https://dagamobile10-creator.github.io';
+  const liveOrigin='https://daga-app-staging.dagamobile10.workers.dev';
   const liveWindow=window.open('about:blank','_blank');
   if(!liveWindow){alert('اسمح بفتح نافذة LIVE DAGA علشان نربط حساب الشركة بأمان.');return;}
   let completed=false;
@@ -502,7 +502,7 @@ function showLiveComingSoon(){
     liveWindow.postMessage({type:'DAGA_AUTH',token,companyId:String(user.storeId||'')},liveOrigin);
   };
   window.addEventListener('message',onLiveReady);
-  liveWindow.location.assign(liveOrigin+'/DAGA/?api=staging');
+  liveWindow.location.assign(liveOrigin+'/live/?api=staging');
   setTimeout(()=>{if(!completed)window.removeEventListener('message',onLiveReady);},15000);
 }
 function closeDagaLiveFullscreen(){
@@ -640,15 +640,15 @@ let dashboardBooted=false;
 async function bootAuthenticatedDashboard(token,selectedCompanyId){
  if(dashboardBooted)return;dashboardBooted=true;
  try{
-  const response=await fetch('/api/shop/auth/me',{method:'GET',headers:{Authorization:'Bearer '+token},cache:'no-store',credentials:'omit'});
+  const response=await fetch('/api/company/auth/me',{method:'GET',headers:{Authorization:'Bearer '+token},cache:'no-store',credentials:'omit'});
   const data=await response.json().catch(()=>({}));
-  if(!response.ok||!data.account||!Array.isArray(data.shops)||!data.shops.length){window.location.replace('/shop-access/');return;}
-  const company=data.shops.find(c=>c.id===selectedCompanyId);
+  if(!response.ok||!data.account||!Array.isArray(data.companies)||!data.companies.length){window.location.replace('/shop-access/');return;}
+  const company=data.companies.find(c=>c.id===selectedCompanyId);
   if(!company||company.ledgerEnabled!==true){window.location.replace('/shop-access/');return;}
   let role=String(company.role||data.account.role||'').toLowerCase();
   if(role==='owner')role='store_owner';
   if(!['store_owner','manager','employee'].includes(role)){window.location.replace('/shop-access/');return;}
-  window.DAGA_SESSION_TOKEN=token;window.DAGA_AUTH_USER={id:data.account.id,displayName:data.account.displayName||'',role:role,storeId:company.id,storeName:company.displayName||'ضجه',permissions:company.permissions||{},smartAssistantEnabled:company.smartAssistantEnabled===true,historyEnabled:company.historyEnabled===true,liveDagaEnabled:company.liveDagaEnabled===true};
+  window.DAGA_SESSION_TOKEN=token;window.DAGA_AUTH_USER={id:data.account.id,displayName:data.account.displayName||'',role:role,storeId:company.id,storeName:company.displayName||'ضجه',permissions:company.permissions||{},smartAssistantEnabled:company.smartAssistantEnabled===true&&(role==='store_owner'||company.permissions?.useSmartAssistant===true),historyEnabled:company.historyEnabled===true,liveDagaEnabled:company.liveDagaEnabled===true&&(role==='store_owner'||company.permissions?.useLiveDaga===true)};
   // Keep both premium actions visible on every plan; entitlement controls whether they can run.
   const smartAllowed=window.DAGA_AUTH_USER.smartAssistantEnabled===true;
   const liveAllowed=window.DAGA_AUTH_USER.liveDagaEnabled===true;
