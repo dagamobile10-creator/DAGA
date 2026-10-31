@@ -293,7 +293,6 @@ jobs:
             exit 1
           fi
           echo "V30 voice-only mode: MH avatar image remains static; LiveAvatar animation is deferred to a later update."
-          fi
       - name: Require owner-auth secrets for a green staging run
         if: always()
         env:
