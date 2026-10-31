@@ -234,6 +234,8 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertIn("WHERE owner_account_id=? AND status='approved'", auth)
         self.assertIn("company.ledgerEnabled!==true", dashboard)
         self.assertIn("onboarding_order_id=CASE WHEN onboarding_status='preliminary_approved'", admin)
+        self.assertIn("company_payment_submission_pending_review", admin)
+        self.assertIn("ps.status='pending_review'", admin)
         self.assertIn("reviewResults.some(result => Number(result?.meta?.changes || 0) !== 1)", admin)
 
     def test_company_portal_supports_invite_creation_and_revocation(self):
