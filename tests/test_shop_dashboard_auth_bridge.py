@@ -42,7 +42,7 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn("normalizeStoreFeatures(b.features)", admin)
         self.assertIn("features_json=?,is_active=?", admin)
         self.assertIn("features={tier:smart?'smart':'standard',smartAssistantEnabled:smart,historyEnabled:smart}", console)
-        self.assertIn("مستوى اشتراك الشركة:", console)
+        self.assertIn("مستوى اشتراك الشركه:", console)
 
 
     def test_team_invites_use_email_only_and_real_invitation_api(self):
@@ -100,8 +100,8 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
     def test_company_visible_labels_are_updated_without_changing_storage_identifiers(self):
         portal = (ROOT / "company" / "portal.html").read_text(encoding="utf-8")
         self.assertIn("تسجيل شركة جديدة", portal)
-        self.assertIn("اسم صاحب الشركة", portal)
-        self.assertIn("اسم الشركة", portal)
+        self.assertIn("اسم صاحب الشركه", portal)
+        self.assertIn("اسم الشركه", portal)
         self.assertIn("daga_stores", (ROOT / "company-invitations.js").read_text(encoding="utf-8"))
 
     def test_voice_routes_enforce_member_permissions_independently(self):
