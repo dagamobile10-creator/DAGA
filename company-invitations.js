@@ -48,16 +48,16 @@ export async function handleCompanyInvitations(request, env, url) {
 const COMPANY_PERMISSION_KEYS = ["inviteEmployees","manageUsers","manageInventory","viewReports","useSmartAssistant","useLiveDaga"];
 
 async function companyAccountMe(env, db, account) {
-  const owned = await db.prepare("SELECT id,public_id,display_name,status,'store_owner' AS role FROM daga_stores WHERE owner_account_id=? AND status='approved' ORDER BY created_at DESC").bind(account.id).all();
-  const memberships = await db.prepare("SELECT s.id,s.public_id,s.display_name,s.status,m.role,m.permissions_json,m.status AS membership_status FROM daga_store_memberships m JOIN daga_stores s ON s.id=m.store_id WHERE m.account_id=? AND m.status='active' AND s.status='approved' ORDER BY s.display_name").bind(account.id).all();
+  const owned = await db.prepare("SELECT id,public_id,display_name,contact_phone,status,'store_owner' AS role FROM daga_stores WHERE owner_account_id=? AND status='approved' ORDER BY created_at DESC").bind(account.id).all();
+  const memberships = await db.prepare("SELECT s.id,s.public_id,s.display_name,s.contact_phone,s.status,m.role,m.permissions_json,m.status AS membership_status FROM daga_store_memberships m JOIN daga_stores s ON s.id=m.store_id WHERE m.account_id=? AND m.status='active' AND s.status='approved' ORDER BY s.display_name").bind(account.id).all();
   const rawCompanies = [
-    ...(owned.results || []).map(row => ({ id: row.id, publicId: row.public_id || null, displayName: row.display_name, status: row.status, role: row.role, permissions: {} })),
+    ...(owned.results || []).map(row => ({ id: row.id, publicId: row.public_id || null, displayName: row.display_name, status: row.status, role: row.role, contactPhone: row.contact_phone || "", permissions: {} })),
     ...(memberships.results || []).map(row => {
       let stored = {};
       try { stored = JSON.parse(row.permissions_json || "{}"); } catch (_) {}
       const permissions = {};
       for (const key of COMPANY_PERMISSION_KEYS) permissions[key] = stored[key] === true;
-      return { id: row.id, publicId: row.public_id || null, displayName: row.display_name, status: row.status, role: row.role, permissions };
+      return { id: row.id, publicId: row.public_id || null, displayName: row.display_name, status: row.status, role: row.role, contactPhone: row.contact_phone || "", permissions };
     })
   ];
   const now = new Date().toISOString();
