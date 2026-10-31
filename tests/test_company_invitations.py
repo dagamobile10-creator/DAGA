@@ -229,7 +229,7 @@ class InvitationSchemaTests(unittest.TestCase):
         dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
         self.assertIn("status='approved',onboarding_status='preliminary_approved'", admin)
         self.assertIn("a.status='approved'", admin)
-        self.assertIn("status='approved' AND onboarding_status='preliminary_approved'", admin)
+        self.assertIn("s.status='approved' AND s.onboarding_status='preliminary_approved'", admin)
         self.assertIn("WHERE id=? AND role='store_owner' AND status='approved'", admin)
         self.assertIn("WHERE id=? AND status='approved'", auth)
         self.assertIn("company.ledgerEnabled!==true", dashboard)
