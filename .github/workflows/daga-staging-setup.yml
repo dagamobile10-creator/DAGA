@@ -91,7 +91,7 @@ jobs:
           DAGA_APP_BASE_URL = "https://daga-app-staging.dagamobile10.workers.dev"
           DAGA_ALLOWED_ORIGINS = "https://dagamobile10-creator.github.io"
           DAGA_MEMORY_REQUIRE_AUTH = "true"
-          # The V30 browser client sends the approved shop session token on chat/TTS/LiveAvatar requests.
+          # The V30 browser client sends the approved shop session token on authenticated chat/TTS requests.
           DAGA_VOICE_REQUIRE_AUTH = "true"
           # Enforce the LIVE DAGA character ledger only in isolated staging.
           DAGA_LIVE_QUOTA_ENFORCE = "true"
@@ -139,8 +139,6 @@ jobs:
           ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          LIVEAVATAR_API_KEY: ${{ secrets.LIVEAVATAR_API_KEY }}
-          LIVEAVATAR_AVATAR_ID: ${{ secrets.LIVEAVATAR_AVATAR_ID }}
         run: |
           set -euo pipefail
           # Use the same pinned Wrangler version and staging config as the deployment.
@@ -159,7 +157,7 @@ jobs:
             return 1
           }
           voice_missing=()
-          for name in ELEVENLABS_API_KEY OPENAI_API_KEY GROQ_API_KEY LIVEAVATAR_API_KEY LIVEAVATAR_AVATAR_ID; do
+          for name in ELEVENLABS_API_KEY OPENAI_API_KEY GROQ_API_KEY; do
             if [ -n "${!name:-}" ]; then
               put_staging_secret "$name"
             else
@@ -209,7 +207,7 @@ jobs:
             sleep 5
           done
           jq -e '.ok == true' /tmp/health.json >/dev/null || { echo "::error::Staging health endpoint did not report ok=true"; cat /tmp/health.json; exit 1; }
-          jq '{ok,voiceConfigured,chatConfigured,freeChatConfigured,liveAvatarConfigured,liveAvatarIdConfigured}' /tmp/health.json
+          jq '{ok,voiceConfigured,chatConfigured,freeChatConfigured}' /tmp/health.json
           voice_ready="$(jq -r '.voiceConfigured == true' /tmp/health.json)"
           if [ "$voice_ready" != "true" ]; then
             echo "::warning::ElevenLabs is not configured; continuing security smoke tests. Voice/TTS readiness remains blocked."
@@ -294,16 +292,7 @@ jobs:
             echo "::error::Security smoke tests completed, but voice/TTS is not ready: ELEVENLABS_API_KEY is missing."
             exit 1
           fi
-          if jq -e '.liveAvatarIdConfigured == true' /tmp/health.json >/dev/null; then
-            echo "Staging explicit MH LiveAvatar ID is configured."
-          else
-            avatar_code="$(curl -sS -o /tmp/liveavatar-smoke.json -w '%{http_code}' --max-time 20 https://daga-app-staging.dagamobile10.workers.dev/liveavatar/avatars)"
-            if [ "$avatar_code" = "200" ]; then
-              jq -e '.ok == true and (.hasActiveDaga == true or .activeCount == 1)' /tmp/liveavatar-smoke.json >/dev/null || { echo "::error::No uniquely identifiable active MH/DAGA avatar was found; configure LIVEAVATAR_AVATAR_ID for staging."; cat /tmp/liveavatar-smoke.json; exit 1; }
-              echo "Staging MH LiveAvatar discovery passed."
-            else
-              echo "::error::Staging LiveAvatar discovery returned HTTP $avatar_code"; cat /tmp/liveavatar-smoke.json; exit 1
-            fi
+          echo "V30 voice-only mode: MH avatar image remains static; LiveAvatar animation is deferred to a later update."
           fi
       - name: Require owner-auth secrets for a green staging run
         if: always()
