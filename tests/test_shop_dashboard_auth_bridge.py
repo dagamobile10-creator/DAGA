@@ -43,6 +43,25 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn("body?.liveAvatar === true", worker)
         self.assertIn("live_daga_subscription_required", worker)
 
+    def test_live_assistant_receives_authenticated_shop_session_from_dashboard(self):
+        dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
+        assistant = (ROOT / "index.html").read_text(encoding="utf-8")
+        self.assertIn("DAGA_ASSISTANT_READY", dashboard)
+        self.assertIn("assistant.postMessage({type:'DAGA_AUTH',token,companyId:String(user.storeId||'')}", dashboard)
+        self.assertIn("window.open('/assistant/','_blank')", dashboard)
+        self.assertIn("DAGA_ASSISTANT_READY", assistant)
+        self.assertIn("event.data.type!=='DAGA_AUTH'", assistant)
+        self.assertIn("sessionStorage.setItem(DAGA_SESSION_KEY,event.data.token)", assistant)
+        self.assertIn("refreshIdentity();", assistant)
+        self.assertIn("event.source!==window.opener", assistant)
+
+    def test_live_assistant_is_served_from_same_staging_worker_origin(self):
+        worker = (ROOT / "worker.js").read_text(encoding="utf-8")
+        dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
+        self.assertIn('url.pathname === "/assistant"', worker)
+        self.assertIn("window.open('/assistant/','_blank')", dashboard)
+        self.assertNotIn("window.location.assign('https://dagamobile10-creator.github.io/DAGA/')", dashboard)
+
     def test_role_is_normalized_and_not_used_as_security_boundary(self):
         dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
         self.assertIn("if(role==='owner')role='store_owner';", dashboard)
