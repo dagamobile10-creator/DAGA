@@ -30,6 +30,13 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn('shopWindow.location.assign("/shop/")', portal)
         self.assertIn('event.source!==shopWindow', portal)
 
+
+    def test_authenticated_memory_errors_return_json_responses(self):
+        worker = (ROOT / "worker.js").read_text(encoding="utf-8")
+        self.assertIn('return json({error:"approved_shop_account_required"},401);', worker)
+        self.assertIn('return json({error:"smart_store_subscription_required"},402);', worker)
+        self.assertNotIn("json(env,", worker)
+
     def test_live_assistant_uses_v30_shop_auth_and_isolated_staging_api(self):
         assistant = (ROOT / "index.html").read_text(encoding="utf-8")
         worker = (ROOT / "worker.js").read_text(encoding="utf-8")
