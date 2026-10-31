@@ -600,7 +600,7 @@ async function editTeamMemberPermissions(memberId){
   const member=(data.members||[]).find(m=>m.accountId===memberId);if(!member)throw new Error('العضو غير موجود');
   const labels={inviteEmployees:'دعوة موظفين',manageUsers:'إدارة المستخدمين',manageInventory:'إدارة المخزون',viewReports:'مشاهدة التقارير',useSmartAssistant:'استخدام كلم ضجة',useLiveDaga:'استخدام LIVE DAGA'};
   const keys=member.role==='manager'?Object.keys(labels):Object.keys(labels).filter(k=>k!=='inviteEmployees');
-  open('<h2>صلاحيات '+(member.role==='manager'?'المدير':'الموظف')+'</h2><p class="small">'+esc(member.displayName||member.emailMasked||'')+'</p>'+keys.map(k=>'<label class="row" style="display:flex;align-items:center;gap:10px"><input type="checkbox" data-team-permission="'+k+'" '+(member.permissions&&member.permissions[k]?'checked':'')+'><span>'+labels[k]+'</span></label>').join('')+'<button class="primary" onclick="saveTeamMemberPermissions('+JSON.stringify(memberId).replace(/</g,'\\u003c')+')">حفظ الصلاحيات</button><button onclick="openTeamPermissions()">رجوع</button>');
+  open('<h2>صلاحيات '+(member.role==='manager'?'المدير':'الموظف')+'</h2><p class="small">'+esc(member.displayName||member.emailMasked||'')+'</p>'+keys.map(k=>'<label class="row" style="display:flex;align-items:center;gap:10px"><input type="checkbox" data-team-permission="'+k+'" '+(member.permissions&&member.permissions[k]?'checked':'')+'><span>'+labels[k]+'</span></label>').join('')+'<button class="primary" data-member-id="'+esc(memberId)+'" onclick="saveTeamMemberPermissions(this.dataset.memberId)">حفظ الصلاحيات</button><button onclick="openTeamPermissions()">رجوع</button>');
  }catch(e){alert(e.message)}
 }
 async function saveTeamMemberPermissions(memberId){
