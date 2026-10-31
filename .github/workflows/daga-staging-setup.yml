@@ -116,8 +116,8 @@ jobs:
           npx --yes wrangler@3 d1 migrations apply daga-app-staging --remote --config wrangler.staging.toml
       - name: Check staging subscription and payment configuration counts
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
           npx --yes wrangler@3.90.0 d1 execute daga-app-staging --remote --config wrangler.staging.toml --command "SELECT 'active_plans' AS item, COUNT(*) AS count FROM daga_plans WHERE is_active=1 UNION ALL SELECT 'active_payment_methods', COUNT(*) FROM daga_payment_methods WHERE is_active=1;"
