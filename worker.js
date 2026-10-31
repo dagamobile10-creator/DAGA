@@ -214,8 +214,12 @@ export default {
         if (!account || account.status !== "approved" || account.role === "program_owner") {
           return json({ error: "authenticated_account_required" }, 401);
         }
-        const permissionDenied = await enforceCompanyVoicePermission(env, account, "useLiveDaga");
-        if (permissionDenied) return permissionDenied;
+        const company = await resolveCompanyVoiceContext(env, account, request.headers.get("X-DAGA-Company-ID") || "");
+        if (company.error) return company.error;
+        if (company.role !== "store_owner" && company.permissions.useLiveDaga !== true) return json({ error: "company_voice_permission_denied", permission: "useLiveDaga" }, 403);
+        const now = new Date().toISOString();
+        const liveEntitlement = await env.DAGA_APP_DB.prepare("SELECT id FROM daga_entitlements WHERE store_id=? AND service='live_daga' AND status='active' AND starts_at<=? AND expires_at>? LIMIT 1").bind(company.storeId, now, now).first();
+        if (!liveEntitlement) return json({ error: "live_daga_subscription_required" }, 402);
       }
       if (!env.LIVEAVATAR_API_KEY) return json({ error: "LIVEAVATAR_API_KEY secret is not configured" }, 503);
       try {
@@ -269,7 +273,7 @@ export default {
     if (url.pathname === "/chat" && request.method === "POST") {
       try {
         if (voiceIdentityRequired) {
-          const company = await resolveCompanyVoiceContext(env, voiceAccount);
+          const company = await resolveCompanyVoiceContext(env, voiceAccount, request.headers.get("X-DAGA-Company-ID") || "");
           if (company.error) return company.error;
           if (company.role !== "store_owner" && company.permissions.useSmartAssistant !== true) {
             return json({ error: "company_voice_permission_denied", permission: "useSmartAssistant" }, 403);
@@ -380,7 +384,7 @@ export default {
 
     try {
       if (voiceIdentityRequired) {
-        const permissionDenied = await enforceCompanyVoicePermission(env, voiceAccount, "useLiveDaga");
+        const permissionDenied = await enforceCompanyVoicePermission(env, voiceAccount, "useLiveDaga", request.headers.get("X-DAGA-Company-ID") || "");
         if (permissionDenied) return permissionDenied;
       }
       if (!env.ELEVENLABS_API_KEY) return json({ error: "DAGA voice is not configured" }, 503);
@@ -402,7 +406,7 @@ export default {
         if (!env.DAGA_APP_DB) return json({ error: "live_quota_not_configured" }, 503);
         const account = voiceAccount || await authenticatedAccount(request, env.DAGA_APP_DB);
         if (!account || account.status !== "approved" || account.role === "program_owner") return json({ error: "approved_shop_account_required" }, 401);
-        const company = await resolveCompanyVoiceContext(env, account);
+        const company = await resolveCompanyVoiceContext(env, account, request.headers.get("X-DAGA-Company-ID") || "");
         if (company.error) return company.error;
         if (company.role !== "store_owner" && company.permissions.useLiveDaga !== true) return json({ error: "company_voice_permission_denied", permission: "useLiveDaga" }, 403);
         const storeId = company.storeId;
@@ -538,34 +542,32 @@ function extractModelText(result) {
   return "";
 }
 
-async function resolveCompanyVoiceContext(env, account) {
+async function resolveCompanyVoiceContext(env, account, selectedCompanyId = "") {
   const db = env.DAGA_APP_DB;
   if (!db) return { error: json({ error: "company_permission_database_not_configured" }, 503) };
   if (!account || account.status !== "approved" || account.role === "program_owner") return { error: json({ error: "authenticated_account_required" }, 401) };
+  const selected = String(selectedCompanyId || "").trim();
 
   if (account.role === "store_owner") {
-    const owned = await db.prepare("SELECT id FROM daga_stores WHERE owner_account_id=? AND status='approved' ORDER BY created_at DESC LIMIT 2").bind(account.id).all();
+    const owned = await db.prepare("SELECT id FROM daga_stores WHERE owner_account_id=? AND status='approved' AND (?='' OR id=?) ORDER BY created_at DESC LIMIT 2").bind(account.id, selected, selected).all();
     const stores = owned.results || [];
-    const selected = String(account.store_id || "").trim();
-    if (!selected || stores.length !== 1 || stores[0].id !== selected) {
-      return { error: json({ error: "company_selection_required" }, 403) };
-    }
-    return { storeId: selected, role: "store_owner", permissions: {} };
+    if (stores.length !== 1) return { error: json({ error: stores.length > 1 || !selected ? "company_selection_required" : "company_membership_required" }, 403) };
+    return { storeId: stores[0].id, role: "store_owner", permissions: {} };
   }
 
   if (!["manager", "employee"].includes(account.role)) return { error: json({ error: "company_membership_required" }, 403) };
-  const rows = await db.prepare("SELECT m.store_id,m.role,m.permissions_json FROM daga_store_memberships m JOIN daga_stores s ON s.id=m.store_id WHERE m.account_id=? AND m.status='active' AND m.role IN ('manager','employee') AND s.status='approved' ORDER BY m.created_at DESC LIMIT 2").bind(account.id).all();
+  const rows = await db.prepare("SELECT m.store_id,m.role,m.permissions_json FROM daga_store_memberships m JOIN daga_stores s ON s.id=m.store_id WHERE m.account_id=? AND m.status='active' AND m.role IN ('manager','employee') AND s.status='approved' AND (?='' OR m.store_id=?) ORDER BY m.created_at DESC LIMIT 2").bind(account.id, selected, selected).all();
   const memberships = rows.results || [];
   if (memberships.length !== 1 || memberships[0].role !== account.role) {
-    return { error: json({ error: memberships.length > 1 ? "company_selection_required" : "company_membership_required" }, 403) };
+    return { error: json({ error: memberships.length > 1 || !selected ? "company_selection_required" : "company_membership_required" }, 403) };
   }
   let permissions = {};
   try { permissions = JSON.parse(memberships[0].permissions_json || "{}"); } catch (_) {}
   return { storeId: memberships[0].store_id, role: memberships[0].role, permissions };
 }
 
-async function enforceCompanyVoicePermission(env, account, permissionKey) {
-  const context = await resolveCompanyVoiceContext(env, account);
+async function enforceCompanyVoicePermission(env, account, permissionKey, selectedCompanyId = "") {
+  const context = await resolveCompanyVoiceContext(env, account, selectedCompanyId);
   if (context.error) return context.error;
   if (context.role !== "store_owner" && context.permissions[permissionKey] !== true) {
     return json({ error: "company_voice_permission_denied", permission: permissionKey }, 403);
