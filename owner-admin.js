@@ -243,6 +243,7 @@ export async function handleOwnerAdmin(request, env, url) {
         await db.prepare("UPDATE daga_stores SET onboarding_status='preliminary_approved',updated_at=? WHERE id=?").bind(now,store.id).run();
         await db.prepare("UPDATE daga_accounts SET status='pending',updated_at=? WHERE id=? AND role='store_owner'").bind(now,store.owner_account_id).run();
       }else if(b.status==="approved"){
+        return json(env,{error:"final_payment_confirmation_required",message:"لا يمكن تفعيل الشركه من قرار الموافقة العام. استخدم إجراء التفعيل النهائي بعد مراجعة إثبات الدفع وتأكيد استلام المبلغ."},409);
         if(!store.onboarding_order_id)return json(env,{error:"onboarding_plan_payment_not_recorded"},409);
         const order=await db.prepare("SELECT o.id,o.status,o.plan_id,o.account_id,o.store_id,o.agreed_price_minor,p.duration_days,p.service FROM daga_plan_orders o JOIN daga_plans p ON p.id=o.plan_id WHERE o.id=? AND o.store_id=? AND o.account_id=?").bind(store.onboarding_order_id,store.id,store.owner_account_id).first();
         if(!order||order.service!=="store"||!["awaiting_payment","under_review","payment_submitted"].includes(order.status))return json(env,{error:"valid_onboarding_payment_order_required"},409);
