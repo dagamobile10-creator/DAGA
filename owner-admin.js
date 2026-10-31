@@ -28,6 +28,20 @@ export async function handleOwnerAdmin(request, env, url) {
       return json(env,{ok:true,events:rows.results||[]});
     }
 
+    if (path === "/owner/admin/support-whatsapp" && request.method === "GET") {
+      const setting = await db.prepare("SELECT setting_value,updated_at FROM daga_app_settings WHERE setting_key='support_whatsapp_e164'").first();
+      return json(env,{ok:true,whatsapp:setting?.setting_value||"201020124846",updatedAt:setting?.updated_at||null});
+    }
+    if (path === "/owner/admin/support-whatsapp" && request.method === "PUT") {
+      const b=await readJson(request);if(!b)return json(env,{error:"invalid_json"},400);
+      const whatsapp=String(b.whatsapp||"").replace(/[^0-9]/g,"");
+      if(whatsapp.length<10||whatsapp.length>15)return json(env,{error:"valid_support_whatsapp_required"},400);
+      const now=new Date().toISOString();
+      await db.prepare("INSERT INTO daga_app_settings (setting_key,setting_value,updated_by,updated_at) VALUES ('support_whatsapp_e164',?,?,?) ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value,updated_by=excluded.updated_by,updated_at=excluded.updated_at").bind(whatsapp,owner.id,now).run();
+      await audit(db,owner.id,"support_whatsapp_updated","daga_app_settings","support_whatsapp_e164",{updated:true});
+      return json(env,{ok:true,whatsapp,updatedAt:now});
+    }
+
     if (path === "/owner/admin/live-daga-rate" && request.method === "GET") {
       const setting = await db.prepare("SELECT setting_value,updated_at FROM daga_app_settings WHERE setting_key='live_daga_price_per_1000_minor'").first();
       return json(env,{ok:true,pricePer1000Minor:setting?Number(setting.setting_value):null,updatedAt:setting?.updated_at||null});
