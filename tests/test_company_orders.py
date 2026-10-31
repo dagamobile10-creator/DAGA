@@ -271,11 +271,11 @@ class LiveDagaLoginFlowTests(unittest.TestCase):
             self.assertIn('id="' + element_id + '"', self.client)
         self.assertNotIn('id="dagaAuthPhoneCode"', self.client)
         self.assertNotIn('id="dagaAuthEmailCode"', self.client)
-        self.assertIn("'/api/company/auth/login'", self.client)
-        self.assertNotIn("'/api/company/auth/login/verify'", self.client)
+        self.assertIn("'/api/shop/auth/login'", self.client)
+        self.assertNotIn("'/api/shop/auth/login/verify'", self.client)
         self.assertIn("sessionStorage.setItem('daga_account_session_v1',data.sessionToken)", self.client)
-        self.assertIn("'/api/company/auth/me'", self.client)
-        self.assertIn("'/api/company/auth/logout'", self.client)
+        self.assertIn("'/api/shop/auth/me'", self.client)
+        self.assertIn("'/api/shop/auth/logout'", self.client)
 
 
     def test_session_is_forwarded_to_chat_tts_memory_and_liveavatar(self):
