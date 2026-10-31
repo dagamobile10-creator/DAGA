@@ -144,7 +144,7 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
         self.assertIn("contactPhone:company.contactPhone||''", dashboard)
         self.assertIn("String(user.contactPhone||\"\")", dashboard)
-        self.assertIn("https://wa.me/"+'"'+"+phone+"+'"'+", dashboard)
+        self.assertIn('const url="https://wa.me/"+phone', dashboard)
 
 
 if __name__ == "__main__":
