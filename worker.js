@@ -9,6 +9,7 @@ import shopPortalHtml from "./company/portal.html";
 import shopDashboardHtml from "./shop-dashboard-v30.html";
 import officialLandingHtml from "./go/index.html";
 import ownerConsoleHtml from "./owner-console.html";
+import liveDagaHtml from "./index.html";
 const VOICE_ID = "NG9zqiTuEbX3Nw0gjYcc"; // Previous voice ID backup: PF3gVGPrCr6Dw1WaSSiy
 
 export default {
@@ -23,6 +24,20 @@ export default {
           "Cache-Control": "public, max-age=300",
           "X-Content-Type-Options": "nosniff",
           "Content-Security-Policy": "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"
+        }
+      });
+    }
+
+    if ((url.pathname === "/live" || url.pathname === "/live/") && request.method === "GET") {
+      return new Response(liveDagaHtml, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/html; charset=utf-8",
+          "Cache-Control": "no-store",
+          "Referrer-Policy": "no-referrer",
+          "X-Content-Type-Options": "nosniff",
+          "Permissions-Policy": "camera=(self), microphone=(self)",
+          "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline' https://esm.sh; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob:; connect-src 'self' https: wss:; font-src 'self' data: https:; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
         }
       });
     }
@@ -145,9 +160,10 @@ export default {
           userId = String(url.searchParams.get("userId") || (request.method === "POST" ? body?.userId : "") || "").trim();
         }
         if (!/^[a-f0-9-]{32,36}$/i.test(userId)) return json({ error: "valid_user_identity_required" }, 400);
-        if (!env.DAGA_MEMORY_DB) return json({ error: "persistent_memory_not_configured" }, 503);
+        const memoryDb = env.DAGA_MEMORY_DB || env.DAGA_APP_DB;
+        if (!memoryDb) return json({ error: "persistent_memory_not_configured" }, 503);
         if (request.method === "GET") {
-          const row = await env.DAGA_MEMORY_DB.prepare("SELECT profile_json, history_json, updated_at FROM daga_user_memory WHERE user_id = ?").bind(userId).first();
+          const row = await memoryDb.prepare("SELECT profile_json, history_json, updated_at FROM daga_user_memory WHERE user_id = ?").bind(userId).first();
           return json({ ok: true, persistent: true, memory: row ? { profile: JSON.parse(row.profile_json || "{}"), history: JSON.parse(row.history_json || "[]"), updatedAt: row.updated_at } : { profile: {}, history: [], updatedAt: null } });
         }
         const profile = body?.profile && typeof body.profile === "object" && !Array.isArray(body.profile) ? body.profile : {};
@@ -156,7 +172,7 @@ export default {
         let history = Array.isArray(body?.history) ? body.history.filter(x => x && ["user", "assistant"].includes(x.role) && typeof x.content === "string").slice(-100).map(x => ({ role: x.role, content: x.content.slice(0, 2000) })) : [];
         while (history.length && JSON.stringify(history).length > 120000) history.shift();
         const now = new Date().toISOString();
-        await env.DAGA_MEMORY_DB.prepare("INSERT INTO daga_user_memory (user_id, profile_json, history_json, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET profile_json=excluded.profile_json, history_json=excluded.history_json, updated_at=excluded.updated_at").bind(userId, profileJson, JSON.stringify(history), now).run();
+        await memoryDb.prepare("INSERT INTO daga_user_memory (user_id, profile_json, history_json, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET profile_json=excluded.profile_json, history_json=excluded.history_json, updated_at=excluded.updated_at").bind(userId, profileJson, JSON.stringify(history), now).run();
         return json({ ok: true, persistent: true, updatedAt: now });
       } catch (error) {
         return json({ error: "memory_storage_failed" }, 500);
@@ -174,7 +190,7 @@ export default {
         if (!response.ok) return json({ error: "liveavatar_avatar_lookup_failed", status: response.status }, response.status);
         const avatars = data?.data?.results || [];
         const active = avatars.filter(a => a.status === "ACTIVE");
-        let publicActiveCount = 0;
+        let publicActiveCount = 0, publicHasDaga = false;
         try {
           const publicResponse = await fetch("https://api.liveavatar.com/v1/avatars/public?page=1&page_size=100", {
             headers: { "X-API-KEY": env.LIVEAVATAR_API_KEY, "Accept": "application/json" },
@@ -182,10 +198,13 @@ export default {
           });
           if (publicResponse.ok) {
             const publicData = await publicResponse.json();
-            publicActiveCount = (publicData?.data?.results || []).filter(a => a.status === "ACTIVE" && !a.is_expired).length;
+            const publicActive = (publicData?.data?.results || []).filter(a => a.status === "ACTIVE" && !a.is_expired);
+            publicActiveCount = publicActive.length;
+            publicHasDaga = publicActive.some(a => /daga|ضجه|ضجّة|\bmh\b|محمد\s*حامد/i.test(String(a.name || "")));
           }
         } catch (_) {}
-        return json({ ok: true, count: data?.data?.count ?? avatars.length, activeCount: active.length, hasActiveDaga: active.some(a => /daga|ضجه|ضجّة/i.test(String(a.name || ""))), publicActiveCount });
+        const privateHasDaga = active.some(a => /daga|ضجه|ضجّة|\bmh\b|محمد\s*حامد/i.test(String(a.name || "")));
+        return json({ ok: true, count: data?.data?.count ?? avatars.length, activeCount: active.length, hasActiveDaga: privateHasDaga || publicHasDaga, publicActiveCount });
       } catch (_) { return json({ error: "liveavatar_lookup_failed" }, 502); }
     }
 
@@ -198,6 +217,12 @@ export default {
         if (!account || account.status !== "approved" || account.role === "program_owner") {
           return json({ error: "authenticated_account_required" }, 401);
         }
+        const company = await resolveCompanyVoiceContext(env, account, request.headers.get("X-DAGA-Company-ID") || "");
+        if (company.error) return company.error;
+        if (company.role !== "store_owner" && company.permissions.useLiveDaga !== true) return json({ error: "company_voice_permission_denied", permission: "useLiveDaga" }, 403);
+        const now = new Date().toISOString();
+        const liveEntitlement = await env.DAGA_APP_DB.prepare("SELECT id FROM daga_entitlements WHERE store_id=? AND service='live_daga' AND status='active' AND starts_at<=? AND expires_at>? LIMIT 1").bind(company.storeId, now, now).first();
+        if (!liveEntitlement) return json({ error: "live_daga_subscription_required" }, 402);
       }
       if (!env.LIVEAVATAR_API_KEY) return json({ error: "LIVEAVATAR_API_KEY secret is not configured" }, 503);
       try {
@@ -210,7 +235,20 @@ export default {
           const listData = await listResponse.json();
           if (!listResponse.ok) return json({ error: "liveavatar_avatar_lookup_failed", status: listResponse.status }, listResponse.status);
           const avatars = listData?.data?.results || [];
-          const chosen = avatars.find(a => /daga|ضجه|ضجّة/i.test(String(a.name || "")) && a.status === "ACTIVE") || (avatars.length === 1 && avatars[0].status === "ACTIVE" ? avatars[0] : null);
+          let chosen = avatars.find(a => /daga|ضجه|ضجّة|\bmh\b|محمد\s*حامد/i.test(String(a.name || "")) && a.status === "ACTIVE") || (avatars.length === 1 && avatars[0].status === "ACTIVE" ? avatars[0] : null);
+          if (!chosen) {
+            try {
+              const publicResponse = await fetch("https://api.liveavatar.com/v1/avatars/public?page=1&page_size=100", {
+                headers: { "X-API-KEY": env.LIVEAVATAR_API_KEY, "Accept": "application/json" },
+                signal: AbortSignal.timeout(10000)
+              });
+              if (publicResponse.ok) {
+                const publicData = await publicResponse.json();
+                const publicAvatars = publicData?.data?.results || [];
+                chosen = publicAvatars.find(a => /daga|ضجه|ضجّة|\bmh\b|محمد\s*حامد/i.test(String(a.name || "")) && a.status === "ACTIVE" && !a.is_expired) || null;
+              }
+            } catch (_) {}
+          }
           if (chosen) {
             avatarId = chosen.id;
           } else {
@@ -233,7 +271,7 @@ export default {
     }
 
     if (url.pathname === "/health") {
-      return json({ ok: true, voiceConfigured: Boolean(env.ELEVENLABS_API_KEY), chatConfigured: Boolean(env.OPENAI_API_KEY), freeChatConfigured: Boolean(env.GROQ_API_KEY || env.AI), liveAvatarConfigured: Boolean(env.LIVEAVATAR_API_KEY), liveAvatarIdConfigured: Boolean(env.LIVEAVATAR_AVATAR_ID) });
+      return json({ ok: true, voiceConfigured: Boolean(env.ELEVENLABS_API_KEY), chatConfigured: Boolean(env.OPENAI_API_KEY || env.GROQ_API_KEY || env.AI), freeChatConfigured: Boolean(env.GROQ_API_KEY || env.AI), liveAvatarConfigured: Boolean(env.LIVEAVATAR_API_KEY), liveAvatarIdConfigured: Boolean(env.LIVEAVATAR_AVATAR_ID) });
     }
 
     // Staged identity gate: off by default to preserve the legacy anonymous LIVE DAGA client.
@@ -253,6 +291,23 @@ export default {
         const parsed = await readBoundedJson(request, 32768);
         if (!parsed.ok) return json({ error: parsed.error }, parsed.status);
         const body = parsed.value;
+        if (voiceIdentityRequired) {
+          const company = await resolveCompanyVoiceContext(env, voiceAccount, request.headers.get("X-DAGA-Company-ID") || "");
+          if (company.error) return company.error;
+          const liveMode = body?.mode === "live_daga";
+          const permission = liveMode ? "useLiveDaga" : "useSmartAssistant";
+          if (company.role !== "store_owner" && company.permissions[permission] !== true) {
+            return json({ error: "company_voice_permission_denied", permission }, 403);
+          }
+          const now = new Date().toISOString();
+          if (liveMode) {
+            const liveEntitlement = await env.DAGA_APP_DB.prepare("SELECT id FROM daga_entitlements WHERE store_id=? AND service='live_daga' AND status='active' AND starts_at<=? AND expires_at>? LIMIT 1").bind(company.storeId, now, now).first();
+            if (!liveEntitlement) return json({ error: "live_daga_subscription_required" }, 402);
+          } else {
+            const smartPlan = await env.DAGA_APP_DB.prepare("SELECT e.id FROM daga_entitlements e JOIN daga_plan_orders o ON o.id=e.order_id JOIN daga_plans p ON p.id=o.plan_id WHERE e.store_id=? AND e.service='store' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? AND (json_extract(p.features_json,'$.tier')='smart' OR json_extract(p.features_json,'$.smartAssistantEnabled')=1) LIMIT 1").bind(company.storeId, now, now).first();
+            if (!smartPlan) return json({ error: "smart_store_subscription_required" }, 402);
+          }
+        }
         const userText = String(body?.text || "").trim();
         if (!userText) return json({ error: "text is required" }, 400);
         if (userText.length > 2000) return json({ error: "text_too_long", maxLength: 2000 }, 413);
@@ -281,12 +336,12 @@ export default {
           "الهوية والملكية: مالك ومؤسس البرنامج هو محمد حامد. هذه معلومة عن صاحب البرنامج وليست اسم المساعد، وليست دليلًا أن كل شخص يتحدث معك هو محمد حامد. لا تنادِ المستخدم باسم محمد حامد ولا تعتبره المالك إلا إذا عرّف نفسه بذلك في المحادثة أو أثبتت بيانات الحساب ذلك. عندما يقول المستخدم صراحة «أنا محمد حامد» أو يعرّف نفسه باسم آخر، استخدم الاسم في سياق هذه المحادثة واحترم تصحيحاته. لا تدّعِ أنك تتذكر الاسم في محادثة جديدة إلا إذا وصلتك ذاكرة فعلية.",
           "تعامل مع أول تعريف من المستخدم باعتباره ملفه الشخصي في هذه المحادثة: استخرج الاسم والصفة التي صرّح بها، واستخدمهما بشكل طبيعي. استدل على التذكير أو التأنيث من صيغة تعريف المستخدم وضمائره وكلامه، لكن لا تخمّن الجنس من الاسم وحده إذا كان ملتبسًا؛ عند الحاجة اسأل مرة واحدة بلطف. لا تتحدث مع الجميع بصيغة واحدة عمياء، ولا تغيّر صيغة مخاطبة المستخدم بلا سبب.",
           "افهم المقصود وسياق آخر الرسائل قبل الرد. أجب مباشرة عن السؤال المحدد، ووازن طول الرد مع السؤال: مختصر في البسيط، ومفصل عند الحاجة. لا تستخدم إجابات محفوظة أو افتتاحيات متكررة، ولا تكرر كلام المستخدم، ولا تتهرب من السؤال بنصائح عامة. إذا كان هناك أكثر من تفسير مؤثر، اسأل سؤالًا واحدًا واضحًا.",
-          "قاعدة أولوية صارمة: السؤال الحالي هو الأهم. لا تحوّل سؤالًا بسيطًا مثل «دورك إيه معايا؟» إلى قائمة مهام أو معلومات عن المحل. اشرح دورك بجملة أو جملتين مرتبطتين بالسؤال فقط، ثم اعرض سؤال متابعة واحدًا إذا كان مفيدًا. لا تنقل إجابة من موضوع سابق لمجرد أنه موجود في سجل المحادثة أو سياق العمل.",
-          "قاعدة منع الخلط: اقرأ آخر رسالة للمستخدم وحدها أولًا وحدد المطلوب منها في داخلك. اكتب إجابة مباشرة عن هذا المطلوب فقط. لا تذكر كلمات أو أسماء أو أمثلة غير لازمة للسؤال. ممنوع إدخال اسم جمال أو مجدي أو أي اسم آخر إلا إذا ذكره المستخدم في سؤاله أو كان ضروريًا للإجابة. لا تعتذر ولا تشرح أنك ستصحح الكلام؛ نفّذ المطلوب مباشرة. إذا كان السؤال عن دورك، أجب مثل: «دوري أساعدك في اللي تحتاجه، وأفهم سؤالك وأرد عليك بوضوح.» ولا تسرد مهام المحل إلا إذا سأل عنها صراحة.",
-          "استخدم سجل المحادثة السابق فقط لحل الإشارات مثل «ده» و«اللي فات» أو لاستمرار موضوع واضح. إذا كان السؤال الحالي موضوعًا جديدًا، تجاهل التاريخ غير المرتبط. سياق العمل الثابت يصف طبيعة التطبيق ولا يعني أن المستخدم طلب شرح مهام المحل. لا تخلط بين معرفة ما يستطيع المساعد فعله وبين الادعاء أنه نفذ إجراءً فعليًا.",
+          "قاعدة أولوية صارمة: السؤال الحالي هو الأهم. لا تحوّل سؤالًا بسيطًا مثل «دورك إيه معايا؟» إلى قائمة مهام أو معلومات عن الشركة. اشرح دورك بجملة أو جملتين مرتبطتين بالسؤال فقط، ثم اعرض سؤال متابعة واحدًا إذا كان مفيدًا. لا تنقل إجابة من موضوع سابق لمجرد أنه موجود في سجل المحادثة أو سياق العمل.",
+          "قاعدة منع الخلط: اقرأ آخر رسالة للمستخدم وحدها أولًا وحدد المطلوب منها في داخلك. اكتب إجابة مباشرة عن هذا المطلوب فقط. لا تذكر كلمات أو أسماء أو أمثلة غير لازمة للسؤال. ممنوع إدخال اسم جمال أو مجدي أو أي اسم آخر إلا إذا ذكره المستخدم في سؤاله أو كان ضروريًا للإجابة. لا تعتذر ولا تشرح أنك ستصحح الكلام؛ نفّذ المطلوب مباشرة. إذا كان السؤال عن دورك، أجب مثل: «دوري أساعدك في اللي تحتاجه، وأفهم سؤالك وأرد عليك بوضوح.» ولا تسرد مهام الشركة إلا إذا سأل عنها صراحة.",
+          "استخدم سجل المحادثة السابق فقط لحل الإشارات مثل «ده» و«اللي فات» أو لاستمرار موضوع واضح. إذا كان السؤال الحالي موضوعًا جديدًا، تجاهل التاريخ غير المرتبط. سياق العمل الثابت يصف طبيعة التطبيق ولا يعني أن المستخدم طلب شرح مهام الشركة. لا تخلط بين معرفة ما يستطيع المساعد فعله وبين الادعاء أنه نفذ إجراءً فعليًا.",
           "وحدة اللغة: استخدم عامية مصرية قاهرية طبيعية مع قواعد عربية سليمة. حلّل كل جملة صرفيًا ونحويًا قبل الرد: حدّد المتكلم والمخاطب، والفاعل والمفعول، والزمن، والنفي، والعدد، والتذكير والتأنيث، والضمائر، وتطابق الفعل والصفة مع الاسم. حافظ على اتجاه الأدوار؛ لا تبدّل المتكلم بالمخاطب ولا الفاعل بالمفعول. استخدم صيغة المتكلم والمخاطب المتوافقة مع المعنى والسياق، وميّز بين قواعد الفصحى والاستعمال المصري الدارج بدل تطبيق إحداهما آليًا على الأخرى. طبّق قواعد الإعراب والتنوين في الفصحى عند الحاجة، ولا تفرضها على العامية. كوّن النطق من التحليل الصرفي والنحوي والسياق الصوتي، لا من قائمة كلمات محفوظة أو استثناءات معجمية موضوعة يدويًا. إذا كان السياق لا يحسم القراءة، لا تخترع قاعدة؛ استخدم القراءة الأكثر طبيعية في اللهجة المطلوبة.",
           "وحدة النطق: انطق العامية المصرية القاهرية وفق نظامها الصوتي الطبيعي، مع التمييز بين الأصوات العربية المتقاربة اعتمادًا على علم الأصوات وبنية الكلمة والصرف والنحو والسياق والوصل والوقف. لا تستنتج النطق من شكل الحرف الأخير وحده، ولا تعمم قاعدة فصحى على العامية بلا تحقق، ولا تغيّر النص المكتوب لمجرد معالجة النطق. لا تستخدم قائمة تهجئات صوتية أو استبدالات خاصة بكلمات منفردة؛ استنتج القراءة المناسبة من القواعد العامة والسياق، وحافظ على معنى الجملة ونصها الإملائي.",
-          "استعمل سجل المحادثة والذاكرة المرسلة لفهم الإشارات والتصحيحات، وقدّم أحدث تصحيح على القديم. لا تختلق ذكريات أو معلومات شخصية. لا تخترع أرقامًا أو بيانات محل؛ استخدم فقط البيانات التي أُرسلت فعلًا، ولا تدّع تنفيذ شيء لم تنفذه.",
+          "استعمل سجل المحادثة والذاكرة المرسلة لفهم الإشارات والتصحيحات، وقدّم أحدث تصحيح على القديم. لا تختلق ذكريات أو معلومات شخصية. لا تخترع أرقامًا أو بيانات شركة؛ استخدم فقط البيانات التي أُرسلت فعلًا، ولا تدّع تنفيذ شيء لم تنفذه.",
           "راجع الرد أخيرًا: هل جاوب السؤال فعلًا؟ هل الاسم والهوية والضمائر صحيحة؟ هل الصرف والنحو طبيعيان؟ هل توجد جملة زائدة أو معلومة مخترعة؟ أصلحها قبل الإرسال."
         ].join("\n") + verifiedIdentityContext + (memory ? "\n\nذاكرة المستخدم المتاحة (مرجع سياقي، استخدم المرتبط بالسؤال فقط): " + memory : "") + (businessContext ? "\n\nسياق العمل الثابت (ليس بيانات حية): " + businessContext : "");
         const failures = [];
@@ -351,6 +406,10 @@ export default {
     if (url.pathname !== "/tts" || request.method !== "POST") return json({ error: "Not found" }, 404);
 
     try {
+      if (voiceIdentityRequired) {
+        const permissionDenied = await enforceCompanyVoicePermission(env, voiceAccount, "useLiveDaga", request.headers.get("X-DAGA-Company-ID") || "");
+        if (permissionDenied) return permissionDenied;
+      }
       if (!env.ELEVENLABS_API_KEY) return json({ error: "DAGA voice is not configured" }, 503);
       const parsed = await readBoundedJson(request, 16384);
       if (!parsed.ok) return json({ error: parsed.error }, parsed.status);
@@ -369,24 +428,26 @@ export default {
       if (String(env.DAGA_LIVE_QUOTA_ENFORCE || "").toLowerCase() === "true") {
         if (!env.DAGA_APP_DB) return json({ error: "live_quota_not_configured" }, 503);
         const account = voiceAccount || await authenticatedAccount(request, env.DAGA_APP_DB);
-        if (!account || account.status !== "approved" || account.role === "program_owner" || !account.store_id) return json({ error: "approved_shop_account_required" }, 401);
+        if (!account || account.status !== "approved" || account.role === "program_owner") return json({ error: "approved_shop_account_required" }, 401);
+        const company = await resolveCompanyVoiceContext(env, account, request.headers.get("X-DAGA-Company-ID") || "");
+        if (company.error) return company.error;
+        if (company.role !== "store_owner" && company.permissions.useLiveDaga !== true) return json({ error: "company_voice_permission_denied", permission: "useLiveDaga" }, 403);
+        const storeId = company.storeId;
         const quotaNow = new Date().toISOString();
-        const smartPlan = await env.DAGA_APP_DB.prepare("SELECT e.id FROM daga_entitlements e JOIN daga_plan_orders o ON o.id=e.order_id JOIN daga_plans p ON p.id=o.plan_id WHERE e.account_id=? AND e.store_id=? AND e.service='store' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? AND (json_extract(p.features_json,'$.tier')='smart' OR json_extract(p.features_json,'$.smartAssistantEnabled')=1) LIMIT 1").bind(account.id, account.store_id, quotaNow, quotaNow).first();
-        if (!smartPlan) return json({ error: "smart_store_subscription_required" }, 402);
-        const entitlement = await env.DAGA_APP_DB.prepare("SELECT id FROM daga_entitlements WHERE store_id=? AND service='live_daga' AND status='active' AND starts_at<=? AND expires_at>? LIMIT 1").bind(account.store_id, quotaNow, quotaNow).first();
+        const entitlement = await env.DAGA_APP_DB.prepare("SELECT id FROM daga_entitlements WHERE store_id=? AND service='live_daga' AND status='active' AND starts_at<=? AND expires_at>? LIMIT 1").bind(storeId, quotaNow, quotaNow).first();
         if (!entitlement) return json({ error: "live_daga_subscription_required" }, 402);
 
         // Count Unicode code points in the exact, pronunciation-adjusted text sent to ElevenLabs.
         const characters = Array.from(text).length;
         const requestId = "tts:" + crypto.randomUUID();
         const debit = await env.DAGA_APP_DB.prepare("INSERT INTO daga_live_word_ledger (id,account_id,store_id,event_type,words,request_id,note) SELECT ?,?,?,'debit',?,?,? WHERE (SELECT COALESCE(SUM(CASE WHEN event_type IN ('credit','adjustment','refund') THEN words ELSE -words END),0) FROM daga_live_word_ledger WHERE store_id=?) >= ? AND EXISTS (SELECT 1 FROM daga_entitlements WHERE store_id=? AND service='live_daga' AND status='active' AND starts_at<=? AND expires_at>?)")
-          .bind(crypto.randomUUID(), account.id, account.store_id, characters, requestId, "LIVE DAGA generated text characters", account.store_id, characters, account.store_id, quotaNow, quotaNow).run();
+          .bind(crypto.randomUUID(), account.id, storeId, characters, requestId, "LIVE DAGA generated text characters", storeId, characters, storeId, quotaNow, quotaNow).run();
         if (!debit.meta || debit.meta.changes !== 1) {
-          const ledger = await env.DAGA_APP_DB.prepare("SELECT COALESCE(SUM(CASE WHEN event_type IN ('credit','adjustment','refund') THEN words ELSE -words END),0) AS remaining FROM daga_live_word_ledger WHERE store_id=?").bind(account.store_id).first();
+          const ledger = await env.DAGA_APP_DB.prepare("SELECT COALESCE(SUM(CASE WHEN event_type IN ('credit','adjustment','refund') THEN words ELSE -words END),0) AS remaining FROM daga_live_word_ledger WHERE store_id=?").bind(storeId).first();
           const remaining = Number(ledger && ledger.remaining || 0);
           return json({ error: remaining < characters ? "live_daga_quota_insufficient" : "live_daga_subscription_required", requiredCharacters: characters, remainingCharacters: remaining }, 402);
         }
-        quota = { accountId: account.id, storeId: account.store_id, characters, requestId };
+        quota = { accountId: account.id, storeId: storeId, characters, requestId };
       }
 
       const refundQuota = async () => {
@@ -503,3 +564,37 @@ function extractModelText(result) {
   }
   return "";
 }
+
+async function resolveCompanyVoiceContext(env, account, selectedCompanyId = "") {
+  const db = env.DAGA_APP_DB;
+  if (!db) return { error: json({ error: "company_permission_database_not_configured" }, 503) };
+  if (!account || account.status !== "approved" || account.role === "program_owner") return { error: json({ error: "authenticated_account_required" }, 401) };
+  const selected = String(selectedCompanyId || "").trim();
+
+  if (account.role === "store_owner") {
+    const owned = await db.prepare("SELECT id FROM daga_stores WHERE owner_account_id=? AND status='approved' AND (?='' OR id=?) ORDER BY created_at DESC LIMIT 2").bind(account.id, selected, selected).all();
+    const stores = owned.results || [];
+    if (stores.length !== 1) return { error: json({ error: stores.length > 1 || !selected ? "company_selection_required" : "company_membership_required" }, 403) };
+    return { storeId: stores[0].id, role: "store_owner", permissions: {} };
+  }
+
+  if (!["manager", "employee"].includes(account.role)) return { error: json({ error: "company_membership_required" }, 403) };
+  const rows = await db.prepare("SELECT m.store_id,m.role,m.permissions_json FROM daga_store_memberships m JOIN daga_stores s ON s.id=m.store_id WHERE m.account_id=? AND m.status='active' AND m.role IN ('manager','employee') AND s.status='approved' AND (?='' OR m.store_id=?) ORDER BY m.created_at DESC LIMIT 2").bind(account.id, selected, selected).all();
+  const memberships = rows.results || [];
+  if (memberships.length !== 1 || memberships[0].role !== account.role) {
+    return { error: json({ error: memberships.length > 1 || !selected ? "company_selection_required" : "company_membership_required" }, 403) };
+  }
+  let permissions = {};
+  try { permissions = JSON.parse(memberships[0].permissions_json || "{}"); } catch (_) {}
+  return { storeId: memberships[0].store_id, role: memberships[0].role, permissions };
+}
+
+async function enforceCompanyVoicePermission(env, account, permissionKey, selectedCompanyId = "") {
+  const context = await resolveCompanyVoiceContext(env, account, selectedCompanyId);
+  if (context.error) return context.error;
+  if (context.role !== "store_owner" && context.permissions[permissionKey] !== true) {
+    return json({ error: "company_voice_permission_denied", permission: permissionKey }, 403);
+  }
+  return null;
+}
+

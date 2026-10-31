@@ -31,16 +31,21 @@ class ShopSelfRegistrationTests(unittest.TestCase):
         self.assertIn('store.onboarding_status!=="preliminary_approved"', admin)
         self.assertIn('"preliminary_approved"', admin)
         self.assertIn("onboarding_status", admin)
-        self.assertIn("contact_phone", auth)
+        self.assertIn("contact_phone", auth)  # legacy storage column retained for compatibility
+        self.assertIn("b.contactPhone", auth)  # company support contact, not login
+        self.assertIn('.bind(id,email,owner,name,contactPhone,internalIdentity,destinationHash,codeHash,expires).run();', auth)
         self.assertIn("onboardingContactPhone", (ROOT / "company" / "portal.html").read_text(encoding="utf-8"))
         self.assertIn("data-wa-store", (ROOT / "owner-console.html").read_text(encoding="utf-8"))
+        self.assertIn("company.contactPhone", dashboard)
+        self.assertNotIn('const phone="201020124846"', dashboard)
         self.assertIn("company.ledgerEnabled!==true", dashboard)
         self.assertIn("daga_entitlements", auth)
 
     def test_shop_data_is_not_opened_before_active_entitlement(self):
         auth = (ROOT / "shop-auth.js").read_text(encoding="utf-8")
-        self.assertIn("service='store' AND status='active' AND expires_at>?", auth)
-        self.assertIn("/api/shop/auth/me", (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8"))
+        self.assertIn("e.service='store' AND e.status='active' AND e.starts_at<=? AND e.expires_at>?", auth)
+        self.assertIn("/api/company/auth/me", (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8"))
+        self.assertIn("ledgerEnabled: Boolean(storeEntitlement)", (ROOT / "company-invitations.js").read_text(encoding="utf-8"))
 
 if __name__ == "__main__":
     unittest.main()

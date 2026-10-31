@@ -23,8 +23,8 @@ jobs:
               "LIVE DAGA quota uses one explicit UTC timestamp for entitlement checks":
                   'const quotaNow = new Date().toISOString();' in worker
                   and 'starts_at<=? AND expires_at>?' in worker
-                  and 'account.store_id, quotaNow, quotaNow' in worker
-                  and 'account.store_id, quotaNow, quotaNow).run()' in worker,
+                  and 'storeId, quotaNow, quotaNow' in worker
+                  and 'storeId, quotaNow, quotaNow).run()' in worker,
               "LIVE DAGA refunds quota after provider failures":
                   "const refundQuota = async () =>" in worker
                   and "await refundQuota();" in worker,
