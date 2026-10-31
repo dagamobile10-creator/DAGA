@@ -240,10 +240,11 @@ export async function handleOwnerAdmin(request, env, url) {
       if(b.status==="preliminary_approved" && store.onboarding_status!=="pending")return json(env,{error:"store_not_pending_preliminary_approval"},409);
       const now=new Date().toISOString();
       if(b.status==="preliminary_approved"){
-        await db.batch([
+        const approvalResults=await db.batch([
           db.prepare("UPDATE daga_stores SET status='approved',onboarding_status='preliminary_approved',updated_at=? WHERE id=? AND status='pending'").bind(now,store.id),
           db.prepare("UPDATE daga_accounts SET status='approved',updated_at=? WHERE id=? AND role='store_owner' AND status='pending'").bind(now,store.owner_account_id)
         ]);
+        if(approvalResults.some(result=>Number(result?.meta?.changes||0)!==1))return json(env,{error:"company_preliminary_approval_conflict_retry"},409);
       }else if(b.status==="approved"){
         return json(env,{error:"final_payment_confirmation_required",message:"لا يمكن تفعيل الشركه من قرار الموافقة العام. استخدم إجراء التفعيل النهائي بعد مراجعة إثبات الدفع وتأكيد استلام المبلغ."},409);
       }else{
