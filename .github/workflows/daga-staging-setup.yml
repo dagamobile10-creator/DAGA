@@ -120,7 +120,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
-          npx --yes wrangler@3.90.0 d1 execute daga-app-staging --remote --config wrangler.staging.toml --command "SELECT 'active_plans' AS item, COUNT(*) AS count FROM daga_plans WHERE is_active=1 UNION ALL SELECT 'active_payment_methods', COUNT(*) FROM daga_payment_methods WHERE is_active=1;"
+          npx --yes wrangler@3.90.0 d1 execute daga-app-staging --remote --config wrangler.staging.toml --command "SELECT service AS item, COUNT(*) AS count FROM daga_plans WHERE is_active=1 GROUP BY service UNION ALL SELECT 'active_payment_methods', COUNT(*) FROM daga_payment_methods WHERE is_active=1;"
       - name: Deploy isolated staging Worker
         uses: cloudflare/wrangler-action@v3
         with:
