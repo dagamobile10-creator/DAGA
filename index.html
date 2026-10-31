@@ -64,6 +64,13 @@ function normalizeArabicInput(value){ return String(value||'').replace(/\bplus\b
 // Optional authenticated session bridge. Existing LIVE DAGA remains compatible when no session is present.
 const DAGA_SESSION_KEY='daga_account_session_v1';
 function dagaAuthHeaders(extra={}){const headers={...extra};try{const token=sessionStorage.getItem(DAGA_SESSION_KEY);if(token&&token.length<=4096)headers.Authorization='Bearer '+token}catch(e){}return headers}
+if(window.opener){
+  window.addEventListener('message',event=>{
+    if(event.origin!==location.origin||event.source!==window.opener||!event.data||event.data.type!=='DAGA_AUTH'||typeof event.data.token!=='string'||!event.data.token||typeof event.data.companyId!=='string')return;
+    try{sessionStorage.setItem(DAGA_SESSION_KEY,event.data.token);window.DAGA_STORE_ID=event.data.companyId;refreshIdentity();}catch(_){}
+  });
+  window.opener.postMessage('DAGA_ASSISTANT_READY',location.origin);
+}
 const DAGA_MEMORY_KEY='daga_mh_memory_v1';
 const DAGA_PROFILE_KEY='daga_mh_long_memory_v1';
 const DAGA_SERVER_USER_KEY='daga_mh_server_user_v1';
