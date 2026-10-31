@@ -27,7 +27,7 @@ class NavigationRouteTests(unittest.TestCase):
     def test_live_navigation_uses_worker_origin_for_worker_pages(self):
         for path in ("/go/", "/company/", "/owner-console/"):
             with self.subTest(path=path):
-                self.assertIn("DAGA_API_BASE" + path, self.live)
+                self.assertIn("DAGA_API_BASE+'" + path + "'", self.live)
                 self.assertIn("DAGA_API_BASE = new URLSearchParams", self.live)
 
     def test_navigation_pages_link_to_each_other(self):
