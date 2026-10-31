@@ -40,7 +40,8 @@ class ShopSelfRegistrationTests(unittest.TestCase):
     def test_shop_data_is_not_opened_before_active_entitlement(self):
         auth = (ROOT / "shop-auth.js").read_text(encoding="utf-8")
         self.assertIn("e.service='store' AND e.status='active' AND e.starts_at<=? AND e.expires_at>?", auth)
-        self.assertIn("/api/shop/auth/me", (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8"))
+        self.assertIn("/api/company/auth/me", (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8"))
+        self.assertIn("ledgerEnabled: Boolean(storeEntitlement)", (ROOT / "company-invitations.js").read_text(encoding="utf-8"))
 
 if __name__ == "__main__":
     unittest.main()
