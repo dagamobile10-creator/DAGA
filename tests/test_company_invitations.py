@@ -722,6 +722,8 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertIn('authenticatedAccount(request, env.DAGA_APP_DB)', route)
         self.assertIn('account.status !== "approved"', route)
         self.assertIn('account.role === "program_owner"', route)
+        self.assertIn('https://api.liveavatar.com/v1/avatars/public', route)
+        self.assertIn('LIVEAVATAR_AVATAR_ID', route)
         self.assertLess(route.index('DAGA_VOICE_REQUIRE_AUTH'), route.index('if (!env.LIVEAVATAR_API_KEY)'))
 
 
