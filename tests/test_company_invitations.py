@@ -231,7 +231,7 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertIn("a.status='approved'", admin)
         self.assertIn("s.status='approved' AND s.onboarding_status='preliminary_approved'", admin)
         self.assertIn("WHERE id=? AND role='store_owner' AND status='approved'", admin)
-        self.assertIn("WHERE id=? AND status='approved'", auth)
+        self.assertIn("WHERE owner_account_id=? AND status='approved'", auth)
         self.assertIn("company.ledgerEnabled!==true", dashboard)
         self.assertIn("onboarding_order_id=CASE WHEN onboarding_status='preliminary_approved'", admin)
         self.assertIn("reviewResults.some(result => Number(result?.meta?.changes || 0) !== 1)", admin)
