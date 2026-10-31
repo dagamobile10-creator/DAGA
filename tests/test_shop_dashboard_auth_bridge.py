@@ -111,9 +111,19 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn('paymentManuallyConfirmed:true', admin)
         self.assertIn('paymentConfirmed!==true', admin)
 
+    def test_live_daga_chat_uses_live_entitlement_not_smart_plan(self):
+        worker = (ROOT / "worker.js").read_text(encoding="utf-8")
+        live = (ROOT / "index.html").read_text(encoding="utf-8")
+        chat = worker[worker.index('if (url.pathname === "/chat"'):worker.index('if (url.pathname !== "/tts"')]
+        self.assertIn("body?.mode === \"live_daga\"", chat)
+        self.assertIn('permission = liveMode ? "useLiveDaga" : "useSmartAssistant"', chat)
+        self.assertIn("service='live_daga'", chat)
+        self.assertIn("smart_store_subscription_required", chat)
+        self.assertIn("mode:'live_daga'", live)
+
     def test_voice_routes_enforce_member_permissions_independently(self):
         worker = (ROOT / "worker.js").read_text(encoding="utf-8")
-        self.assertIn('company.permissions.useSmartAssistant !== true', worker)
+        self.assertIn('const permission = liveMode ? "useLiveDaga" : "useSmartAssistant"', worker)
         self.assertIn('company.permissions.useLiveDaga !== true', worker)
         self.assertIn('context.permissions[permissionKey] !== true', worker)
         self.assertIn('company_voice_permission_denied', worker)
