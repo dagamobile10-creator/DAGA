@@ -128,5 +128,14 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn('context.permissions[permissionKey] !== true', worker)
         self.assertIn('company_voice_permission_denied', worker)
 
+    def test_authenticated_company_profile_returns_company_whatsapp_contact(self):
+        auth = (ROOT / "shop-auth.js").read_text(encoding="utf-8")
+        self.assertIn("display_name,contact_phone,status FROM daga_stores", auth)
+        self.assertIn("contactPhone:store.contact_phone||\"\"", auth)
+        dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
+        self.assertIn("user.contactPhone", dashboard)
+        self.assertIn("https://wa.me/"+'"+phone+"', dashboard)
+
+
 if __name__ == "__main__":
     unittest.main()
