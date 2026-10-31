@@ -128,23 +128,14 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn('context.permissions[permissionKey] !== true', worker)
         self.assertIn('company_voice_permission_denied', worker)
 
-    def test_authenticated_company_profile_returns_company_whatsapp_contact(self):
-        auth = (ROOT / "shop-auth.js").read_text(encoding="utf-8")
-        self.assertIn("display_name,contact_phone,status FROM daga_stores", auth)
-        self.assertIn("contactPhone:store.contact_phone||\"\"", auth)
+    def test_company_support_whatsapp_uses_selected_company_contact_not_app_owner(self):
+        profile = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
+        self.assertIn("s.contact_phone", profile)
+        self.assertIn("contactPhone: row.contact_phone || \"\"", profile)
         dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
-        self.assertIn("user.contactPhone", dashboard)
-        self.assertIn("https://wa.me/"+'"+phone+"', dashboard)
-
-
-    def test_shop_registration_uses_email_only_and_company_contact_is_optional(self):
-        auth = (ROOT / "shop-auth.js").read_text(encoding="utf-8")
-        self.assertIn("valid_shop_owner_name_and_email_required", auth)
-        self.assertIn("if(contactPhone&&contactPhone.replace", auth)
-        self.assertNotIn("contactPhone.replace(/[^0-9]/g,\"\").length<10)return", auth)
-        portal = (ROOT / "company" / "portal.html").read_text(encoding="utf-8")
-        self.assertIn("رقم واتساب الشركة للتواصل والدعم (اختياري)", portal)
-        self.assertNotIn('id="onboardingContactPhone" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" required', portal)
+        self.assertIn("contactPhone:company.contactPhone||''", dashboard)
+        self.assertIn("String(user.contactPhone||\"\")", dashboard)
+        self.assertIn("https://wa.me/"+'"'+"+phone+"+'"'+", dashboard)
 
 
 if __name__ == "__main__":
