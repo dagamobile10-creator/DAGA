@@ -302,7 +302,7 @@ window.__dagaStopLiveAvatar=async function(){
    try{sessionStorage.setItem('daga_account_session_v1',data.token);sessionStorage.setItem('daga_company_id_v1',data.companyId);}catch(_){state.textContent='تعذر حفظ جلسة الشركة على هذا المتصفح';state.style.color='var(--red)';return;}
    state.textContent='تم استلام جلسة الشركة؛ جاري التحقق…';state.style.color='var(--muted)';await refreshIdentity();
   });
-  window.addEventListener('load',()=>{try{window.opener.postMessage('DAGA_LIVE_READY','https://dagamobile10-creator.github.io')}catch(_){}});
+  window.addEventListener('load',()=>{try{window.opener.postMessage('DAGA_LIVE_READY',new URLSearchParams(location.search).get('api')==='staging'?'https://daga-app-staging.dagamobile10.workers.dev':'https://dagamobile10-creator.github.io')}catch(_){}});
  }
  send.addEventListener('click',()=>busy(send,async()=>{const email=$('dagaAuthIdentifier').value.trim(),password=$('dagaAuthPassword').value;if(!email||!password)throw new Error('اكتب البريد الإلكتروني وكلمة المرور');const data=await authApi('/api/company/auth/login',{email,password},'POST',false);if(!data.sessionToken)throw new Error('session_token_missing');sessionStorage.setItem('daga_account_session_v1',data.sessionToken);state.textContent='تم تسجيل الدخول، جاري التحقق…';await refreshIdentity()}));
  logout.addEventListener('click',()=>busy(logout,async()=>{try{await authApi('/api/company/auth/logout',{},'POST',true)}finally{try{sessionStorage.removeItem('daga_account_session_v1')}catch(e){}$('dagaAuthFields').style.display='grid';send.style.display='inline-block';logout.style.display='none';state.textContent='تم فصل الحساب؛ المساعد متاح بدون ربط';state.style.color='var(--muted)'}}));
