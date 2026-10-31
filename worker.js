@@ -517,10 +517,15 @@ function extractModelText(result) {
 async function enforceCompanyVoicePermission(env, account, permissionKey) {
   if (!env.DAGA_APP_DB) return json({ error: "company_permission_database_not_configured" }, 503);
   if (!account || account.status !== "approved" || account.role === "program_owner") return json({ error: "authenticated_account_required" }, 401);
-  if (account.role === "store_owner") return null;
-  if (!["manager", "employee"].includes(account.role) || !account.store_id) return json({ error: "company_membership_required" }, 403);
-  const membership = await env.DAGA_APP_DB.prepare("SELECT permissions_json FROM daga_store_memberships WHERE store_id=? AND account_id=? AND status='active' LIMIT 1").bind(account.store_id, account.id).first();
-  if (!membership) return json({ error: "company_membership_required" }, 403);
+  if (!account.store_id) return json({ error: "company_membership_required" }, 403);
+  const store = await env.DAGA_APP_DB.prepare("SELECT id,owner_account_id,status FROM daga_stores WHERE id=? LIMIT 1").bind(account.store_id).first();
+  if (!store || store.status !== "approved") return json({ error: "company_membership_required" }, 403);
+  if (account.role === "store_owner") {
+    return store.owner_account_id === account.id ? null : json({ error: "company_membership_required" }, 403);
+  }
+  if (!["manager", "employee"].includes(account.role)) return json({ error: "company_membership_required" }, 403);
+  const membership = await env.DAGA_APP_DB.prepare("SELECT role,permissions_json FROM daga_store_memberships WHERE store_id=? AND account_id=? AND status='active' LIMIT 1").bind(store.id, account.id).first();
+  if (!membership || membership.role !== account.role) return json({ error: "company_membership_required" }, 403);
   let permissions = {};
   try { permissions = JSON.parse(membership.permissions_json || "{}"); } catch (_) {}
   if (permissions[permissionKey] !== true) return json({ error: "company_voice_permission_denied", permission: permissionKey }, 403);
