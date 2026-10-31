@@ -277,9 +277,10 @@ export async function handleOwnerAdmin(request, env, url) {
         const entitlementId=crypto.randomUUID(), starts=now, expires=new Date(Date.now()+Number(sub.duration_days)*86400000).toISOString();
         statements.push(db.prepare("INSERT INTO daga_entitlements (id,account_id,store_id,service,order_id,starts_at,expires_at,status) SELECT ?,?,?,?,?,?,?,'active' WHERE EXISTS (SELECT 1 FROM daga_payment_submissions ps JOIN daga_plan_orders o ON o.id=ps.order_id WHERE ps.id=? AND ps.status='confirmed' AND ps.reviewed_by=? AND ps.reviewed_at=? AND o.status='paid_approved')").bind(entitlementId,sub.account_id,sub.store_id,sub.service,sub.order_id,starts,expires,sub.id,owner.id,now));
         if(sub.service==="live_daga"&&Number(sub.word_quota)>0) statements.push(db.prepare("INSERT INTO daga_live_word_ledger (id,account_id,store_id,order_id,event_type,words,request_id,note) SELECT ?,?,?,?,'credit',?,?,? WHERE EXISTS (SELECT 1 FROM daga_payment_submissions ps JOIN daga_plan_orders o ON o.id=ps.order_id WHERE ps.id=? AND ps.status='confirmed' AND ps.reviewed_by=? AND ps.reviewed_at=? AND o.status='paid_approved')").bind(crypto.randomUUID(),sub.account_id,sub.store_id,sub.order_id,Number(sub.word_quota),"order:"+sub.order_id,"Owner-confirmed LIVE DAGA purchase",sub.id,owner.id,now));
+        if(sub.service==="store") statements.push(db.prepare("UPDATE daga_stores SET onboarding_status=CASE WHEN onboarding_status='preliminary_approved' THEN 'approved' ELSE onboarding_status END,onboarding_order_id=CASE WHEN onboarding_status='preliminary_approved' AND onboarding_order_id IS NULL THEN ? ELSE onboarding_order_id END,updated_at=? WHERE id=? AND status='approved' AND EXISTS (SELECT 1 FROM daga_plan_orders WHERE id=? AND status='paid_approved')").bind(sub.order_id,now,sub.store_id,sub.order_id));
       }
       const reviewResults = await db.batch(statements);
-      if (Number(reviewResults?.[0]?.meta?.changes || 0) !== 1 || Number(reviewResults?.[1]?.meta?.changes || 0) !== 1) {
+      if (reviewResults.some(result => Number(result?.meta?.changes || 0) !== 1)) {
         return json(env, {error:"payment_review_state_changed_retry"},409);
       }
       await audit(db,owner.id,"payment_reviewed","daga_payment_submissions",sub.id,{status:b.status,orderId:sub.order_id});
