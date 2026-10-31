@@ -514,10 +514,10 @@ function sendDagaLiveSnapshot(){
  const frame=document.getElementById('dagaLiveFrame');
  if(!frame||!frame.contentWindow||!document.getElementById('dagaLiveFullscreen')||document.getElementById('dagaLiveFullscreen').style.display==='none')return;
  const snapshot={updatedAt:new Date().toISOString(),source:'DAGA Dashboard V30',readOnly:true,columns:(Array.isArray(cols)?cols:[]).map(c=>({name:String(c.name||''),entries:(Array.isArray(c.entries)?c.entries:[]).map(e=>({name:String(e[0]??''),amount:Number(String(e[1]??0).replace(/[^0-9.-]/g,''))||0}))}))};
- try{frame.contentWindow.postMessage({type:'DAGA_DASHBOARD_SNAPSHOT',snapshot},'https://dagamobile10-creator.github.io');}catch(e){console.warn('LIVE DAGA snapshot send failed',e)}
+ try{frame.contentWindow.postMessage({type:'DAGA_DASHBOARD_SNAPSHOT',snapshot},'https://daga-app-staging.dagamobile10.workers.dev');}catch(e){console.warn('LIVE DAGA snapshot send failed',e)}
 }
 window.addEventListener('message',function(event){
- if(event.origin!=='https://dagamobile10-creator.github.io')return;
+ if(event.origin!=='https://daga-app-staging.dagamobile10.workers.dev')return;
  if(event.source!==document.getElementById('dagaLiveFrame')?.contentWindow)return;
  if(event.data&&event.data.type==='DAGA_LIVE_REQUEST_SNAPSHOT')sendDagaLiveSnapshot();
 });
