@@ -9,6 +9,7 @@ import shopPortalHtml from "./company/portal.html";
 import shopDashboardHtml from "./shop-dashboard-v30.html";
 import officialLandingHtml from "./go/index.html";
 import ownerConsoleHtml from "./owner-console.html";
+import liveDagaHtml from "./index.html";
 const VOICE_ID = "NG9zqiTuEbX3Nw0gjYcc"; // Previous voice ID backup: PF3gVGPrCr6Dw1WaSSiy
 
 export default {
@@ -23,6 +24,20 @@ export default {
           "Cache-Control": "public, max-age=300",
           "X-Content-Type-Options": "nosniff",
           "Content-Security-Policy": "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"
+        }
+      });
+    }
+
+    if ((url.pathname === "/live" || url.pathname === "/live/") && request.method === "GET") {
+      return new Response(liveDagaHtml, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/html; charset=utf-8",
+          "Cache-Control": "no-store",
+          "Referrer-Policy": "no-referrer",
+          "X-Content-Type-Options": "nosniff",
+          "Permissions-Policy": "camera=(self), microphone=(self)",
+          "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline' https://esm.sh; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob:; connect-src 'self' https: wss:; font-src 'self' data: https:; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
         }
       });
     }
@@ -145,9 +160,10 @@ export default {
           userId = String(url.searchParams.get("userId") || (request.method === "POST" ? body?.userId : "") || "").trim();
         }
         if (!/^[a-f0-9-]{32,36}$/i.test(userId)) return json({ error: "valid_user_identity_required" }, 400);
-        if (!env.DAGA_MEMORY_DB) return json({ error: "persistent_memory_not_configured" }, 503);
+        const memoryDb = env.DAGA_MEMORY_DB || env.DAGA_APP_DB;
+        if (!memoryDb) return json({ error: "persistent_memory_not_configured" }, 503);
         if (request.method === "GET") {
-          const row = await env.DAGA_MEMORY_DB.prepare("SELECT profile_json, history_json, updated_at FROM daga_user_memory WHERE user_id = ?").bind(userId).first();
+          const row = await memoryDb.prepare("SELECT profile_json, history_json, updated_at FROM daga_user_memory WHERE user_id = ?").bind(userId).first();
           return json({ ok: true, persistent: true, memory: row ? { profile: JSON.parse(row.profile_json || "{}"), history: JSON.parse(row.history_json || "[]"), updatedAt: row.updated_at } : { profile: {}, history: [], updatedAt: null } });
         }
         const profile = body?.profile && typeof body.profile === "object" && !Array.isArray(body.profile) ? body.profile : {};
@@ -156,7 +172,7 @@ export default {
         let history = Array.isArray(body?.history) ? body.history.filter(x => x && ["user", "assistant"].includes(x.role) && typeof x.content === "string").slice(-100).map(x => ({ role: x.role, content: x.content.slice(0, 2000) })) : [];
         while (history.length && JSON.stringify(history).length > 120000) history.shift();
         const now = new Date().toISOString();
-        await env.DAGA_MEMORY_DB.prepare("INSERT INTO daga_user_memory (user_id, profile_json, history_json, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET profile_json=excluded.profile_json, history_json=excluded.history_json, updated_at=excluded.updated_at").bind(userId, profileJson, JSON.stringify(history), now).run();
+        await memoryDb.prepare("INSERT INTO daga_user_memory (user_id, profile_json, history_json, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET profile_json=excluded.profile_json, history_json=excluded.history_json, updated_at=excluded.updated_at").bind(userId, profileJson, JSON.stringify(history), now).run();
         return json({ ok: true, persistent: true, updatedAt: now });
       } catch (error) {
         return json({ error: "memory_storage_failed" }, 500);
