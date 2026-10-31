@@ -80,7 +80,8 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn("b.hidden=false;b.disabled=!smartAllowed", dashboard)
         self.assertIn("b.hidden=false;b.disabled=!liveAllowed", dashboard)
         self.assertIn("b.hidden=false;b.disabled=!window.DAGA_AUTH_USER.historyEnabled", dashboard)
-        self.assertIn("smartAllowed&&window.DAGA_AUTH_USER.liveDagaEnabled===true", dashboard)
+        self.assertIn("const liveAllowed=window.DAGA_AUTH_USER.liveDagaEnabled===true", dashboard)
+        self.assertNotIn("smartAllowed&&window.DAGA_AUTH_USER.liveDagaEnabled===true", dashboard)
 
 
     def test_company_owner_can_list_members_and_update_individual_permissions(self):
@@ -103,6 +104,12 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn("اسم صاحب الشركه", portal)
         self.assertIn("اسم الشركه", portal)
         self.assertIn("daga_stores", (ROOT / "company-invitations.js").read_text(encoding="utf-8"))
+
+    def test_preliminary_store_approval_cannot_activate_before_payment_confirmation(self):
+        admin = (ROOT / "owner-admin.js").read_text(encoding="utf-8")
+        self.assertIn('final_payment_confirmation_required', admin)
+        self.assertIn('paymentManuallyConfirmed:true', admin)
+        self.assertIn('paymentConfirmed!==true', admin)
 
     def test_voice_routes_enforce_member_permissions_independently(self):
         worker = (ROOT / "worker.js").read_text(encoding="utf-8")
