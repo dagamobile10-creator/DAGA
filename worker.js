@@ -253,8 +253,14 @@ export default {
     if (url.pathname === "/chat" && request.method === "POST") {
       try {
         if (voiceIdentityRequired) {
-          const permissionDenied = await enforceCompanyVoicePermission(env, voiceAccount, "useSmartAssistant");
-          if (permissionDenied) return permissionDenied;
+          const company = await resolveCompanyVoiceContext(env, voiceAccount);
+          if (company.error) return company.error;
+          if (company.role !== "store_owner" && company.permissions.useSmartAssistant !== true) {
+            return json({ error: "company_voice_permission_denied", permission: "useSmartAssistant" }, 403);
+          }
+          const now = new Date().toISOString();
+          const smartPlan = await env.DAGA_APP_DB.prepare("SELECT e.id FROM daga_entitlements e JOIN daga_plan_orders o ON o.id=e.order_id JOIN daga_plans p ON p.id=o.plan_id WHERE e.store_id=? AND e.service='store' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? AND (json_extract(p.features_json,'$.tier')='smart' OR json_extract(p.features_json,'$.smartAssistantEnabled')=1) LIMIT 1").bind(company.storeId, now, now).first();
+          if (!smartPlan) return json({ error: "smart_store_subscription_required" }, 402);
         }
         const parsed = await readBoundedJson(request, 32768);
         if (!parsed.ok) return json({ error: parsed.error }, parsed.status);
@@ -379,24 +385,26 @@ export default {
       if (String(env.DAGA_LIVE_QUOTA_ENFORCE || "").toLowerCase() === "true") {
         if (!env.DAGA_APP_DB) return json({ error: "live_quota_not_configured" }, 503);
         const account = voiceAccount || await authenticatedAccount(request, env.DAGA_APP_DB);
-        if (!account || account.status !== "approved" || account.role === "program_owner" || !account.store_id) return json({ error: "approved_shop_account_required" }, 401);
+        if (!account || account.status !== "approved" || account.role === "program_owner") return json({ error: "approved_shop_account_required" }, 401);
+        const company = await resolveCompanyVoiceContext(env, account);
+        if (company.error) return company.error;
+        if (company.role !== "store_owner" && company.permissions.useLiveDaga !== true) return json({ error: "company_voice_permission_denied", permission: "useLiveDaga" }, 403);
+        const storeId = company.storeId;
         const quotaNow = new Date().toISOString();
-        const smartPlan = await env.DAGA_APP_DB.prepare("SELECT e.id FROM daga_entitlements e JOIN daga_plan_orders o ON o.id=e.order_id JOIN daga_plans p ON p.id=o.plan_id WHERE e.account_id=? AND e.store_id=? AND e.service='store' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? AND (json_extract(p.features_json,'$.tier')='smart' OR json_extract(p.features_json,'$.smartAssistantEnabled')=1) LIMIT 1").bind(account.id, account.store_id, quotaNow, quotaNow).first();
-        if (!smartPlan) return json({ error: "smart_store_subscription_required" }, 402);
-        const entitlement = await env.DAGA_APP_DB.prepare("SELECT id FROM daga_entitlements WHERE store_id=? AND service='live_daga' AND status='active' AND starts_at<=? AND expires_at>? LIMIT 1").bind(account.store_id, quotaNow, quotaNow).first();
+        const entitlement = await env.DAGA_APP_DB.prepare("SELECT id FROM daga_entitlements WHERE store_id=? AND service='live_daga' AND status='active' AND starts_at<=? AND expires_at>? LIMIT 1").bind(storeId, quotaNow, quotaNow).first();
         if (!entitlement) return json({ error: "live_daga_subscription_required" }, 402);
 
         // Count Unicode code points in the exact, pronunciation-adjusted text sent to ElevenLabs.
         const characters = Array.from(text).length;
         const requestId = "tts:" + crypto.randomUUID();
         const debit = await env.DAGA_APP_DB.prepare("INSERT INTO daga_live_word_ledger (id,account_id,store_id,event_type,words,request_id,note) SELECT ?,?,?,'debit',?,?,? WHERE (SELECT COALESCE(SUM(CASE WHEN event_type IN ('credit','adjustment','refund') THEN words ELSE -words END),0) FROM daga_live_word_ledger WHERE store_id=?) >= ? AND EXISTS (SELECT 1 FROM daga_entitlements WHERE store_id=? AND service='live_daga' AND status='active' AND starts_at<=? AND expires_at>?)")
-          .bind(crypto.randomUUID(), account.id, account.store_id, characters, requestId, "LIVE DAGA generated text characters", account.store_id, characters, account.store_id, quotaNow, quotaNow).run();
+          .bind(crypto.randomUUID(), account.id, storeId, characters, requestId, "LIVE DAGA generated text characters", account.store_id, characters, storeId, quotaNow, quotaNow).run();
         if (!debit.meta || debit.meta.changes !== 1) {
-          const ledger = await env.DAGA_APP_DB.prepare("SELECT COALESCE(SUM(CASE WHEN event_type IN ('credit','adjustment','refund') THEN words ELSE -words END),0) AS remaining FROM daga_live_word_ledger WHERE store_id=?").bind(account.store_id).first();
+          const ledger = await env.DAGA_APP_DB.prepare("SELECT COALESCE(SUM(CASE WHEN event_type IN ('credit','adjustment','refund') THEN words ELSE -words END),0) AS remaining FROM daga_live_word_ledger WHERE store_id=?").bind(storeId).first();
           const remaining = Number(ledger && ledger.remaining || 0);
           return json({ error: remaining < characters ? "live_daga_quota_insufficient" : "live_daga_subscription_required", requiredCharacters: characters, remainingCharacters: remaining }, 402);
         }
-        quota = { accountId: account.id, storeId: account.store_id, characters, requestId };
+        quota = { accountId: account.id, storeId: storeId, characters, requestId };
       }
 
       const refundQuota = async () => {
@@ -514,26 +522,38 @@ function extractModelText(result) {
   return "";
 }
 
-async function enforceCompanyVoicePermission(env, account, permissionKey) {
+async function resolveCompanyVoiceContext(env, account) {
   const db = env.DAGA_APP_DB;
-  if (!db) return json({ error: "company_permission_database_not_configured" }, 503);
-  if (!account || account.status !== "approved" || account.role === "program_owner") return json({ error: "authenticated_account_required" }, 401);
+  if (!db) return { error: json({ error: "company_permission_database_not_configured" }, 503) };
+  if (!account || account.status !== "approved" || account.role === "program_owner") return { error: json({ error: "authenticated_account_required" }, 401) };
 
-  // Resolve only an unambiguous active company. Never trust a client-supplied
-  // store id or silently pick one membership when an account belongs to many.
   if (account.role === "store_owner") {
     const owned = await db.prepare("SELECT id FROM daga_stores WHERE owner_account_id=? AND status='approved' ORDER BY created_at DESC LIMIT 2").bind(account.id).all();
     const stores = owned.results || [];
-    if (stores.length !== 1) return json({ error: "company_selection_required" }, 403);
-    return null;
+    const selected = String(account.store_id || "").trim();
+    if (!selected || stores.length !== 1 || stores[0].id !== selected) {
+      return { error: json({ error: "company_selection_required" }, 403) };
+    }
+    return { storeId: selected, role: "store_owner", permissions: {} };
   }
-  if (!["manager", "employee"].includes(account.role)) return json({ error: "company_membership_required" }, 403);
-  const rows = await db.prepare("SELECT m.role,m.permissions_json FROM daga_store_memberships m JOIN daga_stores s ON s.id=m.store_id WHERE m.account_id=? AND m.status='active' AND m.role IN ('manager','employee') AND s.status='approved' ORDER BY m.created_at DESC LIMIT 2").bind(account.id).all();
+
+  if (!["manager", "employee"].includes(account.role)) return { error: json({ error: "company_membership_required" }, 403) };
+  const rows = await db.prepare("SELECT m.store_id,m.role,m.permissions_json FROM daga_store_memberships m JOIN daga_stores s ON s.id=m.store_id WHERE m.account_id=? AND m.status='active' AND m.role IN ('manager','employee') AND s.status='approved' ORDER BY m.created_at DESC LIMIT 2").bind(account.id).all();
   const memberships = rows.results || [];
-  if (memberships.length !== 1 || memberships[0].role !== account.role) return json({ error: memberships.length > 1 ? "company_selection_required" : "company_membership_required" }, 403);
+  if (memberships.length !== 1 || memberships[0].role !== account.role) {
+    return { error: json({ error: memberships.length > 1 ? "company_selection_required" : "company_membership_required" }, 403) };
+  }
   let permissions = {};
   try { permissions = JSON.parse(memberships[0].permissions_json || "{}"); } catch (_) {}
-  if (permissions[permissionKey] !== true) return json({ error: "company_voice_permission_denied", permission: permissionKey }, 403);
+  return { storeId: memberships[0].store_id, role: memberships[0].role, permissions };
+}
+
+async function enforceCompanyVoicePermission(env, account, permissionKey) {
+  const context = await resolveCompanyVoiceContext(env, account);
+  if (context.error) return context.error;
+  if (context.role !== "store_owner" && context.permissions[permissionKey] !== true) {
+    return json({ error: "company_voice_permission_denied", permission: permissionKey }, 403);
+  }
   return null;
 }
 
