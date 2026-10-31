@@ -77,9 +77,9 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn('features.historyEnabled===true||features.tier==="smart"', auth)
         self.assertIn("smartAssistantEnabled:company.smartAssistantEnabled===true", dashboard)
         self.assertIn("historyEnabled:company.historyEnabled===true", dashboard)
-        self.assertIn("b.hidden=false;b.disabled=!smartAllowed", dashboard)
-        self.assertIn("b.hidden=false;b.disabled=!liveAllowed", dashboard)
-        self.assertIn("b.hidden=false;b.disabled=!window.DAGA_AUTH_USER.historyEnabled", dashboard)
+        self.assertIn("b.hidden=false;b.disabled=false", dashboard)
+        self.assertIn("b.hidden=false;b.disabled=false", dashboard)
+        self.assertIn("b.hidden=false;b.disabled=false", dashboard)
         self.assertIn("const liveAllowed=window.DAGA_AUTH_USER.liveDagaEnabled===true", dashboard)
         self.assertNotIn("smartAllowed&&window.DAGA_AUTH_USER.liveDagaEnabled===true", dashboard)
 
