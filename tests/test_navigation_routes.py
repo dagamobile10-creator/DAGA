@@ -125,13 +125,13 @@ class NavigationRouteTests(unittest.TestCase):
                 with self.subTest(page=page_name, forbidden=forbidden):
                     self.assertNotIn(forbidden, page)
         for route in (
-            "/api/shop/auth/setup/start",
-            "/api/shop/auth/setup/verify",
-            "/api/shop/auth/recovery/start",
-            "/api/shop/auth/recovery/complete",
+            "/api/company/auth/setup/start",
+            "/api/company/auth/setup/verify",
+            "/api/company/auth/recovery/start",
+            "/api/company/auth/recovery/complete",
         ):
             with self.subTest(route=route):
-                self.assertIn(route, self.shop_auth)
+                self.assertIn(route, self.company_auth)
         self.assertIn("emailCode", self.shop_auth)
         self.assertIn("RESEND_API_KEY", self.shop_auth)
         self.assertIn("/owner/bootstrap/start", self.owner)
