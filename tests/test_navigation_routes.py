@@ -168,7 +168,7 @@ class NavigationRouteTests(unittest.TestCase):
         self.assertIn("company-invitations.js", self.worker)
 
     def test_navigation_does_not_remove_live_voice_contract_markers(self):
-        for marker in ("workers.dev/chat", "workers.dev/tts", "playVoiceTest", "daga_mh_memory_v1"):
+        for marker in ("DAGA_API_BASE+'/chat'", "DAGA_API_BASE+'/tts'", "playVoiceTest", "daga_mh_memory_v1", "daga-app-staging.dagamobile10.workers.dev", "daga-voice.dagamobile10.workers.dev"):
             with self.subTest(marker=marker):
                 self.assertIn(marker, self.live)
 
