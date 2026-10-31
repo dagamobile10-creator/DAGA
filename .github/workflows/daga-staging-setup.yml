@@ -127,31 +127,6 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: deploy --config wrangler.staging.toml
-      - name: Reuse existing MH avatar ID for staging when available
-        env:
-          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CURRENT_AVATAR_ID: ${{ secrets.LIVEAVATAR_AVATAR_ID }}
-        run: |
-          set -euo pipefail
-          if [ -n "${CURRENT_AVATAR_ID:-}" ]; then
-            echo "::add-mask::$CURRENT_AVATAR_ID"
-            echo "LIVEAVATAR_AVATAR_ID=$CURRENT_AVATAR_ID" >> "$GITHUB_ENV"
-            echo "A dedicated staging MH avatar ID is configured."
-            exit 0
-          fi
-          versions="$(curl -fsS --max-time 20 -H "Authorization: Bearer $CF_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/workers/scripts/daga-voice/versions")"
-          for version_id in $(echo "$versions" | jq -r '.result[]?.id // empty'); do
-            version="$(curl -fsS --max-time 20 -H "Authorization: Bearer $CF_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/workers/scripts/daga-voice/versions/$version_id")"
-            recovered="$(echo "$version" | jq -r '.. | objects | select((.name? == "LIVEAVATAR_AVATAR_ID") and (.type? == "plain_text" or .type? == "text")) | (.text // .value // empty)' | head -n1)"
-            if [ -n "$recovered" ] && [ "$recovered" != "null" ]; then
-              echo "::add-mask::$recovered"
-              echo "LIVEAVATAR_AVATAR_ID=$recovered" >> "$GITHUB_ENV"
-              echo "A prior non-secret MH avatar ID was reused for staging."
-              exit 0
-            fi
-          done
-          echo "No reusable plain-text MH avatar ID was found; staging avatar discovery will report the remaining requirement."
       - name: Configure staging-only auth and delivery secrets
         id: configure-secrets
         env:
@@ -165,6 +140,7 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           LIVEAVATAR_API_KEY: ${{ secrets.LIVEAVATAR_API_KEY }}
+          LIVEAVATAR_AVATAR_ID: ${{ secrets.LIVEAVATAR_AVATAR_ID }}
         run: |
           set -euo pipefail
           # Use the same pinned Wrangler version and staging config as the deployment.
