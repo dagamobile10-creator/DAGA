@@ -66,7 +66,7 @@ const DAGA_API_BASE = new URLSearchParams(location.search).get('api') === 'stagi
 // Optional authenticated session bridge. Existing LIVE DAGA remains compatible when no session is present.
 const DAGA_SESSION_KEY='daga_account_session_v1';
 try{const links=document.querySelectorAll('.app-nav a');if(links[0])links[0].href=DAGA_API_BASE+'/go/';if(links[1])links[1].href=DAGA_API_BASE+'/company/';if(links[2])links[2].href=DAGA_API_BASE+'/owner-console/';}catch(_){}
-function dagaAuthHeaders(extra={}){const headers={...extra};try{const token=sessionStorage.getItem(DAGA_SESSION_KEY);if(token&&token.length<=4096)headers.Authorization='Bearer '+token}catch(e){}return headers}
+function dagaAuthHeaders(extra={}){const headers={...extra};try{const token=sessionStorage.getItem(DAGA_SESSION_KEY);if(token&&token.length<=4096)headers.Authorization='Bearer '+token;const companyId=sessionStorage.getItem('daga_company_id_v1');if(companyId&&companyId.length<=64)headers['X-DAGA-Company-ID']=companyId}catch(e){}return headers}
 const DAGA_MEMORY_KEY='daga_mh_memory_v1';
 const DAGA_PROFILE_KEY='daga_mh_long_memory_v1';
 const DAGA_SERVER_USER_KEY='daga_mh_server_user_v1';
