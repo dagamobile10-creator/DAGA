@@ -493,14 +493,17 @@ function showLiveComingSoon(){
   if(user.liveDagaEnabled!==true){alert('الاشتراك الذكي مفعّل. لإضافة LIVE DAGA، اشترك في الإضافة المدفوعة أولًا.');return;}
   const token=String(window.DAGA_SESSION_TOKEN||'');
   if(!token){alert('انتهت جلسة المحل. سجّل الدخول من جديد.');return;}
-  const assistant=window.open('/assistant/','_blank');
-  if(!assistant){alert('اسمح بفتح نافذة LIVE DAGA علشان نربط حساب المحل بأمان.');return;}
+  // Register the handshake listener BEFORE opening the assistant. Otherwise a fast
+  // assistant load can post DAGA_ASSISTANT_READY before the parent starts listening.
+  let assistant=null;
   const bridge=event=>{
-    if(event.origin!==location.origin||event.source!==assistant||event.data!=='DAGA_ASSISTANT_READY')return;
+    if(!assistant||event.origin!==location.origin||event.source!==assistant||event.data!=='DAGA_ASSISTANT_READY')return;
     assistant.postMessage({type:'DAGA_AUTH',token,companyId:String(user.storeId||'')},location.origin);
     window.removeEventListener('message',bridge);
   };
   window.addEventListener('message',bridge);
+  assistant=window.open('/assistant/','_blank');
+  if(!assistant){window.removeEventListener('message',bridge);alert('اسمح بفتح نافذة LIVE DAGA علشان نربط حساب المحل بأمان.');return;}
 }
 function closeDagaLiveFullscreen(){
  const screen=document.getElementById('dagaLiveFullscreen');
