@@ -16,7 +16,7 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn("DAGA_SHOP_READY", dashboard)
         self.assertIn("bootAuthenticatedDashboard(event.data.token,event.data.companyId)", dashboard)
         self.assertNotIn("sessionStorage", dashboard)
-        self.assertIn("fetch('/api/shop/auth/me'", dashboard)
+        self.assertIn("fetch('/api/company/auth/me'", dashboard)
         self.assertIn("window.location.replace('/shop-access/')", dashboard)
         self.assertIn("if(window.opener)", dashboard)
         self.assertIn("loadStoreData(company.id)", dashboard)
@@ -34,7 +34,7 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
         self.assertIn("if(role==='owner')role='store_owner';", dashboard)
         self.assertIn("Authorization:'Bearer '+token", dashboard)
-        self.assertIn("api/shop/auth/logout", dashboard)
+        self.assertIn("api/company/auth/logout", dashboard)
 
     def test_store_plan_tier_is_saved_and_editable(self):
         admin = (ROOT / "owner-admin.js").read_text(encoding="utf-8")
@@ -62,7 +62,7 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         tts = worker[worker.index('if (url.pathname !== "/tts"'):]
         self.assertNotIn("smart_store_subscription_required", tts)
         self.assertIn("live_daga_subscription_required", tts)
-        self.assertIn("resolveCompanyVoiceContext(env, account)", tts)
+        self.assertIn('resolveCompanyVoiceContext(env, account, request.headers.get("X-DAGA-Company-ID") || "")', tts)
         self.assertIn("live_daga_quota_insufficient", worker)
 
     def test_standard_plan_overrides_legacy_smart_flags(self):
@@ -75,7 +75,7 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn("p.features_json", auth)
         self.assertIn('features.smartAssistantEnabled===true||features.tier==="smart"', auth)
         self.assertIn('features.historyEnabled===true||features.tier==="smart"', auth)
-        self.assertIn("smartAssistantEnabled:company.smartAssistantEnabled===true", dashboard)
+        self.assertIn("smartAssistantEnabled:company.smartAssistantEnabled===true&&(role==='store_owner'||company.permissions?.useSmartAssistant===true)", dashboard)
         self.assertIn("historyEnabled:company.historyEnabled===true", dashboard)
         self.assertIn("b.hidden=false;b.disabled=false", dashboard)
         self.assertIn("b.hidden=false;b.disabled=false", dashboard)
