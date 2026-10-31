@@ -240,18 +240,26 @@ class LiveClientSessionForwardingTests(unittest.TestCase):
         self.assertIn("headers.Authorization='Bearer '+token", self.client)
         self.assertNotIn("localStorage.setItem(DAGA_SESSION_KEY", self.client)
 
-    def test_existing_live_api_calls_forward_optional_session(self):
+    def test_v30_chat_and_tts_forward_session_without_liveavatar(self):
         self.assertIn("headers:dagaAuthHeaders({'Content-Type':'application/json'})", self.client)
-        self.assertIn('headers:dagaAuthHeaders({"Content-Type":"application/json"})', self.client)
         self.assertIn("DAGA_API_BASE+'/chat'", self.client)
         self.assertIn("DAGA_API_BASE+'/tts'", self.client)
         self.assertIn("daga-app-staging.dagamobile10.workers.dev", self.client)
         self.assertIn("DAGA_LIVE_READY", self.client)
         self.assertIn("DAGA_AUTH", self.client)
         self.assertIn("sessionStorage.setItem('daga_account_session_v1',data.token)", self.client)
-        self.assertIn("LIVE_ENDPOINT", self.client)
-        self.assertIn("headers:dagaAuthHeaders()", self.client)
+        self.assertNotIn("LiveAvatarSession", self.client)
+        self.assertNotIn("window.__dagaAvatarSpeak", self.client)
 
+    def test_v30_keeps_mh_image_static_while_retaining_voice_controls(self):
+        self.assertIn('<div class="avatar">', self.client)
+        self.assertIn('<img src="data:image/jpeg;base64,', self.client)
+        self.assertIn("SpeechRecognition", self.client)
+        self.assertIn("function speak(text)", self.client)
+        self.assertIn("DAGA_API_BASE+'/chat'", self.client)
+        self.assertIn("DAGA_API_BASE+'/tts'", self.client)
+        self.assertNotIn(".avatar.speaking img{animation:", self.client)
+        self.assertNotIn("@keyframes avatarTalk", self.client)
     def test_legacy_client_remains_compatible_without_session(self):
         helper_start = self.client.index("function dagaAuthHeaders")
         helper_end = self.client.index("\n", helper_start)
@@ -282,12 +290,11 @@ class LiveDagaLoginFlowTests(unittest.TestCase):
         self.assertIn("'/api/company/auth/logout'", self.client)
 
 
-    def test_session_is_forwarded_to_chat_tts_memory_and_liveavatar(self):
+    def test_session_is_forwarded_to_chat_tts_and_memory_in_v30(self):
         self.assertIn("headers.Authorization='Bearer '+token", self.client)
         self.assertIn("headers:dagaAuthHeaders({'Content-Type':'application/json'})", self.client)
-        self.assertIn('headers:dagaAuthHeaders({"Content-Type":"application/json"})', self.client)
         self.assertIn("headers:dagaAuthHeaders()", self.client)
-
+        self.assertNotIn("LiveAvatarSession", self.client)
     def test_worker_cors_allows_authorization_header(self):
         self.assertIn('"Access-Control-Allow-Headers": "Content-Type, Authorization"', self.worker)
 
