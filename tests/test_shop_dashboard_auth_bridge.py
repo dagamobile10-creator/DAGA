@@ -60,7 +60,7 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn("DAGA_ASSISTANT_READY", assistant)
         self.assertIn("event.data.type!=='DAGA_AUTH'", assistant)
         self.assertIn("sessionStorage.setItem(DAGA_SESSION_KEY,event.data.token)", assistant)
-        self.assertIn("window.DAGA_SESSION_TOKEN=event.data.token", assistant)
+        self.assertIn("sessionStorage.setItem(DAGA_SESSION_KEY,event.data.token)", assistant)
         self.assertNotIn("refreshIdentity();", assistant)
         self.assertIn("event.source!==window.opener", assistant)
 
