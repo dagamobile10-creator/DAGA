@@ -198,19 +198,18 @@ jobs:
           if [ "$voice_ready" != "true" ]; then
             echo "::warning::ElevenLabs is not configured; continuing security smoke tests. Voice/TTS readiness remains blocked."
           fi
-          # Anonymous chat must be denied while account authentication is enforced.
+          # Legacy LIVE DAGA supports anonymous chat on the isolated staging worker.
           chat_code="$(curl -sS -o /tmp/chat-smoke.json -w '%{http_code}' --max-time 20 \
             -H 'Content-Type: application/json' -d '{"text":"اختبار"}' \
             https://daga-app-staging.dagamobile10.workers.dev/chat)"
-          test "$chat_code" = "401" || { echo "::error::Anonymous staging chat returned HTTP $chat_code"; cat /tmp/chat-smoke.json; exit 1; }
-          grep -q 'authenticated_account_required' /tmp/chat-smoke.json || { echo "::error::Anonymous staging chat did not return the expected authentication error"; cat /tmp/chat-smoke.json; exit 1; }
-          echo "Staging anonymous chat denial test passed."
-          # Anonymous TTS must be denied now that staging voice identity and LIVE DAGA quota are enforced.
+          test "$chat_code" = "200" || { echo "::error::Staging LIVE DAGA chat should work without a second login; got HTTP $chat_code"; cat /tmp/chat-smoke.json; exit 1; }
+          echo "Staging legacy LIVE DAGA chat smoke test passed."
+          # Legacy LIVE DAGA TTS remains available on isolated staging without a second login.
           if jq -e '.voiceConfigured == true' /tmp/health.json >/dev/null; then
             tts_code="$(curl -sS -o /tmp/tts-anon.json -w '%{http_code}' --max-time 20 \
               -H 'Content-Type: application/json' -d '{"text":"اختبار الصوت."}' \
               https://daga-app-staging.dagamobile10.workers.dev/tts)"
-            test "$tts_code" = "401" || { echo "::error::Anonymous staging TTS should return HTTP 401, got $tts_code"; cat /tmp/tts-anon.json; exit 1; }
+            test "$tts_code" = "200" || { echo "::error::Staging LIVE DAGA TTS should work without a second login; got HTTP $tts_code"; cat /tmp/tts-anon.json; exit 1; }
             grep -q 'authenticated_account_required' /tmp/tts-anon.json || { echo "::error::Anonymous staging TTS did not fail with the expected authentication error"; cat /tmp/tts-anon.json; exit 1; }
             echo "Staging TTS anonymous-denial test passed."
           else
