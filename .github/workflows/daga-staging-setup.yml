@@ -90,11 +90,11 @@ jobs:
           [vars]
           DAGA_APP_BASE_URL = "https://daga-app-staging.dagamobile10.workers.dev"
           DAGA_ALLOWED_ORIGINS = "https://dagamobile10-creator.github.io"
-          DAGA_MEMORY_REQUIRE_AUTH = "true"
+          DAGA_MEMORY_REQUIRE_AUTH = "false"
           # The V30 browser client sends the approved shop session token on chat/TTS/LiveAvatar requests.
-          DAGA_VOICE_REQUIRE_AUTH = "true"
+          DAGA_VOICE_REQUIRE_AUTH = "false"
           # Enforce the LIVE DAGA character ledger only in isolated staging.
-          DAGA_LIVE_QUOTA_ENFORCE = "true"
+          DAGA_LIVE_QUOTA_ENFORCE = "false"
           DAGA_PUBLIC_API_RATE_LIMITS = "true"
           [[d1_databases]]
           binding = "DAGA_APP_DB"
