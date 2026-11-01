@@ -266,16 +266,18 @@ class LiveDagaLoginFlowTests(unittest.TestCase):
         cls.worker = (ROOT / "worker.js").read_text(encoding="utf-8")
         cls.auth = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
 
-    def test_live_page_has_email_password_login_and_session_verification(self):
-        for element_id in ("dagaAuthIdentifier", "dagaAuthPassword", "dagaAuthSend", "dagaAuthLogout"):
-            self.assertIn('id="' + element_id + '"', self.client)
-        self.assertNotIn('id="dagaAuthPhoneCode"', self.client)
-        self.assertNotIn('id="dagaAuthEmailCode"', self.client)
-        self.assertIn("'/api/shop/auth/login'", self.client)
-        self.assertNotIn("'/api/shop/auth/login/verify'", self.client)
-        self.assertIn("sessionStorage.setItem('daga_account_session_v1',data.sessionToken)", self.client)
-        self.assertIn("'/api/shop/auth/me'", self.client)
-        self.assertIn("'/api/shop/auth/logout'", self.client)
+    def test_live_page_uses_silent_dashboard_session_bridge_without_second_login(self):
+        # LIVE DAGA must keep its legacy launch flow; the shop dashboard owns sign-in.
+        for element_id in ("dagaAuthPanel", "dagaAuthIdentifier", "dagaAuthPassword", "dagaAuthSend", "dagaAuthLogout"):
+            self.assertNotIn('id="' + element_id + '"', self.client)
+        self.assertNotIn("'/api/shop/auth/login'", self.client)
+        self.assertNotIn("'/api/shop/auth/me'", self.client)
+        self.assertNotIn("'/api/shop/auth/logout'", self.client)
+        self.assertIn("event.data.type!=='DAGA_AUTH'", self.client)
+        self.assertIn("event.source!==window.opener", self.client)
+        self.assertIn("event.origin!==location.origin", self.client)
+        self.assertIn("sessionStorage.setItem(DAGA_SESSION_KEY,event.data.token)", self.client)
+        self.assertIn("window.opener.postMessage('DAGA_ASSISTANT_READY',location.origin)", self.client)
 
 
     def test_session_is_forwarded_to_chat_tts_memory_and_liveavatar(self):
