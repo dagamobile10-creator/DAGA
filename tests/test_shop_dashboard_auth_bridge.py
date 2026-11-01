@@ -42,8 +42,9 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         worker = (ROOT / "worker.js").read_text(encoding="utf-8")
         self.assertIn("daga-app-staging.dagamobile10.workers.dev", assistant)
         self.assertNotIn("daga-voice.dagamobile10.workers.dev", assistant)
-        self.assertIn("/api/shop/auth/login", assistant)
-        self.assertIn("/api/shop/auth/me", assistant)
+        self.assertNotIn('id="dagaAuthPanel"', assistant)
+        self.assertNotIn("/api/shop/auth/login", assistant)
+        self.assertNotIn("/api/shop/auth/me", assistant)
         self.assertNotIn("/api/company/auth/login", assistant)
         self.assertIn('url.pathname === "/assistant"', worker)
         self.assertIn("smart_store_subscription_required", worker)
@@ -59,7 +60,8 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn("DAGA_ASSISTANT_READY", assistant)
         self.assertIn("event.data.type!=='DAGA_AUTH'", assistant)
         self.assertIn("sessionStorage.setItem(DAGA_SESSION_KEY,event.data.token)", assistant)
-        self.assertIn("refreshIdentity();", assistant)
+        self.assertIn("window.DAGA_SESSION_TOKEN=event.data.token", assistant)
+        self.assertNotIn("refreshIdentity();", assistant)
         self.assertIn("event.source!==window.opener", assistant)
 
     def test_live_assistant_is_served_from_same_staging_worker_origin(self):
