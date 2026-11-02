@@ -146,22 +146,18 @@ export default {
         // When enabled, persistent memory is bound to the verified server-side account.
         // Never trust a caller-supplied userId as proof of memory ownership.
         let userId;
-        if (String(env.DAGA_MEMORY_REQUIRE_AUTH || "").toLowerCase() === "true") {
-          if (!env.DAGA_APP_DB) return json({ error: "authenticated_memory_not_configured" }, 503);
-          const account = await authenticatedAccount(request, env.DAGA_APP_DB);
-          if (!account || account.status !== "approved" || account.role === "program_owner") {
-            return json({ error: "authenticated_account_required" }, 401);
-          }
-          if (!account.store_id) return json({error:"approved_shop_account_required"},401);
-          const now = new Date().toISOString();
-          const smartPlan = await env.DAGA_APP_DB.prepare("SELECT e.id FROM daga_entitlements e JOIN daga_plan_orders o ON o.id=e.order_id JOIN daga_plans p ON p.id=o.plan_id WHERE e.account_id=? AND e.store_id=? AND e.service='store' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? AND (json_extract(p.features_json,'$.tier')='smart' OR json_extract(p.features_json,'$.smartAssistantEnabled')=1) LIMIT 1").bind(account.id, account.store_id, now, now).first();
-          if (!smartPlan) return json({error:"smart_store_subscription_required"},402);
-          userId = String(account.id || "").trim();
-        } else {
-          // Temporary compatibility mode for the existing anonymous LIVE DAGA client.
-          // Disable after the client has a supported sign-in and one-time memory-claim flow.
-          userId = String(url.searchParams.get("userId") || (request.method === "POST" ? body?.userId : "") || "").trim();
+        // Persistent memory is always scoped to a verified, approved shop account.
+        // Caller-supplied userId values are never accepted as authentication.
+        if (!env.DAGA_APP_DB) return json({ error: "authenticated_memory_not_configured" }, 503);
+        const account = await authenticatedAccount(request, env.DAGA_APP_DB);
+        if (!account || account.status !== "approved" || account.role === "program_owner") {
+          return json({ error: "authenticated_account_required" }, 401);
         }
+        if (!account.store_id) return json({error:"approved_shop_account_required"},401);
+        const now = new Date().toISOString();
+        const smartPlan = await env.DAGA_APP_DB.prepare("SELECT e.id FROM daga_entitlements e JOIN daga_plan_orders o ON o.id=e.order_id JOIN daga_plans p ON p.id=o.plan_id WHERE e.account_id=? AND e.store_id=? AND e.service='store' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? AND (json_extract(p.features_json,'$.tier')='smart' OR json_extract(p.features_json,'$.smartAssistantEnabled')=1) LIMIT 1").bind(account.id, account.store_id, now, now).first();
+        if (!smartPlan) return json({error:"smart_store_subscription_required"},402);
+        userId = String(account.id || "").trim();
         if (!/^[a-f0-9-]{32,36}$/i.test(userId)) return json({ error: "valid_user_identity_required" }, 400);
         if (!env.DAGA_MEMORY_DB) return json({ error: "persistent_memory_not_configured" }, 503);
         if (request.method === "GET") {
