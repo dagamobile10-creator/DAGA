@@ -206,16 +206,13 @@ jobs:
           echo "Staging legacy LIVE DAGA chat smoke test passed."
           # Legacy LIVE DAGA TTS remains available on isolated staging without a second login.
           if jq -e '.voiceConfigured == true' /tmp/health.json >/dev/null; then
-            tts_code="$(curl -sS -o /tmp/tts-anon.json -w '%{http_code}' --max-time 20 \
+            tts_code="$(curl -sS -D /tmp/tts.headers -o /tmp/tts-audio.bin -w '%{http_code}' --max-time 20 \
               -H 'Content-Type: application/json' -d '{"text":"اختبار الصوت."}' \
               https://daga-app-staging.dagamobile10.workers.dev/tts)"
-            test "$tts_code" = "200" || { echo "::error::Staging LIVE DAGA TTS request failed; got HTTP $tts_code"; cat /tmp/tts-anon.json; exit 1; }
-            tts_type="$(curl -sSI --max-time 15 https://daga-app-staging.dagamobile10.workers.dev/health | tr -d '\r' | awk 'BEGIN{IGNORECASE=1} /^content-type:/ {print tolower($0)}')"
-            if ! grep -q 'audio/' /tmp/tts-anon.json 2>/dev/null; then
-              echo "TTS returned HTTP 200; validating response bytes as audio."
-            fi
-            test -s /tmp/tts-anon.json || { echo "::error::Staging TTS returned an empty response"; exit 1; }
-            echo "Staging TTS provider request returned HTTP 200 with a non-empty response."
+            test "$tts_code" = "200" || { echo "::error::Staging LIVE DAGA TTS request failed; got HTTP $tts_code"; cat /tmp/tts-audio.bin; exit 1; }
+            grep -Eqi '^content-type: *audio/' /tmp/tts.headers || { echo "::error::Staging TTS returned HTTP 200 without an audio content type"; cat /tmp/tts.headers; exit 1; }
+            test -s /tmp/tts-audio.bin || { echo "::error::Staging TTS returned an empty audio body"; exit 1; }
+            echo "Staging TTS provider smoke test passed: HTTP 200, audio content type, non-empty body."
           else
             echo "::warning::Staging TTS auth smoke test skipped: ELEVENLABS_API_KEY is not configured."
           fi
