@@ -166,7 +166,7 @@ async function me(request,env,db){
   const smartAssistantEnabled=Boolean(entitlement&&(features.smartAssistantEnabled===true||features.tier==="smart"));
   const historyEnabled=Boolean(entitlement&&(features.historyEnabled===true||features.tier==="smart"));
   const support=await db.prepare("SELECT setting_value FROM daga_app_settings WHERE setting_key='support_whatsapp_e164'").first();
-  return json(env,{ok:true,account:{id:account.id,role:account.role,displayName:account.display_name,emailMasked:maskEmail(account.email)},supportWhatsApp:support?.setting_value||"201020124846",shops:[{id:store.id,publicId:store.public_id,displayName:store.display_name,role:"store_owner",permissions:{},ledgerEnabled:Boolean(entitlement),smartAssistantEnabled,historyEnabled,liveDagaEnabled:Boolean(liveEntitlement)&&liveWordsRemaining>0,liveWordsRemaining}]});
+  return json(env,{ok:true,account:{id:account.id,role:account.role,displayName:account.display_name,emailMasked:maskEmail(account.email)},supportWhatsApp:support?.setting_value||"201020124846",shops:[{id:store.id,publicId:store.public_id,displayName:store.display_name,role:"store_owner",permissions:{},ledgerEnabled:Boolean(entitlement),smartAssistantEnabled,historyEnabled,liveDagaEnabled:Boolean(liveEntitlement),liveWordsRemaining}]});
 }
 
 async function logout(request,env,db){
