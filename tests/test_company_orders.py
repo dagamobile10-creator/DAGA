@@ -223,7 +223,8 @@ class VoiceIdentityGateTests(unittest.TestCase):
 
     def test_voice_identity_gate_does_not_claim_to_authorize_company_financial_data(self):
         self.assertIn('لا تعتبرها دليلًا على بيانات مالية أو صلاحيات شركة غير مسترجعة من قاعدة البيانات', self.worker)
-        self.assertIn('DAGA_MEMORY_REQUIRE_AUTH', self.worker)
+        memory = self.worker[self.worker.index('if (url.pathname === "/memory"'):self.worker.index('if (url.pathname === "/liveavatar/avatars"')]
+        self.assertIn('authenticatedAccount(request, env.DAGA_APP_DB)', memory)
 
 
 
@@ -298,10 +299,14 @@ class LiveDagaLoginFlowTests(unittest.TestCase):
         self.assertIn("sessionToken:token,expiresAt:expires", login)
 
 
-    def test_optional_voice_gate_and_memory_gate_use_server_verified_identity(self):
+    def test_voice_gate_is_optional_but_persistent_memory_is_always_authenticated(self):
         self.assertIn('voiceIdentityRequired && ["/chat", "/tts", "/liveavatar/token"].includes(url.pathname)', self.worker)
         self.assertIn('const account = await authenticatedAccount(request, env.DAGA_APP_DB)', self.worker)
-        self.assertIn('DAGA_MEMORY_REQUIRE_AUTH', self.worker)
+        memory = self.worker[self.worker.index('if (url.pathname === "/memory"'):self.worker.index('if (url.pathname === "/liveavatar/avatars"')]
+        self.assertIn('authenticatedAccount(request, env.DAGA_APP_DB)', memory)
+        self.assertIn('userId = String(account.id || "").trim()', memory)
+        self.assertNotIn('body?.userId', memory)
+        self.assertNotIn('url.searchParams.get("userId")', memory)
         self.assertIn('DAGA_VOICE_REQUIRE_AUTH', self.worker)
 
 
@@ -315,23 +320,27 @@ class AuthenticatedMemoryIsolationTests(unittest.TestCase):
 
     def test_authenticated_memory_uses_server_account_id_not_client_user_id(self):
         route = self.worker[self.worker.index('if (url.pathname === "/memory"'):self.worker.index('if (url.pathname === "/liveavatar/avatars"')]
-        auth_branch = route[route.index('if (String(env.DAGA_MEMORY_REQUIRE_AUTH'):route.index('} else {')]
-        self.assertIn('authenticatedAccount(request, env.DAGA_APP_DB)', auth_branch)
-        self.assertIn('userId = String(account.id || "").trim()', auth_branch)
-        self.assertNotIn('body?.userId', auth_branch)
-        self.assertNotIn('url.searchParams.get("userId")', auth_branch)
+        self.assertIn('authenticatedAccount(request, env.DAGA_APP_DB)', route)
+        self.assertIn('if (!account || account.status !== "approved" || account.role === "program_owner")', route)
+        self.assertIn('if (!account.store_id)', route)
+        self.assertIn('userId = String(account.id || "").trim()', route)
+        self.assertNotIn('body?.userId', route)
+        self.assertNotIn('url.searchParams.get("userId")', route)
 
     def test_legacy_memory_identity_is_not_mistaken_for_authenticated_identity(self):
         route = self.worker[self.worker.index('if (url.pathname === "/memory"'):self.worker.index('if (url.pathname === "/liveavatar/avatars"')]
-        self.assertIn('Temporary compatibility mode for the existing anonymous LIVE DAGA client', route)
-        self.assertIn('DAGA_MEMORY_REQUIRE_AUTH', route)
+        self.assertNotIn('Temporary compatibility mode for the existing anonymous LIVE DAGA client', route)
+        self.assertNotIn('url.searchParams.get("userId")', route)
+        self.assertNotIn('body?.userId', route)
         self.assertIn("dagaServerUserId()", self.client)
         self.assertIn("dagaAuthHeaders()", self.client)
 
     def test_voice_and_memory_auth_remain_separately_gated(self):
         self.assertIn('DAGA_VOICE_REQUIRE_AUTH', self.worker)
-        self.assertIn('DAGA_MEMORY_REQUIRE_AUTH', self.worker)
         self.assertIn('voiceIdentityRequired && ["/chat", "/tts", "/liveavatar/token"].includes(url.pathname)', self.worker)
+        memory = self.worker[self.worker.index('if (url.pathname === "/memory"'):self.worker.index('if (url.pathname === "/liveavatar/avatars"')]
+        self.assertIn('authenticatedAccount(request, env.DAGA_APP_DB)', memory)
+        self.assertNotIn('DAGA_MEMORY_REQUIRE_AUTH', memory)
 
 
 
