@@ -399,7 +399,7 @@ export default {
       text = text.replace(/ضَجَّة|ضَجّة|ضجّة|ضجه/gu, "ضَگَّة").replace(/\s{2,}/g, " ").trim();
 
       let quota = null;
-      if (String(env.DAGA_LIVE_QUOTA_ENFORCE || "").toLowerCase() === "true" && body?.liveAvatar === true) {
+      if (body?.liveAvatar === true) {
         if (!env.DAGA_APP_DB) return json({ error: "live_quota_not_configured" }, 503);
         const account = voiceAccount || await authenticatedAccount(request, env.DAGA_APP_DB);
         if (!account || account.status !== "approved" || account.role === "program_owner" || !account.store_id) return json({ error: "approved_shop_account_required" }, 401);
