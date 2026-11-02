@@ -75,7 +75,7 @@ jobs:
                   and '<input id="wordRequest" type="hidden">' in open("owner-console.html", encoding="utf-8").read(),
               "staging deploy targets dedicated worker": 'name = "daga-app-staging"' in workflow,
               "staging database is separately named": 'database_name = "daga-app-staging"' in workflow,
-              "staging memory gate disabled for legacy LIVE DAGA": 'DAGA_MEMORY_REQUIRE_AUTH = "false"' in workflow,
+              "staging memory requires verified shop sessions": 'DAGA_MEMORY_REQUIRE_AUTH = "true"' in workflow,
               "staging voice gate disabled for legacy LIVE DAGA": 'DAGA_VOICE_REQUIRE_AUTH = "false"' in workflow and 'DAGA_LIVE_QUOTA_ENFORCE = "false"' in workflow,
               "missing auth secrets mark readiness false": 'echo "auth_ready=false" >> "$GITHUB_OUTPUT"' in workflow,
               "configured auth secrets mark readiness true": 'echo "auth_ready=true" >> "$GITHUB_OUTPUT"' in workflow,
