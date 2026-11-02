@@ -199,11 +199,17 @@ jobs:
             echo "::warning::ElevenLabs is not configured; continuing security smoke tests. Voice/TTS readiness remains blocked."
           fi
           # Legacy LIVE DAGA supports anonymous chat on the isolated staging worker.
+          chat_ready=true
           chat_code="$(curl -sS -o /tmp/chat-smoke.json -w '%{http_code}' --max-time 20 \
             -H 'Content-Type: application/json' -d '{"text":"اختبار"}' \
             https://daga-app-staging.dagamobile10.workers.dev/chat)"
-          test "$chat_code" = "200" || { echo "::error::Staging LIVE DAGA chat should work without a second login; got HTTP $chat_code"; cat /tmp/chat-smoke.json; exit 1; }
-          echo "Staging legacy LIVE DAGA chat smoke test passed."
+          if [ "$chat_code" = "200" ]; then
+            echo "Staging legacy LIVE DAGA chat smoke test passed."
+          else
+            chat_ready=false
+            echo "::warning::Staging chat provider check failed with HTTP $chat_code; continuing independent TTS, CORS, route, and security checks."
+            cat /tmp/chat-smoke.json
+          fi
           # Legacy LIVE DAGA TTS remains available on isolated staging without a second login.
           if jq -e '.voiceConfigured == true' /tmp/health.json >/dev/null; then
             tts_code="$(curl -sS -D /tmp/tts.headers -o /tmp/tts-audio.bin -w '%{http_code}' --max-time 20 \
@@ -275,6 +281,10 @@ jobs:
           echo "Staging Worker only. Production Worker and main branch were not targeted."
           if [ "$voice_ready" != "true" ]; then
             echo "::error::Security smoke tests completed, but voice/TTS is not ready: ELEVENLABS_API_KEY is missing."
+            exit 1
+          fi
+          if [ "$chat_ready" != "true" ]; then
+            echo "::error::Staging chat provider check failed; independent staging checks completed, but chat is not ready."
             exit 1
           fi
       - name: Require owner-auth secrets for a green staging run
