@@ -491,6 +491,7 @@ function showLiveComingSoon(){
   const user=window.DAGA_AUTH_USER||{};
   if(user.smartAssistantEnabled!==true){alert('تشغيل LIVE DAGA يتطلب الاشتراك الذكي أولًا.');return;}
   if(user.liveDagaEnabled!==true){alert('الاشتراك الذكي مفعّل. لإضافة LIVE DAGA، اشترك في الإضافة المدفوعة أولًا.');return;}
+  if(!(Number(user.liveWordsRemaining)>0)){alert('رصيد حروف LIVE DAGA خلص. اشحن رصيد حروف الأول.');return;}
   const token=String(window.DAGA_SESSION_TOKEN||'');
   if(!token){alert('انتهت جلسة الشركة. سجّل الدخول من جديد.');return;}
   // Register the handshake listener BEFORE opening the assistant. Otherwise a fast
