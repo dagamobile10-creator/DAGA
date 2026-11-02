@@ -217,6 +217,8 @@ export default {
         if (!smartPlan) return json({ error: "smart_store_subscription_required" }, 402);
         const liveEntitlement = await env.DAGA_APP_DB.prepare("SELECT id FROM daga_entitlements WHERE account_id=? AND store_id=? AND service='live_daga' AND status='active' AND starts_at<=? AND expires_at>? LIMIT 1").bind(account.id, account.store_id, now, now).first();
         if (!liveEntitlement) return json({ error: "live_daga_subscription_required" }, 402);
+        const liveWords = await env.DAGA_APP_DB.prepare("SELECT COALESCE(SUM(CASE WHEN event_type IN ('credit','adjustment','refund') THEN words ELSE -words END),0) AS remaining FROM daga_live_word_ledger WHERE store_id=?").bind(account.store_id).first();
+        if (Number(liveWords?.remaining || 0) <= 0) return json({ error: "live_daga_quota_insufficient", remainingCharacters: 0 }, 402);
       }
       if (!env.LIVEAVATAR_API_KEY) return json({ error: "LIVEAVATAR_API_KEY secret is not configured" }, 503);
       try {
