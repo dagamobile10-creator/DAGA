@@ -195,6 +195,7 @@ jobs:
           jq -e '.ok == true' /tmp/health.json >/dev/null || { echo "::error::Staging health endpoint did not report ok=true"; cat /tmp/health.json; exit 1; }
           jq '{ok,voiceConfigured,chatConfigured,freeChatConfigured,liveAvatarConfigured}' /tmp/health.json
           voice_ready="$(jq -r '.voiceConfigured == true' /tmp/health.json)"
+          chat_ready="$(jq -r '.chatConfigured == true' /tmp/health.json)"
           if [ "$voice_ready" != "true" ]; then
             echo "::warning::ElevenLabs is not configured; continuing security smoke tests. Voice/TTS readiness remains blocked."
           fi
