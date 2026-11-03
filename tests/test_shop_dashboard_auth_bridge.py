@@ -37,11 +37,15 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn('return json({error:"smart_store_subscription_required"},402);', worker)
         self.assertNotIn("json(env,", worker)
 
-    def test_live_assistant_uses_v30_shop_auth_and_isolated_staging_api(self):
+    def test_live_assistant_uses_same_origin_shop_auth_api(self):
         assistant = (ROOT / "index.html").read_text(encoding="utf-8")
         worker = (ROOT / "worker.js").read_text(encoding="utf-8")
-        self.assertIn("daga-app-staging.dagamobile10.workers.dev", assistant)
+        self.assertNotIn("daga-app-staging.dagamobile10.workers.dev", assistant)
         self.assertNotIn("daga-voice.dagamobile10.workers.dev", assistant)
+        self.assertIn("${location.origin}/chat", assistant)
+        self.assertIn("${location.origin}/tts", assistant)
+        self.assertIn("${location.origin}/memory", assistant)
+        self.assertIn("${location.origin}/liveavatar/token", assistant)
         self.assertNotIn('id="dagaAuthPanel"', assistant)
         self.assertNotIn("/api/shop/auth/login", assistant)
         self.assertNotIn("/api/shop/auth/me", assistant)
