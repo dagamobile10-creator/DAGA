@@ -226,7 +226,8 @@ class InvitationSchemaTests(unittest.TestCase):
     def test_company_portal_supports_invite_creation_and_revocation(self):
         portal = (ROOT / "company" / "portal.html").read_text(encoding="utf-8")
         self.assertIn("/api/shop/auth/login", portal)
-        self.assertIn("/api/shop/auth/me", portal)
+        self.assertIn("/api/shop/auth/portal", portal)
+        self.assertIn("/api/shop/auth/me", (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8"))
         self.assertIn("/api/company/invitations", portal)
         self.assertIn("/revoke", portal)
         self.assertIn("navigator.share", portal)
