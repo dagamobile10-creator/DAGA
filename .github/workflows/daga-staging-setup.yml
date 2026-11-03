@@ -198,30 +198,21 @@ jobs:
           if [ "$voice_ready" != "true" ]; then
             echo "::warning::ElevenLabs is not configured; continuing security smoke tests. Voice/TTS readiness remains blocked."
           fi
-          # Legacy LIVE DAGA supports anonymous chat on the isolated staging worker.
-          chat_ready=true
-          chat_code="$(curl -sS -o /tmp/chat-smoke.json -w '%{http_code}' --max-time 20 \
-            -H 'Content-Type: application/json' -d '{"text":"اختبار"}' \
-            https://daga-app-staging.dagamobile10.workers.dev/chat)"
-          if [ "$chat_code" = "200" ]; then
-            echo "Staging legacy LIVE DAGA chat smoke test passed."
-          else
-            chat_ready=false
-            echo "::warning::Staging chat provider check failed with HTTP $chat_code; continuing independent TTS, CORS, route, and security checks."
-            cat /tmp/chat-smoke.json
-          fi
-          # Legacy LIVE DAGA TTS remains available on isolated staging without a second login.
-          if jq -e '.voiceConfigured == true' /tmp/health.json >/dev/null; then
-            tts_code="$(curl -sS -D /tmp/tts.headers -o /tmp/tts-audio.bin -w '%{http_code}' --max-time 20 \
-              -H 'Content-Type: application/json' -d '{"text":"اختبار الصوت."}' \
-              https://daga-app-staging.dagamobile10.workers.dev/tts)"
-            test "$tts_code" = "200" || { echo "::error::Staging LIVE DAGA TTS request failed; got HTTP $tts_code"; cat /tmp/tts-audio.bin; exit 1; }
-            grep -Eqi '^content-type: *audio/' /tmp/tts.headers || { echo "::error::Staging TTS returned HTTP 200 without an audio content type"; cat /tmp/tts.headers; exit 1; }
-            test -s /tmp/tts-audio.bin || { echo "::error::Staging TTS returned an empty audio body"; exit 1; }
-            echo "Staging TTS provider smoke test passed: HTTP 200, audio content type, non-empty body."
-          else
-            echo "::warning::Staging TTS auth smoke test skipped: ELEVENLABS_API_KEY is not configured."
-          fi
+          # Voice endpoints must reject anonymous calls now that tenant authorization is mandatory.
+          for endpoint in chat tts; do
+            code="$(curl -sS -o "/tmp/$endpoint-anon.json" -w '%{http_code}' --max-time 20 \
+              -H 'Content-Type: application/json' -d '{"text":"اختبار"}' \
+              "https://daga-app-staging.dagamobile10.workers.dev/$endpoint")"
+            test "$code" = "401" || { echo "::error::Anonymous $endpoint endpoint must be blocked; got HTTP $code"; cat "/tmp/$endpoint-anon.json"; exit 1; }
+            grep -q 'authenticated_account_required' "/tmp/$endpoint-anon.json" || { echo "::error::Anonymous $endpoint endpoint returned an unexpected denial"; cat "/tmp/$endpoint-anon.json"; exit 1; }
+            echo "Staging anonymous $endpoint authorization gate passed."
+          done
+          code="$(curl -sS -o /tmp/liveavatar-anon.json -w '%{http_code}' --max-time 20 \
+            -H 'Content-Type: application/json' -d '{}' \
+            https://daga-app-staging.dagamobile10.workers.dev/liveavatar/token)"
+          test "$code" = "401" || { echo "::error::Anonymous LIVE DAGA token endpoint must be blocked; got HTTP $code"; cat /tmp/liveavatar-anon.json; exit 1; }
+          grep -q 'authenticated_account_required' /tmp/liveavatar-anon.json || { echo "::error::Anonymous LIVE DAGA token endpoint returned an unexpected denial"; cat /tmp/liveavatar-anon.json; exit 1; }
+          echo "Staging anonymous LIVE DAGA token authorization gate passed."
           # Runtime CORS smoke test: only the configured staging origin may be authorized.
           curl -fsS -D /tmp/cors-allowed.headers -o /dev/null -X OPTIONS \
             -H 'Origin: https://dagamobile10-creator.github.io' \
