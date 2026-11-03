@@ -9,7 +9,7 @@ export async function handleShopAuth(request, env, url) {
   const routes = new Set([
     "/api/shop/registration/start", "/api/shop/registration/verify",
     "/api/shop/auth/setup/start", "/api/shop/auth/setup/verify",
-    "/api/shop/auth/login", "/api/shop/auth/me", "/api/shop/auth/logout", "/api/shop/auth/recovery/start", "/api/shop/auth/recovery/complete"
+    "/api/shop/auth/login", "/api/shop/auth/me", "/api/shop/auth/portal", "/api/shop/auth/logout", "/api/shop/auth/recovery/start", "/api/shop/auth/recovery/complete"
   ]);
   if (!routes.has(path)) return null;
   if (request.method === "OPTIONS") return new Response(null, {status:204,headers:cors(env)});
@@ -23,7 +23,8 @@ export async function handleShopAuth(request, env, url) {
     if (path === "/api/shop/auth/login" && request.method === "POST") return await login(request,env,db);
     if (path === "/api/shop/auth/recovery/start" && request.method === "POST") return await recoveryStart(request,env,db);
     if (path === "/api/shop/auth/recovery/complete" && request.method === "POST") return await recoveryComplete(request,env,db);
-    if (path === "/api/shop/auth/me" && request.method === "GET") return await me(request,env,db);
+    if (path === "/api/shop/auth/me" && request.method === "GET") return await me(request,env,db,false);
+    if (path === "/api/shop/auth/portal" && request.method === "GET") return await me(request,env,db,true);
     if (path === "/api/shop/auth/logout" && request.method === "POST") return await logout(request,env,db);
     return json(env,{error:"method_not_allowed"},405);
   } catch (e) {
@@ -152,14 +153,15 @@ async function recoveryComplete(request,env,db){
   ]);
   return json(env,{ok:true,message:"تم تغيير كلمة المرور وإلغاء الجلسات السابقة."});
 }
-async function me(request,env,db){
+async function me(request,env,db,allowCheckoutWithoutSubscription=false){
   const account=await authenticatedAccount(request,db);
   if(!account||account.role!=="store_owner"||account.status!=="approved")return json(env,{error:"authentication_required"},401);
   const store=await db.prepare("SELECT id,public_id,display_name,status FROM daga_stores WHERE id=? AND owner_account_id=? AND status='approved'").bind(account.store_id,account.id).first();
   if(!store)return json(env,{error:"shop_not_approved"},403);
   const now=new Date().toISOString();
-  const entitlement=await db.prepare("SELECT e.id,p.features_json FROM (SELECT id,order_id FROM daga_entitlements WHERE account_id=? AND store_id=? AND service='store' AND status='active' AND starts_at<=? AND expires_at>? LIMIT 1) e LEFT JOIN daga_plan_orders o ON o.id=e.order_id LEFT JOIN daga_plans p ON p.id=o.plan_id").bind(account.id,store.id,now,now).first();
-  const liveEntitlement=await db.prepare("SELECT id FROM daga_entitlements WHERE account_id=? AND store_id=? AND service='live_daga' AND status='active' AND starts_at<=? AND expires_at>? LIMIT 1").bind(account.id,store.id,now,now).first();
+  const entitlement=await db.prepare("SELECT e.id,p.features_json FROM daga_entitlements e JOIN daga_plan_orders o ON o.id=e.order_id AND o.status='paid_approved' JOIN daga_plans p ON p.id=o.plan_id WHERE e.account_id=? AND e.store_id=? AND e.service='store' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? LIMIT 1").bind(account.id,store.id,now,now).first();
+   if(!entitlement&&!allowCheckoutWithoutSubscription)return json(env,{error:"active_store_subscription_required",message:"لازم الاشتراك يكون مدفوع ومعتمد من مالك التطبيق قبل دخول دفتر المحل."},403);
+  const liveEntitlement=await db.prepare("SELECT e.id FROM daga_entitlements e JOIN daga_plan_orders o ON o.id=e.order_id AND o.status='paid_approved' WHERE e.account_id=? AND e.store_id=? AND e.service='live_daga' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? LIMIT 1").bind(account.id,store.id,now,now).first();
   const liveWordLedger=await db.prepare("SELECT COALESCE(SUM(CASE WHEN event_type IN ('credit','adjustment','refund') THEN words ELSE -words END),0) AS remaining FROM daga_live_word_ledger WHERE store_id=?").bind(store.id).first();
   const liveWordsRemaining=Math.max(0,Number(liveWordLedger?.remaining||0));
   let features={};try{features=JSON.parse(entitlement?.features_json||"{}");if(!features||typeof features!=="object"||Array.isArray(features))features={};}catch(_){features={};}
