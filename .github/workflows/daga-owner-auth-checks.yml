@@ -64,7 +64,7 @@ jobs:
                   and '>= ?' in worker
                   and 'requiredCharacters: characters, remainingCharacters: remaining' in worker,
               "LIVE DAGA worker checks entitlement start and expiry before debit":
-                  'starts_at<=? AND expires_at>?' in worker
+                  'starts_at<=? AND e.expires_at>?' in worker
                   and 'if (!entitlement) return json({ error: "live_daga_subscription_required" }, 402);' in worker
                   and "o.status='paid_approved'" in worker,
               "owner console labels LIVE DAGA quota as characters and requires it":
