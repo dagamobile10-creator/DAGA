@@ -24,7 +24,7 @@ jobs:
                   'const quotaNow = new Date().toISOString();' in worker
                   and 'starts_at<=? AND expires_at>?' in worker
                   and 'account.store_id, quotaNow, quotaNow' in worker
-                  and 'account.store_id, quotaNow, quotaNow).run()' in worker
+                  and 'account.store_id, quotaNow, quotaNow).first()' in worker
                   and "o.status='paid_approved'" in worker,
               "LIVE DAGA refunds quota after provider failures":
                   "const refundQuota = async () =>" in worker
@@ -65,7 +65,7 @@ jobs:
                   and 'requiredCharacters: characters, remainingCharacters: remaining' in worker,
               "LIVE DAGA worker checks entitlement start and expiry before debit":
                   'starts_at<=? AND expires_at>?' in worker
-                  and 'error: "live_daga_subscription_required"' in worker
+                  and 'if (!entitlement) return json({ error: "live_daga_subscription_required" }, 402);' in worker
                   and "o.status='paid_approved'" in worker,
               "owner console labels LIVE DAGA quota as characters and requires it":
                   "رصيد الحروف (إلزامي لباقة LIVE DAGA)" in open("owner-console.html", encoding="utf-8").read()
