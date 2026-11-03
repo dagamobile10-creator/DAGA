@@ -260,7 +260,7 @@ export default {
     // Staged identity gate: off by default to preserve the legacy anonymous LIVE DAGA client.
     // Enable only after the client has a supported sign-in/session flow.
     let voiceAccount = null;
-    const voiceIdentityRequired = String(env.DAGA_VOICE_REQUIRE_AUTH || "").toLowerCase() === "true";
+    const voiceIdentityRequired = true; // Smart assistant and voice endpoints always require an approved, entitled shop session.
     if (voiceIdentityRequired && ["/chat", "/tts", "/liveavatar/token"].includes(url.pathname)) {
       if (!env.DAGA_APP_DB) return json({ error: "authenticated_voice_not_configured" }, 503);
       voiceAccount = await authenticatedAccount(request, env.DAGA_APP_DB);
