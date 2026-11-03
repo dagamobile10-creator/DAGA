@@ -22,7 +22,7 @@ jobs:
           checks = {
               "LIVE DAGA quota uses one explicit UTC timestamp for entitlement checks":
                   'const quotaNow = new Date().toISOString();' in worker
-                  and 'starts_at<=? AND expires_at>?' in worker
+                  and 'starts_at<=? AND e.expires_at>?' in worker
                   and 'account.store_id, quotaNow, quotaNow' in worker
                   and 'account.store_id, quotaNow, quotaNow).first()' in worker
                   and "o.status='paid_approved'" in worker,
