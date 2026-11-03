@@ -92,9 +92,9 @@ jobs:
           DAGA_ALLOWED_ORIGINS = "https://dagamobile10-creator.github.io"
           DAGA_MEMORY_REQUIRE_AUTH = "true"
           # The V30 browser client sends the approved shop session token on chat/TTS/LiveAvatar requests.
-          DAGA_VOICE_REQUIRE_AUTH = "false"
+          DAGA_VOICE_REQUIRE_AUTH = "true"
           # Enforce the LIVE DAGA character ledger only in isolated staging.
-          DAGA_LIVE_QUOTA_ENFORCE = "false"
+          DAGA_LIVE_QUOTA_ENFORCE = "true"
           DAGA_PUBLIC_API_RATE_LIMITS = "true"
           [[d1_databases]]
           binding = "DAGA_APP_DB"
@@ -163,7 +163,7 @@ jobs:
               echo "## DAGA staging readiness"
               echo "- Infrastructure: deployed; schema migrations and runtime smoke checks are verified separately below."
               echo "- Owner authentication / OTP delivery: **BLOCKED**."
-            echo "- Voice/chat/TTS are explicitly in legacy compatibility mode; this does not establish tenant-secure voice identity."
+            echo "- Voice/chat/TTS require verified shop sessions and active Smart entitlement; LIVE additionally requires its paid entitlement and positive character balance."
               echo "- Missing GitHub Actions repository secrets: $missing_csv."
               echo "- Add the missing secrets under Settings → Secrets and variables → Actions, then rerun this workflow. Staging bootstrap uses the separate DAGA_STAGING_OWNER_BOOTSTRAP_TOKEN secret; it does not reuse the production bootstrap token."
               echo "- Optional voice secrets missing: ${voice_missing[*]:-none}."
@@ -182,7 +182,7 @@ jobs:
             echo "## DAGA staging readiness"
             echo "- Email-only owner authentication and email OTP delivery secrets: present and configured on the isolated staging Worker. The staging bootstrap token is sourced from the dedicated DAGA_STAGING_OWNER_BOOTSTRAP_TOKEN GitHub secret, separate from production."
             echo "- Owner bootstrap and real email delivery still require end-to-end verification with the designated owner."
-            echo "- Voice/chat/TTS remain explicitly in legacy compatibility mode until the client sends verified sessions; do not treat these smoke tests as authenticated voice validation."
+            echo "- Voice/chat/TTS require verified shop sessions; anonymous access is explicitly rejected. LIVE requires Smart, paid LIVE entitlement, and positive character balance."
             echo "- Production Worker and main branch were not targeted."
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Verify staging health without printing secrets
