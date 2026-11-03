@@ -41,7 +41,9 @@ class ShopSelfRegistrationTests(unittest.TestCase):
 
     def test_shop_data_is_not_opened_before_active_entitlement(self):
         auth = (ROOT / "shop-auth.js").read_text(encoding="utf-8")
-        self.assertIn("service='store' AND status='active' AND starts_at<=? AND expires_at>?", auth)
+        self.assertIn("e.service=\\'store\\' AND e.status=\\'active\\' AND e.starts_at<=? AND e.expires_at>?", auth)
+        self.assertIn("o.status=\\'paid_approved\\'", auth)
+        self.assertIn("if(!entitlement&&!allowCheckoutWithoutSubscription)", auth)
         self.assertIn("/api/shop/auth/me", (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8"))
 
 if __name__ == "__main__":
