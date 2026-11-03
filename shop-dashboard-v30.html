@@ -621,7 +621,7 @@ async function bootAuthenticatedDashboard(token,selectedCompanyId){
   let role=String(company.role||data.account.role||'').toLowerCase();
   if(role==='owner')role='store_owner';
   if(!['store_owner','manager','employee'].includes(role)){window.location.replace('/shop-access/');return;}
-  window.DAGA_SESSION_TOKEN=token;window.DAGA_AUTH_USER={id:data.account.id,displayName:data.account.displayName||'',role:role,storeId:company.id,storeName:company.displayName||'ضجه',supportWhatsApp:String(data.supportWhatsApp||'').replace(/[^0-9]/g,''),permissions:company.permissions||{},smartAssistantEnabled:company.smartAssistantEnabled===true,historyEnabled:company.historyEnabled===true,liveDagaEnabled:company.liveDagaEnabled===true};
+  window.DAGA_SESSION_TOKEN=token;window.DAGA_AUTH_USER={id:data.account.id,displayName:data.account.displayName||'',role:role,storeId:company.id,storeName:company.displayName||'ضجه',supportWhatsApp:String(data.supportWhatsApp||'').replace(/[^0-9]/g,''),permissions:company.permissions||{},smartAssistantEnabled:company.smartAssistantEnabled===true,historyEnabled:company.historyEnabled===true,liveDagaEnabled:company.liveDagaEnabled===true,liveWordsRemaining:Number(company.liveWordsRemaining||0)};
   // Keep both premium actions visible on every plan; entitlement controls whether they can run.
   const smartAllowed=window.DAGA_AUTH_USER.smartAssistantEnabled===true;
   const liveAllowed=smartAllowed&&window.DAGA_AUTH_USER.liveDagaEnabled===true&&Number(window.DAGA_AUTH_USER.liveWordsRemaining)>0;
