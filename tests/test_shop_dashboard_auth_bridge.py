@@ -57,8 +57,8 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
 
     def test_live_daga_requires_live_entitlement_without_smart_plan_dependency(self):
         worker = (ROOT / "worker.js").read_text(encoding="utf-8")
-        self.assertIn("store_subscription_required", worker)  # Standard and Smart both enable Kallim DAGA
-        self.assertNotIn("smart_store_subscription_required", worker)
+        self.assertIn("smart_store_subscription_required", worker)
+        self.assertNotIn("store_subscription_required", worker)
         tts = worker[worker.index('if (url.pathname !== "/tts"'):]
         self.assertNotIn("smart_store_subscription_required", tts)
         self.assertIn("live_daga_subscription_required", tts)
@@ -154,8 +154,8 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn("smart_store_subscription_required", chat)
         self.assertIn("live_daga_quota_insufficient", chat)
         self.assertNotIn("service='live_daga'", chat)
-        self.assertIn("store_subscription_required", chat)
-        self.assertNotIn("smart_store_subscription_required", chat)
+        self.assertIn("smart_store_subscription_required", chat)
+        self.assertNotIn("store_subscription_required", chat)
         self.assertIn("mode:'live_daga'", live)
 
     def test_voice_routes_enforce_member_permissions_independently(self):
