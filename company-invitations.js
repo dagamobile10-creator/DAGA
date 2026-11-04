@@ -63,14 +63,14 @@ async function companyAccountMe(env, db, account) {
   const now = new Date().toISOString();
   const companies = await Promise.all(rawCompanies.map(async company => {
     const [storeEntitlement, liveEntitlement, liveWordBalance] = await Promise.all([
-      db.prepare("SELECT p.features_json FROM daga_entitlements e LEFT JOIN daga_plan_orders o ON o.id=e.order_id LEFT JOIN daga_plans p ON p.id=o.plan_id WHERE e.store_id=? AND e.service='store' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? ORDER BY e.starts_at DESC,e.created_at DESC LIMIT 1").bind(company.id, now, now).first(),
+      db.prepare("SELECT p.name,p.features_json FROM daga_entitlements e LEFT JOIN daga_plan_orders o ON o.id=e.order_id LEFT JOIN daga_plans p ON p.id=o.plan_id WHERE e.store_id=? AND e.service='store' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? ORDER BY e.starts_at DESC,e.created_at DESC LIMIT 1").bind(company.id, now, now).first(),
       db.prepare("SELECT id FROM daga_entitlements WHERE store_id=? AND service='live_daga' AND status='active' AND starts_at<=? AND expires_at>? ORDER BY starts_at DESC,created_at DESC LIMIT 1").bind(company.id, now, now).first(),
       db.prepare("SELECT COALESCE(SUM(CASE WHEN event_type IN ('credit','adjustment','refund') THEN words ELSE -words END),0) AS remaining FROM daga_live_word_ledger WHERE store_id=?").bind(company.id).first()
     ]);
     let features = {};
     try { features = JSON.parse(storeEntitlement?.features_json || "{}"); if (!features || typeof features !== "object" || Array.isArray(features)) features = {}; } catch (_) {}
     const remainingWords = Number(liveWordBalance?.remaining || 0);
-    const smartEnabled = Boolean(storeEntitlement && (features.smartAssistantEnabled === true || features.tier === "smart"));
+    const smartEnabled = Boolean(storeEntitlement && (features.smartAssistantEnabled === true || features.tier === "smart" || /smart|ذكي/i.test(String(storeEntitlement.name || ""))));
     return { ...company, ledgerEnabled: Boolean(storeEntitlement), smartAssistantEnabled: smartEnabled, historyEnabled: Boolean(storeEntitlement && (features.historyEnabled === true || features.tier === "smart")), liveDagaEnabled: smartEnabled && remainingWords > 0, liveWordsRemaining: remainingWords };
   }));
   return json(env, { ok: true, account: { id: account.id, publicId: account.public_id || null, displayName: account.display_name, role: account.role, status: account.status, emailMasked: maskCompanyEmail(account.email) }, companies });
