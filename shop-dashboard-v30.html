@@ -492,16 +492,11 @@ function showLiveComingSoon(){
   if(user.liveDagaEnabled!==true)return;
   const token=String(window.DAGA_SESSION_TOKEN||'');
   if(!token)return;
-  const liveOrigin='https://daga-app-staging.dagamobile10.workers.dev';
-  const liveWindow=window.open(liveOrigin+'/live/?api=staging','_blank');
-  if(!liveWindow)return;
-  const onLiveReady=event=>{
-    if(event.origin!==liveOrigin||event.source!==liveWindow||event.data!=='DAGA_LIVE_READY')return;
-    window.removeEventListener('message',onLiveReady);
-    liveWindow.postMessage({type:'DAGA_AUTH',token,companyId:String(user.storeId||'')},liveOrigin);
-  };
-  window.addEventListener('message',onLiveReady);
-  setTimeout(()=>window.removeEventListener('message',onLiveReady),15000);
+  try{
+    sessionStorage.setItem('daga_account_session_v1',token);
+    sessionStorage.setItem('daga_company_id_v1',String(user.storeId||''));
+  }catch(_){return;}
+  window.location.assign('/live/?api=staging');
 }
 function closeDagaLiveFullscreen(){
  const screen=document.getElementById('dagaLiveFullscreen');
