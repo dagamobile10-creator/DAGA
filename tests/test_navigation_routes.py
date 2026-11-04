@@ -146,7 +146,6 @@ class NavigationRouteTests(unittest.TestCase):
             "/owner/admin/offers",
             "/owner/admin/payments",
             "/owner/admin/stores",
-            "/owner/admin/stores/contact",
             "/owner/admin/accounts",
             "/owner/admin/columns",
             "/owner/admin/words/adjust",
