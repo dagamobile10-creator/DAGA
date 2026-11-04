@@ -209,21 +209,20 @@ export default {
     }
 
     if (url.pathname === "/liveavatar/token" && request.method === "POST") {
-      // This route returns a provider session token and exits before the shared chat/TTS gate below,
-      // so enforce the staged identity requirement here as well when it is enabled.
-      if (String(env.DAGA_VOICE_REQUIRE_AUTH || "").toLowerCase() === "true") {
-        if (!env.DAGA_APP_DB) return json({ error: "authenticated_voice_not_configured" }, 503);
-        const account = await authenticatedAccount(request, env.DAGA_APP_DB);
-        if (!account || account.status !== "approved" || account.role === "program_owner") {
-          return json({ error: "authenticated_account_required" }, 401);
-        }
-        const company = await resolveCompanyVoiceContext(env, account, request.headers.get("X-DAGA-Company-ID") || "");
-        if (company.error) return company.error;
-        if (company.role !== "store_owner" && company.permissions.useLiveDaga !== true) return json({ error: "company_voice_permission_denied", permission: "useLiveDaga" }, 403);
-        const now = new Date().toISOString();
-        const liveEntitlement = await env.DAGA_APP_DB.prepare("SELECT id FROM daga_entitlements WHERE store_id=? AND service='live_daga' AND status='active' AND starts_at<=? AND expires_at>? LIMIT 1").bind(company.storeId, now, now).first();
-        if (!liveEntitlement) return json({ error: "live_daga_subscription_required" }, 402);
+      // This route exits before the shared chat/TTS gate, so authenticate and enforce LIVE DAGA entitlements here.
+      if (!env.DAGA_APP_DB) return json({ error: "authenticated_voice_not_configured" }, 503);
+      const account = await authenticatedAccount(request, env.DAGA_APP_DB);
+      if (!account || account.status !== "approved" || account.role === "program_owner") {
+        return json({ error: "authenticated_account_required" }, 401);
       }
+      const company = await resolveCompanyVoiceContext(env, account, request.headers.get("X-DAGA-Company-ID") || "");
+      if (company.error) return company.error;
+      if (company.role !== "store_owner" && company.permissions.useLiveDaga !== true) return json({ error: "company_voice_permission_denied", permission: "useLiveDaga" }, 403);
+      const now = new Date().toISOString();
+      const liveEntitlement = await env.DAGA_APP_DB.prepare("SELECT id FROM daga_entitlements WHERE store_id=? AND service='live_daga' AND status='active' AND starts_at<=? AND expires_at>? LIMIT 1").bind(company.storeId, now, now).first();
+      if (!liveEntitlement) return json({ error: "live_daga_subscription_required" }, 402);
+      const words = await env.DAGA_APP_DB.prepare("SELECT COALESCE(SUM(CASE WHEN event_type IN ('credit','adjustment','refund') THEN words ELSE -words END),0) AS remaining FROM daga_live_word_ledger WHERE store_id=?").bind(company.storeId).first();
+      if (Number(words?.remaining || 0) <= 0) return json({ error: "live_daga_quota_insufficient", remainingCharacters: 0 }, 402);
       if (!env.LIVEAVATAR_API_KEY) return json({ error: "LIVEAVATAR_API_KEY secret is not configured" }, 503);
       try {
         let avatarId = String(env.LIVEAVATAR_AVATAR_ID || "").trim();
@@ -274,10 +273,9 @@ export default {
       return json({ ok: true, voiceConfigured: Boolean(env.ELEVENLABS_API_KEY), chatConfigured: Boolean(env.OPENAI_API_KEY || env.GROQ_API_KEY || env.AI), freeChatConfigured: Boolean(env.GROQ_API_KEY || env.AI), liveAvatarConfigured: Boolean(env.LIVEAVATAR_API_KEY), liveAvatarIdConfigured: Boolean(env.LIVEAVATAR_AVATAR_ID) });
     }
 
-    // Staged identity gate: off by default to preserve the legacy anonymous LIVE DAGA client.
-    // Enable only after the client has a supported sign-in/session flow.
+    // Subscription-controlled voice routes always require the authenticated company session.
     let voiceAccount = null;
-    const voiceIdentityRequired = String(env.DAGA_VOICE_REQUIRE_AUTH || "").toLowerCase() === "true";
+    const voiceIdentityRequired = true;
     if (voiceIdentityRequired && ["/chat", "/tts", "/liveavatar/token"].includes(url.pathname)) {
       if (!env.DAGA_APP_DB) return json({ error: "authenticated_voice_not_configured" }, 503);
       voiceAccount = await authenticatedAccount(request, env.DAGA_APP_DB);
@@ -303,9 +301,11 @@ export default {
           if (liveMode) {
             const liveEntitlement = await env.DAGA_APP_DB.prepare("SELECT id FROM daga_entitlements WHERE store_id=? AND service='live_daga' AND status='active' AND starts_at<=? AND expires_at>? LIMIT 1").bind(company.storeId, now, now).first();
             if (!liveEntitlement) return json({ error: "live_daga_subscription_required" }, 402);
+            const words = await env.DAGA_APP_DB.prepare("SELECT COALESCE(SUM(CASE WHEN event_type IN ('credit','adjustment','refund') THEN words ELSE -words END),0) AS remaining FROM daga_live_word_ledger WHERE store_id=?").bind(company.storeId).first();
+            if (Number(words?.remaining || 0) <= 0) return json({ error: "live_daga_quota_insufficient", remainingCharacters: 0 }, 402);
           } else {
-            const smartPlan = await env.DAGA_APP_DB.prepare("SELECT e.id FROM daga_entitlements e JOIN daga_plan_orders o ON o.id=e.order_id JOIN daga_plans p ON p.id=o.plan_id WHERE e.store_id=? AND e.service='store' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? AND (json_extract(p.features_json,'$.tier')='smart' OR json_extract(p.features_json,'$.smartAssistantEnabled')=1) LIMIT 1").bind(company.storeId, now, now).first();
-            if (!smartPlan) return json({ error: "smart_store_subscription_required" }, 402);
+            const storePlan = await env.DAGA_APP_DB.prepare("SELECT id FROM daga_entitlements WHERE store_id=? AND service='store' AND status='active' AND starts_at<=? AND expires_at>? LIMIT 1").bind(company.storeId, now, now).first();
+            if (!storePlan) return json({ error: "store_subscription_required" }, 402);
           }
         }
         const userText = String(body?.text || "").trim();
@@ -406,14 +406,22 @@ export default {
     if (url.pathname !== "/tts" || request.method !== "POST") return json({ error: "Not found" }, 404);
 
     try {
-      if (voiceIdentityRequired) {
-        const permissionDenied = await enforceCompanyVoicePermission(env, voiceAccount, "useLiveDaga", request.headers.get("X-DAGA-Company-ID") || "");
-        if (permissionDenied) return permissionDenied;
-      }
       if (!env.ELEVENLABS_API_KEY) return json({ error: "DAGA voice is not configured" }, 503);
       const parsed = await readBoundedJson(request, 16384);
       if (!parsed.ok) return json({ error: parsed.error }, parsed.status);
       const body = parsed.value;
+      const liveMode = body?.mode === "live_daga";
+      if (voiceIdentityRequired) {
+        const permissionDenied = await enforceCompanyVoicePermission(env, voiceAccount, liveMode ? "useLiveDaga" : "useSmartAssistant", request.headers.get("X-DAGA-Company-ID") || "");
+        if (permissionDenied) return permissionDenied;
+        if (!liveMode) {
+          const company = await resolveCompanyVoiceContext(env, voiceAccount, request.headers.get("X-DAGA-Company-ID") || "");
+          if (company.error) return company.error;
+          const now = new Date().toISOString();
+          const storePlan = await env.DAGA_APP_DB.prepare("SELECT id FROM daga_entitlements WHERE store_id=? AND service='store' AND status='active' AND starts_at<=? AND expires_at>? LIMIT 1").bind(company.storeId, now, now).first();
+          if (!storePlan) return json({ error: "store_subscription_required" }, 402);
+        }
+      }
       let text = String(body?.text || "").trim();
       if (!text) return json({ error: "text is required" }, 400);
       if (text.length > 2500) return json({ error: "text_too_long", maxLength: 2500 }, 413);
@@ -425,7 +433,7 @@ export default {
       text = text.replace(/ضَجَّة|ضَجّة|ضجّة|ضجه/gu, "ضَگَّة").replace(/\s{2,}/g, " ").trim();
 
       let quota = null;
-      if (String(env.DAGA_LIVE_QUOTA_ENFORCE || "").toLowerCase() === "true") {
+      if (liveMode) {
         if (!env.DAGA_APP_DB) return json({ error: "live_quota_not_configured" }, 503);
         const account = voiceAccount || await authenticatedAccount(request, env.DAGA_APP_DB);
         if (!account || account.status !== "approved" || account.role === "program_owner") return json({ error: "approved_shop_account_required" }, 401);
