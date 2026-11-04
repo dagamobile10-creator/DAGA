@@ -45,7 +45,7 @@ class ShopSelfRegistrationTests(unittest.TestCase):
         portal = (ROOT / "company" / "portal.html").read_text(encoding="utf-8")
         self.assertIn("data-wa-store", owner_console)
         self.assertIn("data-store-sub-cancel", owner_console)
-        self.assertIn("/subscription/cancel", admin)
+        self.assertIn("cancelStoreSubscriptionMatch", admin)
         self.assertIn("UPDATE daga_entitlements SET status='revoked'", admin)
         self.assertIn("UPDATE daga_auth_sessions SET revoked_at=?", admin)
         self.assertIn("تسجيل ودخول الشركة", portal)
