@@ -5,8 +5,7 @@ const SESSION_TTL_SECONDS = 8 * 60 * 60;
 const ITERATIONS = 100000;
 
 export async function handleShopAuth(request, env, url) {
-  const rawPath = url.pathname.replace(/\/+$/, "") || "/";
-  const path = rawPath.startsWith("/api/company/") ? rawPath.replace(/^\/api\/company\//, "/api/shop/") : rawPath;
+  const path = url.pathname.replace(/\/+$/, "") || "/";
   const routes = new Set([
     "/api/shop/registration/start", "/api/shop/registration/verify",
     "/api/shop/auth/setup/start", "/api/shop/auth/setup/verify",
