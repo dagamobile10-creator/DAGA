@@ -71,7 +71,7 @@ async function companyAccountMe(env, db, account) {
     try { features = JSON.parse(storeEntitlement?.features_json || "{}"); if (!features || typeof features !== "object" || Array.isArray(features)) features = {}; } catch (_) {}
     const remainingWords = Number(liveWordBalance?.remaining || 0);
     const smartEnabled = Boolean(storeEntitlement && (features.smartAssistantEnabled === true || features.tier === "smart" || /smart|ذكي/i.test(String(storeEntitlement.name || ""))));
-    return { ...company, ledgerEnabled: Boolean(storeEntitlement), smartAssistantEnabled: smartEnabled, historyEnabled: Boolean(storeEntitlement && (features.historyEnabled === true || features.tier === "smart")), liveDagaEnabled: smartEnabled && remainingWords > 0, liveWordsRemaining: remainingWords };
+    return { ...company, ledgerEnabled: Boolean(storeEntitlement), smartAssistantEnabled: smartEnabled, historyEnabled: Boolean(storeEntitlement && (features.historyEnabled === true || features.tier === "smart")), liveDagaEnabled: remainingWords > 0, liveWordsRemaining: remainingWords };
   }));
   return json(env, { ok: true, account: { id: account.id, publicId: account.public_id || null, displayName: account.display_name, role: account.role, status: account.status, emailMasked: maskCompanyEmail(account.email) }, companies });
 }
