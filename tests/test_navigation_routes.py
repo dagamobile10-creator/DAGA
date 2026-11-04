@@ -146,6 +146,7 @@ class NavigationRouteTests(unittest.TestCase):
             "/owner/admin/offers",
             "/owner/admin/payments",
             "/owner/admin/stores",
+            "/owner/admin/stores/contact",
             "/owner/admin/accounts",
             "/owner/admin/columns",
             "/owner/admin/words/adjust",
@@ -154,6 +155,9 @@ class NavigationRouteTests(unittest.TestCase):
                 self.assertIn(path, self.owner)
                 self.assertIn(path, self.owner_admin)
         self.assertIn("authenticatedOwner(request, db)", self.owner_admin)
+        self.assertIn("data-contact-edit", self.owner)
+        self.assertIn("store_contact_phone_updated", self.owner_admin)
+        self.assertIn("invalid_contact_phone", self.owner_admin)
 
     def test_approved_shop_owner_is_sent_email_password_setup_code(self):
         # The admin decision must persist approval first, then request the
