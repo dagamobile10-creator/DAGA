@@ -63,5 +63,23 @@ class ShopSelfRegistrationTests(unittest.TestCase):
         self.assertIn("if(!entitlement&&!allowCheckoutWithoutSubscription)", auth)
         self.assertIn("/api/shop/auth/me", (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8"))
 
+
+    def test_cancelled_company_can_be_archived_without_deleting_financial_history(self):
+        admin = (ROOT / "owner-admin.js").read_text(encoding="utf-8")
+        owner = (ROOT / "owner-console.html").read_text(encoding="utf-8")
+        workflow = (ROOT / ".github" / "workflows" / "daga-staging-setup.yml").read_text(encoding="utf-8")
+        migration = (ROOT / "migrations" / "0018_daga_store_archiving.sql").read_text(encoding="utf-8")
+        self.assertIn("archiveStoreMatch", admin)
+        self.assertIn("active_subscription_must_be_cancelled_first", admin)
+        self.assertIn("WHERE archived_at IS NULL GROUP BY status", admin)
+        self.assertIn("WHERE s.archived_at IS NULL", admin)
+        self.assertIn("store_archived_from_owner_dashboard", admin)
+        self.assertIn("UPDATE daga_store_memberships SET status='removed'", admin)
+        self.assertIn("UPDATE daga_store_invitations SET status='revoked'", admin)
+        self.assertIn("data-store-archive", owner)
+        self.assertIn("preservedFinancialHistory", admin)
+        self.assertIn("0018_daga_store_archiving.sql", workflow)
+        self.assertIn("archived_at", migration)
+
 if __name__ == "__main__":
     unittest.main()

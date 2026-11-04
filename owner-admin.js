@@ -12,7 +12,7 @@ export async function handleOwnerAdmin(request, env, url) {
     const path = url.pathname.replace(/\/+$/, "");
     if (path === "/owner/admin/overview" && request.method === "GET") {
       const [stores, pendingAccounts, plans, pendingPayments, activeEntitlements, wordBalance] = await Promise.all([
-        db.prepare("SELECT status,COUNT(*) AS count FROM daga_stores GROUP BY status").all(),
+        db.prepare("SELECT status,COUNT(*) AS count FROM daga_stores WHERE archived_at IS NULL GROUP BY status").all(),
         db.prepare("SELECT role,status,COUNT(*) AS count FROM daga_accounts WHERE role!='program_owner' GROUP BY role,status").all(),
         db.prepare("SELECT service,COUNT(*) AS count FROM daga_plans WHERE is_active=1 GROUP BY service").all(),
         db.prepare("SELECT COUNT(*) AS count FROM daga_payment_submissions WHERE status='pending_review'").first(),
@@ -184,7 +184,7 @@ export async function handleOwnerAdmin(request, env, url) {
 
     if(path==="/owner/admin/stores"&&request.method==="GET"){
       const now=new Date().toISOString();
-      const r=await db.prepare("SELECT s.id,s.public_id,s.owner_account_id,s.display_name,s.status,s.onboarding_status,s.contact_phone,s.created_at,a.email,(SELECT e.id FROM daga_entitlements e WHERE e.store_id=s.id AND e.service='store' AND e.status='active' ORDER BY e.expires_at DESC LIMIT 1) AS store_entitlement_id,(SELECT e.expires_at FROM daga_entitlements e WHERE e.store_id=s.id AND e.service='store' AND e.status='active' ORDER BY e.expires_at DESC LIMIT 1) AS store_entitlement_expires_at,a.display_name AS owner_name,(SELECT p.name FROM daga_entitlements e JOIN daga_plan_orders o ON o.id=e.order_id AND o.status='paid_approved' JOIN daga_plans p ON p.id=o.plan_id WHERE e.store_id=s.id AND e.service='store' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? ORDER BY e.expires_at DESC LIMIT 1) AS store_plan_name,(SELECT COALESCE(json_extract(p.features_json,'$.tier'),CASE WHEN json_extract(p.features_json,'$.smartAssistantEnabled')=1 THEN 'smart' ELSE 'standard' END) FROM daga_entitlements e JOIN daga_plan_orders o ON o.id=e.order_id AND o.status='paid_approved' JOIN daga_plans p ON p.id=o.plan_id WHERE e.store_id=s.id AND e.service='store' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? ORDER BY e.expires_at DESC LIMIT 1) AS store_plan_tier,(SELECT p.name FROM daga_entitlements e JOIN daga_plan_orders o ON o.id=e.order_id AND o.status='paid_approved' JOIN daga_plans p ON p.id=o.plan_id WHERE e.store_id=s.id AND e.service='live_daga' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? ORDER BY e.expires_at DESC LIMIT 1) AS live_daga_plan_name,(SELECT COALESCE(SUM(CASE WHEN l.event_type IN ('credit','adjustment','refund') THEN l.words ELSE -l.words END),0) FROM daga_live_word_ledger l WHERE l.store_id=s.id) AS live_daga_remaining FROM daga_stores s JOIN daga_accounts a ON a.id=s.owner_account_id ORDER BY s.created_at DESC LIMIT 500").bind(now,now,now,now,now,now).all();
+      const r=await db.prepare("SELECT s.id,s.public_id,s.owner_account_id,s.display_name,s.status,s.onboarding_status,s.contact_phone,s.created_at,a.email,(SELECT e.id FROM daga_entitlements e WHERE e.store_id=s.id AND e.service='store' AND e.status='active' ORDER BY e.expires_at DESC LIMIT 1) AS store_entitlement_id,(SELECT e.expires_at FROM daga_entitlements e WHERE e.store_id=s.id AND e.service='store' AND e.status='active' ORDER BY e.expires_at DESC LIMIT 1) AS store_entitlement_expires_at,a.display_name AS owner_name,(SELECT p.name FROM daga_entitlements e JOIN daga_plan_orders o ON o.id=e.order_id AND o.status='paid_approved' JOIN daga_plans p ON p.id=o.plan_id WHERE e.store_id=s.id AND e.service='store' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? ORDER BY e.expires_at DESC LIMIT 1) AS store_plan_name,(SELECT COALESCE(json_extract(p.features_json,'$.tier'),CASE WHEN json_extract(p.features_json,'$.smartAssistantEnabled')=1 THEN 'smart' ELSE 'standard' END) FROM daga_entitlements e JOIN daga_plan_orders o ON o.id=e.order_id AND o.status='paid_approved' JOIN daga_plans p ON p.id=o.plan_id WHERE e.store_id=s.id AND e.service='store' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? ORDER BY e.expires_at DESC LIMIT 1) AS store_plan_tier,(SELECT p.name FROM daga_entitlements e JOIN daga_plan_orders o ON o.id=e.order_id AND o.status='paid_approved' JOIN daga_plans p ON p.id=o.plan_id WHERE e.store_id=s.id AND e.service='live_daga' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? ORDER BY e.expires_at DESC LIMIT 1) AS live_daga_plan_name,(SELECT COALESCE(SUM(CASE WHEN l.event_type IN ('credit','adjustment','refund') THEN l.words ELSE -l.words END),0) FROM daga_live_word_ledger l WHERE l.store_id=s.id) AS live_daga_remaining FROM daga_stores s JOIN daga_accounts a ON a.id=s.owner_account_id WHERE s.archived_at IS NULL ORDER BY s.created_at DESC LIMIT 500").bind(now,now,now,now,now,now).all();
       return json(env, {ok:true,stores:r.results||[]});
     }
     const cancelStoreSubscriptionMatch=path.match(/^\/owner\/admin\/stores\/([a-f0-9-]{36})\/subscription\/cancel$/i);
@@ -199,6 +199,27 @@ export async function handleOwnerAdmin(request, env, url) {
       const revoked=Number(result?.[0]?.meta?.changes||0);
       await audit(db,owner.id,"store_subscription_cancelled","daga_stores",store.id,{revokedEntitlements:revoked,sessionsRevoked:Number(result?.[1]?.meta?.changes||0)});
       return json(env,{ok:true,revokedEntitlements:revoked,sessionsRevoked:Number(result?.[1]?.meta?.changes||0),message:revoked?"تم إلغاء اشتراك الشركة وإنهاء جلساتها.":"لا يوجد اشتراك نشط لإلغائه."});
+    }
+
+    const archiveStoreMatch=path.match(/^\/owner\/admin\/stores\/([a-f0-9-]{36})\/archive$/i);
+    if(archiveStoreMatch&&request.method==="POST"){
+      const store=await db.prepare("SELECT id,owner_account_id,display_name,archived_at FROM daga_stores WHERE id=?").bind(archiveStoreMatch[1]).first();
+      if(!store)return json(env,{error:"store_not_found"},404);
+      if(store.archived_at)return json(env,{ok:true,alreadyArchived:true,message:"الشركة مؤرشفة بالفعل."});
+      const now=new Date().toISOString();
+      const active=await db.prepare("SELECT id FROM daga_entitlements WHERE store_id=? AND service='store' AND status='active' AND expires_at>? LIMIT 1").bind(store.id,now).first();
+      if(active)return json(env,{error:"active_subscription_must_be_cancelled_first",message:"لا يمكن إزالة شركة لديها اشتراك نشط. ألغِ الاشتراك أولًا."},409);
+      const members=await db.prepare("SELECT account_id FROM daga_store_memberships WHERE store_id=?").bind(store.id).all();
+      const accountIds=[store.owner_account_id,...(members.results||[]).map(x=>x.account_id)].filter(Boolean);
+      const statements=[
+        db.prepare("UPDATE daga_stores SET archived_at=?,updated_at=? WHERE id=? AND archived_at IS NULL").bind(now,now,store.id),
+        db.prepare("UPDATE daga_store_memberships SET status='removed',updated_at=? WHERE store_id=?").bind(now,store.id),
+        db.prepare("UPDATE daga_store_invitations SET status='revoked',revoked_at=? WHERE store_id=? AND status='pending'").bind(now,store.id),
+        db.prepare("UPDATE daga_auth_sessions SET revoked_at=? WHERE revoked_at IS NULL AND account_id IN (SELECT account_id FROM daga_store_memberships WHERE store_id=? UNION SELECT owner_account_id FROM daga_stores WHERE id=? UNION SELECT id FROM daga_accounts WHERE store_id=?)").bind(now,store.id,store.id,store.id)
+      ];
+      await db.batch(statements);
+      await audit(db,owner.id,"store_archived_from_owner_dashboard","daga_stores",store.id,{displayName:store.display_name,ownerAccountId:store.owner_account_id,preservedFinancialHistory:true,revokedMemberAccounts:accountIds.length});
+      return json(env,{ok:true,archived:true,message:"تمت إزالة الشركة من لوحة المالك مع الاحتفاظ بسجلاتها المالية والتاريخية."});
     }
 
     const storeEditMatch=path.match(/^\/owner\/admin\/stores\/([a-f0-9-]{36})$/i);
