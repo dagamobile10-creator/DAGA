@@ -3,7 +3,7 @@ name: DAGA isolated staging setup
 on:
   workflow_dispatch:
   push:
-    branches: [daga-v30-implementation, daga-email-only-auth, feat/v30-original-ui-unified-review, daga-v30-permissions-and-company-labels]
+    branches: [daga-v30-implementation, daga-email-only-auth, feat/v30-original-ui-unified-review, daga-v30-permissions-and-company-labels, fix/v30-smart-only-kallim-live-word-unlock]
     paths:
       - ".github/workflows/daga-staging-setup.yml"
       - "worker.js"
