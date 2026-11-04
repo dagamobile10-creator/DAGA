@@ -207,7 +207,7 @@ export async function handleOwnerAdmin(request, env, url) {
       if(!store)return json(env,{error:"store_not_found"},404);
       if(store.archived_at)return json(env,{ok:true,alreadyArchived:true,message:"الشركة مؤرشفة بالفعل."});
       const now=new Date().toISOString();
-      const active=await db.prepare("SELECT id FROM daga_entitlements WHERE store_id=? AND service='store' AND status='active' AND starts_at<=? AND expires_at>? LIMIT 1").bind(store.id,now,now).first();
+      const active=await db.prepare("SELECT id FROM daga_entitlements WHERE store_id=? AND service='store' AND status='active' AND expires_at>? LIMIT 1").bind(store.id,now).first();
       if(active)return json(env,{error:"active_subscription_must_be_cancelled_first",message:"لا يمكن إزالة شركة لديها اشتراك نشط. ألغِ الاشتراك أولًا."},409);
       const members=await db.prepare("SELECT account_id FROM daga_store_memberships WHERE store_id=?").bind(store.id).all();
       const accountIds=[store.owner_account_id,...(members.results||[]).map(x=>x.account_id)].filter(Boolean);
