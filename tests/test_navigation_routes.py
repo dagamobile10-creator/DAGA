@@ -24,10 +24,13 @@ class NavigationRouteTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertIn(path, self.worker)
 
-    def test_live_navigation_uses_worker_origin_for_worker_pages(self):
+    def test_live_navigation_uses_same_worker_origin_for_worker_pages(self):
+        # The assistant page is served by the Worker; relative links must stay
+        # on the active origin so staging never sends users to production.
         for path in ("/go/", "/company/", "/owner-console/"):
             with self.subTest(path=path):
-                self.assertIn("https://daga-voice.dagamobile10.workers.dev" + path, self.live)
+                self.assertIn('href="' + path + '"', self.live)
+        self.assertIn('connect-src \'self\'', self.worker)
 
     def test_navigation_pages_link_to_each_other(self):
         for page, paths in (
@@ -47,7 +50,7 @@ class NavigationRouteTests(unittest.TestCase):
 
     def test_shop_portal_api_paths_have_server_handlers(self):
         for path in (
-            "/api/shop/auth/me",
+            "/api/shop/auth/portal",
             "/api/shop/auth/login",
             "/api/shop/auth/setup/start",
             "/api/shop/auth/setup/verify",
@@ -163,12 +166,13 @@ class NavigationRouteTests(unittest.TestCase):
         handler = self.owner[start:end]
         self.assertIn("b.dataset.decision==='approved'", handler)
         self.assertIn("'/api/shop/auth/setup/start'", handler)
-        self.assertIn("JSON.stringify({email:approvedStore.email})", handler)
-        self.assertIn("تمت الموافقة المبدئية على المحل", handler)
+        self.assertIn("const approved=(latest.stores||[]).find(x=>x.id===s.id)", handler)
+        self.assertIn("JSON.stringify({email:approved.email})", handler)
+        self.assertIn("تم تفعيل المحل، وإرسال كود إعداد كلمة المرور للبريد", handler)
         self.assertIn("company-invitations.js", self.worker)
 
     def test_navigation_does_not_remove_live_voice_contract_markers(self):
-        for marker in ("workers.dev/chat", "workers.dev/tts", "playVoiceTest", "daga_mh_memory_v1"):
+        for marker in ("location.origin}/chat", "location.origin}/tts", "playVoiceTest", "daga_mh_memory_v1"):
             with self.subTest(marker=marker):
                 self.assertIn(marker, self.live)
 
