@@ -46,7 +46,7 @@ class NavigationRouteTests(unittest.TestCase):
 
     def test_invitation_acceptance_is_not_linked_without_a_token(self):
         for page in (self.live, self.landing):
-            self.assertNotIn('href="/invite/"', page)
+            self.assertNotIn('href="https://daga-app-staging.dagamobile10.workers.dev/invite/"', page)
 
     def test_shop_portal_api_paths_have_server_handlers(self):
         for path in (
