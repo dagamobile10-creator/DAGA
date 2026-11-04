@@ -406,14 +406,22 @@ export default {
     if (url.pathname !== "/tts" || request.method !== "POST") return json({ error: "Not found" }, 404);
 
     try {
-      if (voiceIdentityRequired) {
-        const permissionDenied = await enforceCompanyVoicePermission(env, voiceAccount, "useLiveDaga", request.headers.get("X-DAGA-Company-ID") || "");
-        if (permissionDenied) return permissionDenied;
-      }
       if (!env.ELEVENLABS_API_KEY) return json({ error: "DAGA voice is not configured" }, 503);
       const parsed = await readBoundedJson(request, 16384);
       if (!parsed.ok) return json({ error: parsed.error }, parsed.status);
       const body = parsed.value;
+      const liveMode = body?.mode === "live_daga";
+      if (voiceIdentityRequired) {
+        const permissionDenied = await enforceCompanyVoicePermission(env, voiceAccount, liveMode ? "useLiveDaga" : "useSmartAssistant", request.headers.get("X-DAGA-Company-ID") || "");
+        if (permissionDenied) return permissionDenied;
+        if (!liveMode) {
+          const company = await resolveCompanyVoiceContext(env, voiceAccount, request.headers.get("X-DAGA-Company-ID") || "");
+          if (company.error) return company.error;
+          const now = new Date().toISOString();
+          const smartPlan = await env.DAGA_APP_DB.prepare("SELECT e.id FROM daga_entitlements e JOIN daga_plan_orders o ON o.id=e.order_id JOIN daga_plans p ON p.id=o.plan_id WHERE e.store_id=? AND e.service='store' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? AND (json_extract(p.features_json,'$.tier')='smart' OR json_extract(p.features_json,'$.smartAssistantEnabled')=1) LIMIT 1").bind(company.storeId, now, now).first();
+          if (!smartPlan) return json({ error: "smart_store_subscription_required" }, 402);
+        }
+      }
       let text = String(body?.text || "").trim();
       if (!text) return json({ error: "text is required" }, 400);
       if (text.length > 2500) return json({ error: "text_too_long", maxLength: 2500 }, 413);
@@ -425,7 +433,7 @@ export default {
       text = text.replace(/ضَجَّة|ضَجّة|ضجّة|ضجه/gu, "ضَگَّة").replace(/\s{2,}/g, " ").trim();
 
       let quota = null;
-      if (String(env.DAGA_LIVE_QUOTA_ENFORCE || "").toLowerCase() === "true") {
+      if (liveMode && String(env.DAGA_LIVE_QUOTA_ENFORCE || "").toLowerCase() === "true") {
         if (!env.DAGA_APP_DB) return json({ error: "live_quota_not_configured" }, 503);
         const account = voiceAccount || await authenticatedAccount(request, env.DAGA_APP_DB);
         if (!account || account.status !== "approved" || account.role === "program_owner") return json({ error: "approved_shop_account_required" }, 401);
