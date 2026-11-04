@@ -14,7 +14,7 @@ class ShopSelfRegistrationTests(unittest.TestCase):
             self.assertIn(route, auth)
 
     def test_registration_collects_no_company_or_legal_identifier(self):
-        portal = portal
+        portal = (ROOT / "company" / "portal.html").read_text(encoding="utf-8")
         owner = (ROOT / "owner-console.html").read_text(encoding="utf-8")
         self.assertIn('id="shopRegistrationForm"', portal)
         self.assertIn('shopName:$("onboardingShopName").value.trim()', portal)
@@ -28,7 +28,7 @@ class ShopSelfRegistrationTests(unittest.TestCase):
         admin = (ROOT / "owner-admin.js").read_text(encoding="utf-8")
         dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
         owner = (ROOT / "owner-console.html").read_text(encoding="utf-8")
-        portal = portal
+        portal = (ROOT / "company" / "portal.html").read_text(encoding="utf-8")
         self.assertIn("ledgerEnabled:Boolean(entitlement)", auth)
         self.assertIn('store.onboarding_status!=="preliminary_approved"', admin)
         self.assertIn('"preliminary_approved"', admin)
