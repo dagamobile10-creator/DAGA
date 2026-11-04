@@ -207,7 +207,7 @@ export async function handleOwnerAdmin(request, env, url) {
       const store=await db.prepare("SELECT id,display_name,contact_phone FROM daga_stores WHERE id=?").bind(storeEditMatch[1]).first();
       if(!store)return json(env,{error:"store_not_found"},404);
       const displayName=b.displayName===undefined?store.display_name:String(b.displayName).trim().slice(0,120);
-      const contactPhone=b.contactPhone===undefined?store.contact_phone:String(b.contactPhone).replace(/[^0-9+]/g,"").slice(0,20);
+      const rawContactPhone=b.contactPhone===undefined?store.contact_phone:String(b.contactPhone);const arabicDigits="٠١٢٣٤٥٦٧٨٩",persianDigits="۰۱۲۳۴۵۶۷۸۹";let contactPhone=String(rawContactPhone||"").replace(/[٠-٩۰-۹]/g,ch=>{const i=arabicDigits.indexOf(ch);return String(i>=0?i:persianDigits.indexOf(ch));}).replace(/[^0-9+]/g,"").slice(0,20);if(/^01[0125][0-9]{8}$/.test(contactPhone))contactPhone="2"+contactPhone;
       if(!displayName)return json(env,{error:"display_name_required"},400);
       if(b.contactPhone!==undefined&&!/^\+?[0-9]{10,15}$/.test(contactPhone))return json(env,{error:"valid_shop_whatsapp_required"},400);
       await db.prepare("UPDATE daga_stores SET display_name=?,contact_phone=?,updated_at=? WHERE id=?").bind(displayName,contactPhone,new Date().toISOString(),store.id).run();
