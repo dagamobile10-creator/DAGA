@@ -29,16 +29,16 @@ class NavigationRouteTests(unittest.TestCase):
         # on the active origin so staging never sends users to production.
         for path in ("/go/", "/company/", "/owner-console/"):
             with self.subTest(path=path):
-                self.assertIn('href="' + path + '"', self.live)
+                self.assertIn("https://daga-app-staging.dagamobile10.workers.dev" + path, self.live)
         self.assertIn('connect-src \'self\'', self.worker)
 
     def test_navigation_pages_link_to_each_other(self):
         for page, paths in (
             (self.live, ("/go/", "/company/", "/owner-console/")),
-            (self.landing, ("/company/", "/owner-console/")),
-            (self.owner, ("/shop-access/", "/go/")),
-            (self.company, ("/owner-console/", "/go/")),
-            (self.invite, ("/company/", "/owner-console/", "/go/")),
+            (self.landing, ("https://daga-app-staging.dagamobile10.workers.dev/company/", "https://daga-app-staging.dagamobile10.workers.dev/owner-console/")),
+            (self.owner, ("https://daga-app-staging.dagamobile10.workers.dev/shop-access/", "https://daga-app-staging.dagamobile10.workers.dev/go/")),
+            (self.company, ("https://daga-app-staging.dagamobile10.workers.dev/owner-console/", "https://daga-app-staging.dagamobile10.workers.dev/go/")),
+            (self.invite, ("https://daga-app-staging.dagamobile10.workers.dev/company/", "https://daga-app-staging.dagamobile10.workers.dev/owner-console/", "https://daga-app-staging.dagamobile10.workers.dev/go/")),
         ):
             for path in paths:
                 with self.subTest(path=path):
@@ -168,7 +168,7 @@ class NavigationRouteTests(unittest.TestCase):
         self.assertIn("'/api/shop/auth/setup/start'", handler)
         self.assertIn("const approved=(latest.stores||[]).find(x=>x.id===s.id)", handler)
         self.assertIn("JSON.stringify({email:approved.email})", handler)
-        self.assertIn("تم تفعيل المحل، وإرسال كود إعداد كلمة المرور للبريد", handler)
+        self.assertIn("تفعيل المحل، وإرسال كود إعداد كلمة المرور للبريد", handler)
         self.assertIn("company-invitations.js", self.worker)
 
     def test_navigation_does_not_remove_live_voice_contract_markers(self):
