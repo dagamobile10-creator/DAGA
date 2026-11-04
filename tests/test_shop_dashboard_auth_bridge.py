@@ -72,7 +72,8 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
     def test_smart_entitlement_enables_assistant_and_history_separately_from_live_daga(self):
         auth = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
         dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
-        self.assertIn("smartAssistantEnabled: Boolean(storeEntitlement)", auth)
+        self.assertIn("const smartEnabled = Boolean(storeEntitlement && (features.smartAssistantEnabled === true || features.tier === \"smart\"))", auth)
+        self.assertIn("smartAssistantEnabled: smartEnabled", auth)
         self.assertIn('features.historyEnabled === true || features.tier === "smart"', auth)
         self.assertIn("smartAssistantEnabled:company.smartAssistantEnabled===true&&(role==='store_owner'||company.permissions?.useSmartAssistant===true)", dashboard)
         self.assertIn("historyEnabled:company.historyEnabled===true", dashboard)
@@ -95,11 +96,11 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn('لوحة الشركة هتفتح بعد ما مالك التطبيق يأكد الدفع.', portal)
         self.assertIn('company.ledgerEnabled!==true', dashboard)
 
-    def test_live_daga_requires_subscription_and_positive_word_balance(self):
+    def test_live_daga_requires_smart_subscription_and_positive_word_balance(self):
         auth = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
         worker = (ROOT / "worker.js").read_text(encoding="utf-8")
         live = (ROOT / "index.html").read_text(encoding="utf-8")
-        self.assertIn('liveDagaEnabled: Boolean(liveEntitlement) && remainingWords > 0', auth)
+        self.assertIn('liveDagaEnabled: smartEnabled && remainingWords > 0', auth)
         self.assertIn('liveWordsRemaining: remainingWords', auth)
         self.assertIn('body:JSON.stringify({mode:\'live_daga\',text})', live)
         self.assertIn('if (liveMode) {', worker)
@@ -143,13 +144,16 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn('paymentManuallyConfirmed:true', admin)
         self.assertIn('paymentConfirmed!==true', admin)
 
-    def test_live_daga_chat_uses_live_entitlement_not_smart_plan(self):
+    def test_live_daga_chat_requires_smart_plan_and_word_balance(self):
         worker = (ROOT / "worker.js").read_text(encoding="utf-8")
         live = (ROOT / "index.html").read_text(encoding="utf-8")
         chat = worker[worker.index('if (url.pathname === "/chat"'):worker.index('if (url.pathname !== "/tts"')]
         self.assertIn("body?.mode === \"live_daga\"", chat)
         self.assertIn('permission = liveMode ? "useLiveDaga" : "useSmartAssistant"', chat)
-        self.assertIn("service='live_daga'", chat)
+        self.assertIn("service='store'", chat)
+        self.assertIn("smart_store_subscription_required", chat)
+        self.assertIn("live_daga_quota_insufficient", chat)
+        self.assertNotIn("service='live_daga'", chat)
         self.assertIn("store_subscription_required", chat)
         self.assertNotIn("smart_store_subscription_required", chat)
         self.assertIn("mode:'live_daga'", live)
