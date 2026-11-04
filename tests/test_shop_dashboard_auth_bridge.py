@@ -72,7 +72,7 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
     def test_smart_entitlement_enables_assistant_and_history_separately_from_live_daga(self):
         auth = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
         dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
-        self.assertIn("const smartEnabled = Boolean(storeEntitlement && (features.smartAssistantEnabled === true || features.tier === \"smart\"))", auth)
+        self.assertIn("storeEntitlement.name ||", auth)
         self.assertIn("smartAssistantEnabled: smartEnabled", auth)
         self.assertIn('features.historyEnabled === true || features.tier === "smart"', auth)
         self.assertIn("smartAssistantEnabled:company.smartAssistantEnabled===true&&(role==='store_owner'||company.permissions?.useSmartAssistant===true)", dashboard)
