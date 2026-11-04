@@ -195,7 +195,7 @@ export async function handleOwnerAdmin(request, env, url) {
       const displayName=b.displayName===undefined?store.display_name:String(b.displayName).trim().slice(0,120);
       const contactPhone=b.contactPhone===undefined?store.contact_phone:String(b.contactPhone).replace(/[^0-9+]/g,"").slice(0,20);
       if(!displayName)return json(env,{error:"display_name_required"},400);
-      if(b.contactPhone!==undefined&&!/^\\+?[0-9]{10,15}$/.test(contactPhone))return json(env,{error:"valid_shop_whatsapp_required"},400);
+      if(b.contactPhone!==undefined&&!/^\+?[0-9]{10,15}$/.test(contactPhone))return json(env,{error:"valid_shop_whatsapp_required"},400);
       await db.prepare("UPDATE daga_stores SET display_name=?,contact_phone=?,updated_at=? WHERE id=?").bind(displayName,contactPhone,new Date().toISOString(),store.id).run();
       await audit(db,owner.id,b.contactPhone!==undefined?"store_whatsapp_contact_updated":"store_display_name_changed","daga_stores",store.id,{shopNameUpdated:b.displayName!==undefined,whatsappUpdated:b.contactPhone!==undefined});
       return json(env,{ok:true,displayName,contactPhone});
