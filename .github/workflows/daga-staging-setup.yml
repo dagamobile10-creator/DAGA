@@ -3,7 +3,7 @@ name: DAGA isolated staging setup
 on:
   workflow_dispatch:
   push:
-    branches: [daga-v30-implementation, daga-email-only-auth, feat/v30-original-ui-unified-review, fix/v30-owner-login-no-refresh, feature/owner-store-subscription-live-balance, fix/v30-shop-whatsapp-contact]
+    branches: [daga-v30-implementation, daga-email-only-auth, feat/v30-original-ui-unified-review, fix/v30-owner-login-no-refresh, feature/owner-store-subscription-live-balance, fix/v30-shop-whatsapp-contact, feature/v30-company-naming-and-subscription-cancel]
     paths:
       - ".github/workflows/daga-staging-setup.yml"
       - "worker.js"
