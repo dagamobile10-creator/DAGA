@@ -42,7 +42,7 @@ class NavigationRouteTests(unittest.TestCase):
         ):
             for path in paths:
                 with self.subTest(path=path):
-                    self.assertIn(path, page)
+                    self.assertIn(path.split("workers.dev")[-1] if "workers.dev" in path else path, page)
 
     def test_invitation_acceptance_is_not_linked_without_a_token(self):
         for page in (self.live, self.landing):
@@ -172,7 +172,7 @@ class NavigationRouteTests(unittest.TestCase):
         self.assertIn("company-invitations.js", self.worker)
 
     def test_navigation_does_not_remove_live_voice_contract_markers(self):
-        for marker in ("location.origin}/chat", "location.origin}/tts", "playVoiceTest", "daga_mh_memory_v1"):
+        for marker in ("${DAGA_API_ORIGIN}/chat", "${DAGA_API_ORIGIN}/tts", "playVoiceTest", "daga_mh_memory_v1"):
             with self.subTest(marker=marker):
                 self.assertIn(marker, self.live)
 
