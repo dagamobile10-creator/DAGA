@@ -169,7 +169,8 @@ export async function handleOwnerAdmin(request, env, url) {
     }
 
     if(path==="/owner/admin/stores"&&request.method==="GET"){
-      const r=await db.prepare("SELECT s.id,s.public_id,s.owner_account_id,s.display_name,s.status,s.onboarding_status,s.contact_phone,s.created_at,a.email,a.display_name AS owner_name FROM daga_stores s JOIN daga_accounts a ON a.id=s.owner_account_id ORDER BY s.created_at DESC LIMIT 500").all();
+      const now=new Date().toISOString();
+      const r=await db.prepare("SELECT s.id,s.public_id,s.owner_account_id,s.display_name,s.status,s.onboarding_status,s.contact_phone,s.created_at,a.email,a.display_name AS owner_name,(SELECT p.name FROM daga_entitlements e LEFT JOIN daga_plan_orders o ON o.id=e.order_id LEFT JOIN daga_plans p ON p.id=o.plan_id WHERE e.store_id=s.id AND e.service='store' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? ORDER BY e.expires_at DESC LIMIT 1) AS store_plan_name,(SELECT json_extract(p.features_json,'$.tier') FROM daga_entitlements e LEFT JOIN daga_plan_orders o ON o.id=e.order_id LEFT JOIN daga_plans p ON p.id=o.plan_id WHERE e.store_id=s.id AND e.service='store' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? ORDER BY e.expires_at DESC LIMIT 1) AS store_plan_tier,(SELECT e.expires_at FROM daga_entitlements e WHERE e.store_id=s.id AND e.service='store' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? ORDER BY e.expires_at DESC LIMIT 1) AS store_plan_expires_at,(SELECT COALESCE(SUM(CASE WHEN l.event_type IN ('credit','adjustment','refund') THEN l.words ELSE -l.words END),0) FROM daga_live_word_ledger l WHERE l.store_id=s.id) AS live_words_remaining FROM daga_stores s JOIN daga_accounts a ON a.id=s.owner_account_id ORDER BY s.created_at DESC LIMIT 500").bind(now,now,now,now,now,now).all();
       return json(env, {ok:true,stores:r.results||[]});
     }
     const storeEditMatch=path.match(/^\/owner\/admin\/stores\/([a-f0-9-]{36})$/i);
