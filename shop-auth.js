@@ -159,13 +159,13 @@ async function me(request,env,db){
   const store=await db.prepare("SELECT id,public_id,display_name,status FROM daga_stores WHERE id=? AND owner_account_id=? AND status='approved'").bind(account.store_id,account.id).first();
   if(!store)return json(env,{error:"shop_not_approved"},403);
   const now=new Date().toISOString();
-  const entitlement=await db.prepare("SELECT e.id,p.features_json FROM daga_entitlements e LEFT JOIN daga_plan_orders o ON o.id=e.order_id LEFT JOIN daga_plans p ON p.id=o.plan_id WHERE e.account_id=? AND e.store_id=? AND e.service='store' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? ORDER BY e.starts_at DESC,e.created_at DESC LIMIT 1").bind(account.id,store.id,now,now).first();
+  const entitlement=await db.prepare("SELECT e.id,p.name,p.features_json FROM daga_entitlements e LEFT JOIN daga_plan_orders o ON o.id=e.order_id LEFT JOIN daga_plans p ON p.id=o.plan_id WHERE e.account_id=? AND e.store_id=? AND e.service='store' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? ORDER BY e.starts_at DESC,e.created_at DESC LIMIT 1").bind(account.id,store.id,now,now).first();
   const liveWordBalance=await db.prepare("SELECT COALESCE(SUM(CASE WHEN event_type IN ('credit','adjustment','refund') THEN words ELSE -words END),0) AS remaining FROM daga_live_word_ledger WHERE store_id=?").bind(store.id).first();
   const liveEntitlement=await db.prepare("SELECT id FROM daga_entitlements WHERE account_id=? AND store_id=? AND service='live_daga' AND status='active' AND starts_at<=? AND expires_at>? ORDER BY starts_at DESC,created_at DESC LIMIT 1").bind(account.id,store.id,now,now).first();
   let features={};try{features=JSON.parse(entitlement?.features_json||"{}");if(!features||typeof features!=="object"||Array.isArray(features))features={};}catch(_){features={};}
-  const smartAssistantEnabled=Boolean(entitlement);
+  const smartAssistantEnabled=Boolean(entitlement&&(features.smartAssistantEnabled===true||features.tier==="smart"||/smart|ذكي/i.test(String(entitlement.name||""))));
   const historyEnabled=Boolean(entitlement&&(features.historyEnabled===true||features.tier==="smart"));
-  const company={id:store.id,publicId:store.public_id,displayName:store.display_name,role:"store_owner",permissions:{},ledgerEnabled:Boolean(entitlement),smartAssistantEnabled,historyEnabled,liveDagaEnabled:Boolean(liveEntitlement)&&Number(liveWordBalance?.remaining||0)>0,liveWordsRemaining:Number(liveWordBalance?.remaining||0)};
+  const company={id:store.id,publicId:store.public_id,displayName:store.display_name,role:"store_owner",permissions:{},ledgerEnabled:Boolean(entitlement),smartAssistantEnabled,historyEnabled,liveDagaEnabled:smartAssistantEnabled&&Number(liveWordBalance?.remaining||0)>0,liveWordsRemaining:Number(liveWordBalance?.remaining||0)};
   const publicAccount={id:account.id,role:account.role,displayName:account.display_name,emailMasked:maskEmail(account.email),publicId:store.public_id};
   return json(env,{ok:true,account:publicAccount,companies:[company],shops:[company]});
 }
