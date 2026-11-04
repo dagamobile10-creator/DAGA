@@ -1,4 +1,5 @@
 import { authenticatedOwner } from "./owner-auth.js";
+import { sendCompanySetupCodeForStore } from "./company-invitations.js";
 
 export async function handleOwnerAdmin(request, env, url) {
   if (!url.pathname.startsWith("/owner/admin/")) return null;
@@ -200,6 +201,14 @@ export async function handleOwnerAdmin(request, env, url) {
       return json(env,{ok:true,displayName});
     }
 
+    const setupEmailMatch=path.match(/^\\/owner\\/admin\\/stores\\/([a-f0-9-]{36})\\/setup-email$/i);
+    if(setupEmailMatch&&request.method==="POST"){
+      const result=await sendCompanySetupCodeForStore(env,db,setupEmailMatch[1]);
+      if(!result.ok)return json(env,{error:result.error},502);
+      await audit(db,owner.id,result.alreadyConfigured?"store_password_already_configured":"store_password_setup_email_sent","daga_stores",setupEmailMatch[1],{emailMasked:result.emailMasked||null});
+      return json(env,{ok:true,...result});
+    }
+
     const finalizeMatch=path.match(/^\/owner\/admin\/stores\/([a-f0-9-]{36})\/finalize$/i);
     if(finalizeMatch&&request.method==="POST"){
       const b=await readJson(request);if(!b)return json(env,{error:"invalid_json"},400);
@@ -223,7 +232,9 @@ export async function handleOwnerAdmin(request, env, url) {
       ]);
       if(results.some(r=>Number(r?.meta?.changes||0)!==1))return json(env,{error:"store_final_activation_conflict_retry"},409);
       await audit(db,owner.id,"store_final_activation_completed","daga_stores",store.id,{orderId,planId:plan.id,agreedPriceMinor:price,paymentManuallyConfirmed:true});
-      return json(env,{ok:true,status:"approved",orderId,entitlementId,planName:plan.name,agreedPriceMinor:price,expiresAt:expires});
+      const setupEmail=await sendCompanySetupCodeForStore(env,db,store.id);
+      if(!setupEmail.ok)await audit(db,owner.id,"store_password_setup_email_failed","daga_stores",store.id,{error:setupEmail.error});
+      return json(env,{ok:true,status:"approved",orderId,entitlementId,planName:plan.name,agreedPriceMinor:price,expiresAt:expires,setupEmail});
     }
 
     const onboardingMatch=path.match(/^\/owner\/admin\/stores\/([a-f0-9-]{36})\/onboarding$/i);
