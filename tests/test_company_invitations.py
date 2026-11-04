@@ -238,7 +238,7 @@ class InvitationSchemaTests(unittest.TestCase):
         page = (ROOT / "go" / "index.html").read_text(encoding="utf-8")
         worker = (ROOT / "worker.js").read_text(encoding="utf-8")
         self.assertIn("DAGA", page)
-        self.assertIn('location.origin+"/go/"', page)
+        self.assertIn('https://daga-app-staging.dagamobile10.workers.dev/go/', page)
         self.assertIn("new QRCode", page)
         self.assertNotIn("api.qrserver.com", page)
         self.assertIn('url.pathname === "/go"', worker)
