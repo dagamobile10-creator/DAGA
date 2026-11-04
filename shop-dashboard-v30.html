@@ -653,7 +653,7 @@ async function bootAuthenticatedDashboard(token,selectedCompanyId){
   const smartAllowed=window.DAGA_AUTH_USER.smartAssistantEnabled===true;
   const liveAllowed=window.DAGA_AUTH_USER.liveDagaEnabled===true;
   // Keep premium actions visible and tappable; their handlers and server routes enforce entitlements.
-  document.querySelectorAll('button[onclick="voiceDaga()"]').forEach(b=>{b.hidden=false;b.disabled=!smartAllowed;b.title=smartAllowed?'':'متاح بعد تأكيد الاشتراك العادي أو الذكي للشركة';b.setAttribute('aria-disabled',String(!smartAllowed));});
+  document.querySelectorAll('button[onclick="voiceDaga()"]').forEach(b=>{b.hidden=false;b.disabled=!smartAllowed;b.title=smartAllowed?'':'زر كلم ضجة متاح في الاشتراك الذكي فقط بعد تأكيد الدفع.';b.setAttribute('aria-disabled',String(!smartAllowed));});
   document.querySelectorAll('button.liveBtn').forEach(b=>{b.hidden=false;b.disabled=!liveAllowed;b.title=liveAllowed?'':'اشحن رصيد حروف LIVE DAGA لتفعيل الزر.';b.setAttribute('aria-disabled',String(!liveAllowed));});
   document.querySelectorAll('button[onclick="showReports()"]').forEach(b=>{b.hidden=false;b.disabled=false;b.title=window.DAGA_AUTH_USER.historyEnabled?'':'تفاصيل الأيام السابقة متاحة في الاشتراك الذكي فقط';});
   loadStoreData(company.id);
