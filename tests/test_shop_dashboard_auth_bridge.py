@@ -108,7 +108,7 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn("LIVE DAGA generated text characters", worker)
         self.assertIn('const voiceIdentityRequired = true;', worker)
 
-    def test_standard_and_smart_store_entitlements_both_enable_kallim_daga(self):
+    def test_only_smart_store_entitlement_enables_kallim_daga(self):
         auth = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
         worker = (ROOT / "worker.js").read_text(encoding="utf-8")
         dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
