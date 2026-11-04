@@ -194,7 +194,7 @@ export async function handleOwnerAdmin(request, env, url) {
       const now=new Date().toISOString();
       const result=await db.batch([
         db.prepare("UPDATE daga_entitlements SET status='revoked' WHERE store_id=? AND service='store' AND status='active'").bind(store.id),
-        db.prepare("UPDATE daga_auth_sessions SET revoked_at=? WHERE account_id=? AND revoked_at IS NULL").bind(now,store.owner_account_id)
+        db.prepare("UPDATE daga_auth_sessions SET revoked_at=? WHERE revoked_at IS NULL AND account_id IN (SELECT id FROM daga_accounts WHERE store_id=?)").bind(now,store.id)
       ]);
       const revoked=Number(result?.[0]?.meta?.changes||0);
       await audit(db,owner.id,"store_subscription_cancelled","daga_stores",store.id,{revokedEntitlements:revoked,sessionsRevoked:Number(result?.[1]?.meta?.changes||0)});
