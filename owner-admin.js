@@ -173,6 +173,21 @@ export async function handleOwnerAdmin(request, env, url) {
       const r=await db.prepare("SELECT s.id,s.public_id,s.owner_account_id,s.display_name,s.status,s.onboarding_status,s.contact_phone,s.created_at,a.email,a.display_name AS owner_name,(SELECT p.name FROM daga_entitlements e LEFT JOIN daga_plan_orders o ON o.id=e.order_id LEFT JOIN daga_plans p ON p.id=o.plan_id WHERE e.store_id=s.id AND e.service='store' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? ORDER BY e.expires_at DESC LIMIT 1) AS store_plan_name,(SELECT json_extract(p.features_json,'$.tier') FROM daga_entitlements e LEFT JOIN daga_plan_orders o ON o.id=e.order_id LEFT JOIN daga_plans p ON p.id=o.plan_id WHERE e.store_id=s.id AND e.service='store' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? ORDER BY e.expires_at DESC LIMIT 1) AS store_plan_tier,(SELECT e.expires_at FROM daga_entitlements e WHERE e.store_id=s.id AND e.service='store' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? ORDER BY e.expires_at DESC LIMIT 1) AS store_plan_expires_at,(SELECT COALESCE(SUM(CASE WHEN l.event_type IN ('credit','adjustment','refund') THEN l.words ELSE -l.words END),0) FROM daga_live_word_ledger l WHERE l.store_id=s.id) AS live_words_remaining FROM daga_stores s JOIN daga_accounts a ON a.id=s.owner_account_id ORDER BY s.created_at DESC LIMIT 500").bind(now,now,now,now,now,now).all();
       return json(env, {ok:true,stores:r.results||[]});
     }
+    const storeContactMatch=path.match(/^\\/owner\\/admin\\/stores\\/([a-f0-9-]{36})\\/contact$/i);
+    if(storeContactMatch&&request.method==="PATCH"){
+      const b=await readJson(request);if(!b)return json(env,{error:"invalid_json"},400);
+      const store=await db.prepare("SELECT id FROM daga_stores WHERE id=?").bind(storeContactMatch[1]).first();
+      if(!store)return json(env,{error:"store_not_found"},404);
+      const raw=String(b.contactPhone??"").trim();
+      let contactPhone=raw.replace(/\\D/g,"");
+      if(raw&&contactPhone.startsWith("00"))contactPhone=contactPhone.slice(2);
+      if(raw&&(contactPhone.length<10||contactPhone.length>15))return json(env,{error:"invalid_contact_phone"},400);
+      const now=new Date().toISOString();
+      await db.prepare("UPDATE daga_stores SET contact_phone=?,updated_at=? WHERE id=?").bind(contactPhone,now,store.id).run();
+      await audit(db,owner.id,"store_contact_phone_updated","daga_stores",store.id,{contactPhoneUpdated:true,hasContactPhone:Boolean(contactPhone)});
+      return json(env,{ok:true,contactPhone});
+    }
+
     const storeEditMatch=path.match(/^\/owner\/admin\/stores\/([a-f0-9-]{36})$/i);
     if(storeEditMatch&&request.method==="PATCH"){
       const b=await readJson(request);if(!b)return json(env,{error:"invalid_json"},400);
