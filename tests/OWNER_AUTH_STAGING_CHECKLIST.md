@@ -1,0 +1,123 @@
+# Owner authentication staging checklist
+
+Do not use production data, real customer accounts, or real payment records during this checklist. Use a dedicated staging D1 database and staging Worker.
+
+## Prerequisites
+- [ ] Dedicated D1 database is created and bound as `DAGA_APP_DB`.
+- [ ] Migrations 0001–0016 are applied in order; review security/data migrations and back up the dedicated staging database first.
+- [ ] Worker secrets are set in Cloudflare: bootstrap token, OTP pepper, Resend API key, and verified sender.
+- [ ] `DAGA_ALLOWED_ORIGINS` is set to the exact staging frontend origin.
+- [ ] `DAGA_APP_BASE_URL` is set to the trusted HTTPS staging frontend origin/path used to create invitation links; it is never derived from the request Host header.
+- [ ] Invitation page at `/invite/?token=...` is served over HTTPS and calls the staging Worker URL, not the production voice Worker until the application D1 binding is verified.
+- [ ] Verify the staging Worker’s effective `DAGA_APP_BASE_URL` explicitly: invitations generated in staging must link to the staging frontend, never `https://daga-voice.dagamobile10.workers.dev`; do not change the production value as a side effect of staging configuration.
+- [ ] `POST /api/company/auth/register` and `POST /api/company/auth/register/verify` send and verify email OTPs; challenges are hashed, expire, have bounded attempts, and use atomic single-use claims.
+- [ ] `POST /api/company/auth/login` authenticates with email + password and does not require an OTP on every login.
+- [ ] `POST /api/company/auth/setup/start` and `POST /api/company/auth/setup/verify` let an approved account without credentials set a password using email OTP.
+- [ ] `POST /api/company/auth/recovery/start` and `POST /api/company/auth/recovery/complete` securely recover an account and revoke prior sessions.
+- [ ] `GET /api/company/auth/me` returns only approved companies and active memberships; `POST /api/company/auth/logout` revokes the current bearer session.
+- [ ] Provider test delivery succeeds; do not expose codes in logs.
+- [ ] Bootstrap token is generated out-of-band and not committed.
+
+## Bootstrap and owner protection
+- [ ] Bootstrap start without bearer token returns 401.
+- [ ] Wrong bootstrap token returns 401.
+- [ ] Valid bootstrap start sends one email verification code to the email supplied for the owner.
+- [ ] Wrong, expired, consumed, and over-attempted OTPs fail.
+- [ ] Password below policy is rejected.
+- [ ] Successful verification creates exactly one `program_owner` and one owner singleton.
+- [ ] A second bootstrap attempt returns 409.
+- [ ] Bootstrap token is rotated/deleted after owner creation.
+- [ ] Password is never stored/returned in plaintext; only session-token hashes are stored.
+
+## Login, sessions, recovery
+- [ ] Wrong password and unknown identifier return the same generic 401.
+- [ ] Repeated login attempts hit rate limits.
+- [ ] Valid login returns a session; `/owner/auth/me` succeeds only with it.
+- [ ] Logout revokes the session; replaying it fails.
+- [ ] Recovery sends a temporary code only to the verified owner email.
+- [ ] Recovery fails if the email OTP, current recovery code, or password policy is wrong.
+- [ ] Successful recovery rotates the recovery code and revokes all prior sessions.
+- [ ] Recovery is rate-limited; OTPs/recovery codes never appear in logs.
+
+## LIVE DAGA pricing and quota
+- [ ] Apply migration 0016 to the dedicated staging D1 database before deploying the matching Worker.
+- [ ] Owner-only `GET /owner/admin/live-daga-rate` returns the saved rate or an unset value without exposing it publicly.
+- [ ] Owner-only `PUT /owner/admin/live-daga-rate` rejects zero, negative, fractional-piastre, unsafe, and malformed values; valid EGP per-1000-character rate is stored and audited.
+- [ ] Changing the rate recalculates LIVE DAGA plan prices proportionally with rounding up to the next piastre; existing order price snapshots remain unchanged.
+- [ ] New subscriptions credit the package quota exactly once only after owner confirms the payment.
+- [ ] Generation debits the exact Unicode code-point character count; insufficient balance and expired/not-yet-started subscriptions are blocked.
+- [ ] A failed provider generation refunds the debit once; a manual top-up adds characters to the correct approved store owner and duplicate request IDs cannot double-credit.
+- [ ] Complete a real authenticated staging checkout, payment submission, owner review, quota debit-to-zero, and expiry test before release.
+
+## Owner admin and data integrity
+- [ ] Every `/owner/admin/*` route returns 401 without a valid owner session.
+- [ ] Store-owner, manager, and employee sessions are rejected by owner routes.
+- [ ] Owner can create/update/disable plans; existing orders retain agreed price snapshots.
+- [ ] Owner can update payment destinations and active status.
+- [ ] Owner can create, schedule, activate, and disable offers; expired/inactive offers are rejected by the order-creation service.
+- [ ] Existing orders retain their agreed price snapshot when plan/offer settings change.
+- [ ] Store approval/rejection updates both store and store-owner account status.
+- [ ] Payment submission alone does not activate entitlement; owner confirmation is required.
+- [ ] Duplicate payment review cannot create duplicate entitlement/word credits.
+- [ ] LIVE DAGA word adjustments use unique request IDs; retries cannot double-credit.
+- [ ] Owner can set the LIVE DAGA price per 1000 characters; invalid/zero values are rejected.
+- [ ] Saving the character rate recalculates LIVE DAGA plan prices using proportional character pricing rounded up to one piastre; prior order agreed-price snapshots remain unchanged.
+- [ ] New and edited LIVE DAGA packages use the configured rate; when no rate is configured, legacy/manual plan pricing remains unchanged.
+- [ ] LIVE DAGA is blocked when character balance reaches zero even if the subscription has days remaining, and blocked after expiry even if characters remain.
+- [ ] Column label changes preserve stable keys; regular users cannot edit calculation keys.
+- [ ] Privileged changes create audit events.
+- [ ] Tenant isolation is tested before enabling store/manager/employee data routes.
+
+## Company checkout and payment review
+- [ ] Unauthenticated requests to company plans, payment methods, orders, and order-payment routes return 401.
+- [ ] Manager and employee sessions cannot create orders or submit payment for a company.
+- [ ] A store owner can list only orders belonging to an approved store they own; changing `storeId` to another company's ID returns 403.
+- [ ] Inactive plans cannot be ordered; order creation uses the current server-side plan price/version and ignores any client-supplied amount.
+- [ ] An eligible offer is applied only for the matching service and within its active time window; discounts never make the final price negative.
+- [ ] Offer redemption limits remain correct under concurrent order attempts; failed order creation does not permanently consume a redemption.
+- [ ] The order and immutable price adjustment snapshot match the final agreed price, list price, discount, and offer name at order time.
+- [ ] Payment submission is accepted only for the account's own order in `awaiting_payment`, uses an active payment method, and cannot set the order to paid/approved.
+- [ ] Duplicate or concurrent payment submissions cannot create multiple pending submissions for one order.
+- [ ] Payment submission alone never creates an entitlement or LIVE DAGA word credit; only a successful owner review can do so.
+- [ ] Manual-transfer references/receipts are reviewed by the owner; a user-supplied receipt URL or claimed amount is not proof that funds arrived.
+- [ ] Company portal checkout controls appear only for store-owner accounts; employee/manager invitation permissions remain unchanged.
+
+## Store identity and invitation gates
+- [ ] Every store receives a stable public ID distinct from its internal database ID; changing the display name does not change either identity.
+- [ ] The store QR identifies the store only and grants no membership or session.
+- [ ] Invitation tokens are generated with cryptographic randomness; only token hashes are stored, and raw tokens are returned only once.
+- [ ] `POST /api/company/invitations` fails closed until the trusted HTTPS `DAGA_APP_BASE_URL` is configured.
+- [ ] Invitation acceptance requires an authenticated account and server-side checks of token hash, store, expiry, status, use count, intended role, and inviter permissions.
+- [ ] Invitation acceptance and membership creation are atomic; replaying or concurrently accepting the same invitation cannot create extra memberships.
+- [ ] Revoked and expired invitations fail; a manager cannot grant a role or permission beyond their own delegation limits.
+- [ ] A membership from store A cannot read or modify store B data, even when the client changes IDs in requests.
+- [ ] Existing memberships are not silently broken by the introduction of new membership tables; migration/backfill behavior is tested.
+- [ ] Shop QR and invitation QR/link are separate; revoking an invitation does not rotate the store identity.
+
+## Email-only authentication migration
+- [ ] Migration 0010 is applied only to the intended staging D1 database after review and backup.
+- [ ] Owner login uses verified email and password and never requires an OTP on every login.
+- [ ] First-time owner bootstrap verifies the supplied email before creating the singleton program-owner account.
+- [ ] An approved company account can set a password after approval using a single-use email OTP.
+- [ ] Invitation registration keeps its single-use invitation check, verifies email, and creates password/recovery code and membership atomically.
+- [ ] Company login, setup, and recovery are rate-limited; recovery rotates recovery code and revokes prior sessions.
+- [ ] Existing approved accounts without credentials can set a password through email verification.
+- [ ] Migration 0010 clears stored phone values; no authentication endpoint requires phone fields or SMS secrets.
+- [ ] Passwords/recovery codes are never stored in plaintext; OTPs are hashed, expire, have bounded attempts, and are single-use.
+
+## Release gates
+- [ ] CI syntax/schema, navigation, and session-security workflows pass on the exact intended commit.
+- [ ] Email delivery and end-to-end staging tests are verified by a human.
+- [ ] Existing chat/TTS/LiveAvatar routes are tested after Worker changes.
+- [ ] Existing user-facing endpoints have role and tenant authorization; protecting owner routes alone is insufficient.
+- [ ] Production deployment is intentionally approved, then the actual Worker version and endpoint responses are verified.
+- [ ] Do not call the owner console production-secure until these checks pass.
+
+## Current release blockers to verify
+- [ ] Confirm the real mailbox receives owner bootstrap, company setup, invitation-registration, and recovery messages.
+- [ ] Complete authenticated end-to-end checkout and owner payment-review tests.
+- [ ] Verify identity/tenant authorization for legacy memory/chat/TTS/LiveAvatar endpoints.
+- [ ] Confirm `DAGA_MEMORY_REQUIRE_AUTH` and `DAGA_VOICE_REQUIRE_AUTH` are explicitly configured per environment; both are staged identity gates and must not be enabled for the existing anonymous LIVE DAGA client until its supported sign-in/session flow is integrated and tested.
+- [ ] With auth gates disabled for compatibility, document that `/memory` still accepts a caller-supplied legacy `userId`; do not treat that compatibility mode as tenant-secure or expose sensitive account data through it.
+- [ ] With auth gates enabled in staging, verify unauthenticated `/memory`, `/chat`, `/tts`, and `/liveavatar/token` requests fail closed, while valid approved company sessions succeed.
+- [ ] Test manager/employee cross-company isolation and invite permission boundaries.

@@ -2,5 +2,13 @@ name = "daga-voice"
 main = "worker.js"
 compatibility_date = "2026-10-06"
 
+[vars]
+DAGA_APP_BASE_URL = "https://daga-voice.dagamobile10.workers.dev"
+DAGA_ALLOWED_ORIGINS = "https://dagamobile10-creator.github.io"
+
 [ai]
 binding = "AI"
+
+[[previews.d1_databases]]
+binding = "DAGA_APP_DB"
+database_id = "a4b15995-8ec7-4bb9-aa49-cf1bce9d7341"
