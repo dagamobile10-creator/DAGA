@@ -201,7 +201,7 @@ export async function handleOwnerAdmin(request, env, url) {
       return json(env,{ok:true,displayName});
     }
 
-    const setupEmailMatch=path.match(/^\\/owner\\/admin\\/stores\\/([a-f0-9-]{36})\\/setup-email$/i);
+    const setupEmailMatch=path.match(/^\/owner\/admin\/stores\/([a-f0-9-]{36})\/setup-email$/i);
     if(setupEmailMatch&&request.method==="POST"){
       const result=await sendCompanySetupCodeForStore(env,db,setupEmailMatch[1]);
       if(!result.ok)return json(env,{error:result.error},502);
