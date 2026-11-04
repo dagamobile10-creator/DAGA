@@ -14,7 +14,7 @@ class ShopSelfRegistrationTests(unittest.TestCase):
             self.assertIn(route, auth)
 
     def test_registration_collects_no_company_or_legal_identifier(self):
-        portal = (ROOT / "company" / "portal.html").read_text(encoding="utf-8")
+        portal = portal
         owner = (ROOT / "owner-console.html").read_text(encoding="utf-8")
         self.assertIn('id="shopRegistrationForm"', portal)
         self.assertIn('shopName:$("onboardingShopName").value.trim()', portal)
@@ -27,13 +27,15 @@ class ShopSelfRegistrationTests(unittest.TestCase):
         auth = (ROOT / "shop-auth.js").read_text(encoding="utf-8")
         admin = (ROOT / "owner-admin.js").read_text(encoding="utf-8")
         dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
+        owner = (ROOT / "owner-console.html").read_text(encoding="utf-8")
+        portal = portal
         self.assertIn("ledgerEnabled:Boolean(entitlement)", auth)
         self.assertIn('store.onboarding_status!=="preliminary_approved"', admin)
         self.assertIn('"preliminary_approved"', admin)
         self.assertIn("onboarding_status", admin)
         self.assertIn("contact_phone", auth)
-        self.assertIn('id="onboardingContactPhone"', (ROOT / "company" / "portal.html").read_text(encoding="utf-8"))
-        self.assertIn('contactPhone:$("onboardingContactPhone").value.trim()', (ROOT / "company" / "portal.html").read_text(encoding="utf-8"))
+        self.assertIn('id="onboardingContactPhone"', portal)
+        self.assertIn('contactPhone:$("onboardingContactPhone").value.trim()', portal)
         self.assertIn("valid_shop_whatsapp_required", auth)
         self.assertIn("data-store-phone", owner)
         self.assertIn("contactPhone", admin)
