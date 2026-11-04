@@ -81,7 +81,7 @@ class NavigationRouteTests(unittest.TestCase):
             "/api/shop/auth/setup/verify",
             "/api/shop/auth/recovery/start",
             "/api/shop/auth/recovery/complete",
-            "/api/shop/auth/me",
+            "/api/shop/auth/portal",
             "/api/shop/auth/logout",
         ):
             with self.subTest(path=path):
