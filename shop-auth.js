@@ -40,6 +40,7 @@ async function registrationStart(request,env,db){
   const ip=request.headers.get("CF-Connecting-IP")||"unknown";
   if(!await rateLimit(db,env,"shop-register-ip:"+ip,8,3600)||!await rateLimit(db,env,"shop-register-email:"+email,3,3600))return json(env,{error:"rate_limited"},429);
   if(name.length<2||owner.length<2||!validEmail(email))return json(env,{error:"valid_shop_owner_name_and_email_required"},400);
+  if(!/^\\+?[0-9]{10,15}$/.test(contactPhone))return json(env,{error:"valid_shop_whatsapp_required"},400);
   if(await db.prepare("SELECT id FROM daga_accounts WHERE lower(email)=? LIMIT 1").bind(email).first())return json(env,{error:"account_email_already_exists"},409);
   const code=digits(),id=crypto.randomUUID(),now=new Date(),expires=new Date(now.getTime()+OTP_TTL_SECONDS*1000).toISOString();
   const [codeHash,destinationHash]=await Promise.all([sha(id+":"+code+":"+env.DAGA_OTP_PEPPER),sha("email:"+email)]);
