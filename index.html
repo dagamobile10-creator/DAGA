@@ -201,7 +201,7 @@ async function playVoiceTest(){
     status.textContent='بيجهّز اختبار الصوت…';
     state.textContent='جاري توليد الكلام بالصوت المتصل بالمساعد';
     const r=await fetch(DAGA_API_BASE+'/tts',{
-      method:'POST',headers:dagaAuthHeaders({'Content-Type':'application/json'}),body:JSON.stringify({text:testText})
+      method:'POST',headers:dagaAuthHeaders({'Content-Type':'application/json'}),body:JSON.stringify({mode:'live_daga',text:testText})
     });
     if(!r.ok) throw new Error(await r.text());
     const blob=await r.blob(),url=URL.createObjectURL(blob),a=new Audio(url);
