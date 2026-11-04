@@ -154,6 +154,25 @@ const token=companyRandomToken(32),now=new Date().toISOString(),expires=new Date
 await db.prepare("INSERT INTO daga_auth_sessions (id,account_id,token_hash,created_at,expires_at,last_seen_at) VALUES (?,?,?,?,?,?)").bind(crypto.randomUUID(),a.id,await sha256(token),now,expires,now).run();
 return json(env,{ok:true,account:{id:a.id,publicId:a.public_id||null,displayName:a.display_name,role:a.role,emailMasked:maskCompanyEmail(a.email)},sessionToken:token,expiresAt:expires});
 }
+
+export async function sendCompanySetupCodeForStore(env,db,storeId){
+  if(!env.DAGA_OTP_PEPPER||!env.RESEND_API_KEY||!env.DAGA_EMAIL_FROM)return {ok:false,error:"company_email_delivery_not_configured"};
+  const row=await db.prepare("SELECT s.id,a.id AS account_id,a.email FROM daga_stores s JOIN daga_accounts a ON a.id=s.owner_account_id WHERE s.id=? AND s.status='approved' AND s.onboarding_status='approved' AND a.status='approved' AND a.role='store_owner'").bind(storeId).first();
+  if(!row)return {ok:false,error:"approved_store_owner_account_not_found"};
+  const credentials=await db.prepare("SELECT account_id FROM daga_account_credentials WHERE account_id=?").bind(row.account_id).first();
+  if(credentials)return {ok:true,alreadyConfigured:true,emailMasked:maskCompanyEmail(row.email)};
+  const id=crypto.randomUUID(),code=companyDigits(),now=new Date().toISOString(),expires=new Date(Date.now()+600000).toISOString();
+  const [hash,dest]=await Promise.all([sha256(id+":"+code+":"+env.DAGA_OTP_PEPPER),sha256("email:"+String(row.email).trim().toLowerCase())]);
+  await db.prepare("INSERT INTO daga_company_login_challenges (id,account_id,channel,destination_hash,code_hash,expires_at) VALUES (?,?,'email',?,?,?)").bind(id,row.account_id,dest,hash,expires).run();
+  try{
+    await companySendEmail(env,row.email,"DAGA password setup","<p>Your DAGA setup code is <strong>"+code+"</strong>.</p><p>It expires in 10 minutes.</p>");
+  }catch(_){
+    await db.prepare("UPDATE daga_company_login_challenges SET consumed_at=? WHERE id=?").bind(now,id).run();
+    return {ok:false,error:"verification_delivery_failed"};
+  }
+  return {ok:true,sent:true,emailMasked:maskCompanyEmail(row.email),expiresInSeconds:600};
+}
+
 async function companySetupStart(request,env,db){
 if(!env.DAGA_OTP_PEPPER||!env.RESEND_API_KEY||!env.DAGA_EMAIL_FROM)return json(env,{error:"company_registration_not_configured"},503);
 const body=await safeJson(request);if(!body)return json(env,{error:"invalid_json"},400);const email=String(body.email||"").trim().toLowerCase();
