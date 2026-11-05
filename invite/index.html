@@ -71,7 +71,7 @@ button{cursor:pointer;border:0;border-radius:11px;padding:13px 15px;font:inherit
     const response = await fetch(API + path, {method:"POST",headers,body:JSON.stringify(body),cache:"no-store",credentials:"omit",referrerPolicy:"no-referrer"});
     let data = {};
     try { data = await response.json(); } catch (_) {}
-    if (!response.ok) throw new Error(data.error || "حصلت مشكلة في الاتصال. جرّب تاني.");
+    if (!response.ok) { const detail = location.hostname === "daga-app-staging.dagamobile10.workers.dev" && typeof data.diagnostic === "string" ? "\\nتفاصيل التشخيص: " + data.diagnostic : ""; throw new Error((data.error || "حصلت مشكلة في الاتصال. جرّب تاني.") + detail); }
     return data;
   }
   async function busy(button, fn) {
@@ -90,7 +90,7 @@ button{cursor:pointer;border:0;border-radius:11px;padding:13px 15px;font:inherit
       company_login_not_configured:"تسجيل الدخول مش متجهز بالكامل على الخادم لسه.",
       authenticated_account_required:"انتهت الجلسة. سجّل الدخول مرة تانية.",
       already_a_company_member:"الحساب عضو بالفعل في الشركة.",
-      invalid_expired_used_or_concurrently_claimed_invitation:"الدعوة اتقبلت بالفعل أو انتهت. حدّث الصفحة وتأكد من عضويتك."
+      invalid_expired_used_or_concurrently_claimed_invitation:"الدعوة اتقبلت بالفعل أو انتهت. حدّث الصفحة وتأكد من عضويتك.",\n      account_registration_conflict_or_failed:"حصل تعارض أثناء إنشاء الحساب. تفاصيل التشخيص ظاهرة أسفل الرسالة على نسخة الاختبار.",\n      registration_race_or_conflict_retry:"حصل تعارض متزامن أثناء قبول الدعوة. ما تعيدش المحاولة قبل مراجعة حالة الحساب والدعوة."
     };
     return messages[code] || ("تعذّر إكمال العملية: " + code);
   }
