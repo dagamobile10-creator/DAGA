@@ -247,7 +247,7 @@ if(await db.prepare("SELECT id FROM daga_accounts WHERE lower(email)=? LIMIT 1")
 const ip=request.headers.get("CF-Connecting-IP")||"unknown";if(!await companyRateLimit(db,env,"company-register-ip:"+ip,5,900)||!await companyRateLimit(db,env,"company-register-destination:"+await sha256(email),3,3600))return json(env,{error:"rate_limited"},429);
 const id=crypto.randomUUID(),code=companyDigits(),expires=new Date(Date.now()+600000).toISOString(),[hash,dest]=await Promise.all([sha256(id+":"+code+":"+env.DAGA_OTP_PEPPER),sha256("email:"+email)]);
 await db.prepare("INSERT INTO daga_company_registration_challenges (id,invitation_token_hash,channel,destination_hash,code_hash,expires_at) VALUES (?,?,'email',?,?,?)").bind(id,th,dest,hash,expires).run();
-try{await companySendEmail(env,email,"DAGA account verification","<p>Your DAGA verification code is <strong>"+code+"</strong>.</p><p>It expires in 10 minutes.</p>");}catch(_){await db.prepare("UPDATE daga_company_registration_challenges SET consumed_at=? WHERE id=?").bind(new Date().toISOString(),id).run();return json(env,{error:"verification_delivery_failed"},502);}
+try{await companySendEmail(env,email,"DAGA account verification","<p>Your DAGA verification code is <strong>"+code+"</strong>.</p><p>It expires in 10 minutes.</p>");}catch(error){console.error("company_invitation_email_delivery_failed",error instanceof Error?error.message.slice(0,240):"unknown_error");await db.prepare("UPDATE daga_company_registration_challenges SET consumed_at=? WHERE id=?").bind(new Date().toISOString(),id).run();return json(env,{error:"verification_delivery_failed",...(new URL(request.url).hostname==="daga-app-staging.dagamobile10.workers.dev"?{diagnostic:error instanceof Error?error.message.slice(0,240):"unknown_error"}:{})},502);}
 return json(env,{ok:true,requiresVerification:true,emailMasked:maskCompanyEmail(email),expiresInSeconds:600},202);
 }
 async function registerVerify(request,env,db){
@@ -288,7 +288,7 @@ async function companySendEmail(env, email, subject, html) {
     method: "POST", headers: { Authorization: "Bearer " + env.RESEND_API_KEY, "Content-Type": "application/json" },
     body: JSON.stringify({ from: env.DAGA_EMAIL_FROM, to: [email], subject, html }), signal: AbortSignal.timeout(10000)
   });
-  if (!response.ok) throw new Error("email_delivery_failed");
+  if (!response.ok) { let detail=""; try { detail=(await response.text()).slice(0,180); } catch(_) {} throw new Error("resend_http_"+response.status+(detail?":"+detail:"")); }
 }
 function companyDigits() { return String(crypto.getRandomValues(new Uint32Array(1))[0] % 1000000).padStart(6, "0"); }
 function companyRandomToken(size) { const bytes = crypto.getRandomValues(new Uint8Array(size)); return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, ""); }
