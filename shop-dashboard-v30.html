@@ -644,10 +644,10 @@ async function bootAuthenticatedDashboard(token,selectedCompanyId){
   window.DAGA_SESSION_TOKEN=token;window.DAGA_AUTH_USER={id:data.account.id,displayName:data.account.displayName||'',role:role,storeId:company.id,storeName:company.displayName||'ضجه',contactPhone:company.contactPhone||'',permissions:company.permissions||{},smartAssistantEnabled:company.smartAssistantEnabled===true&&(role==='store_owner'||company.permissions?.useSmartAssistant===true),historyEnabled:company.historyEnabled===true,liveDagaEnabled:company.liveDagaEnabled===true&&(role==='store_owner'||company.permissions?.useLiveDaga===true)};
   // Keep both premium actions visible on every plan; entitlement controls whether they can run.
   const smartAllowed=window.DAGA_AUTH_USER.smartAssistantEnabled===true;
-  const liveAllowed=window.DAGA_AUTH_USER.smartAssistantEnabled===true&&window.DAGA_AUTH_USER.liveDagaEnabled===true;
+  const liveAllowed=true;
   // Keep premium actions visible and tappable; their handlers and server routes enforce entitlements.
   document.querySelectorAll('button[onclick="voiceDaga()"]').forEach(b=>{b.hidden=!smartAllowed;b.disabled=!smartAllowed;b.title=smartAllowed?'':'زر كلم ضجة متاح بعد تفعيل اشتراك DAGA للشركة.';b.setAttribute('aria-disabled',String(!smartAllowed));});
-  document.querySelectorAll('button.liveBtn').forEach(b=>{b.hidden=!liveAllowed;b.disabled=!liveAllowed;b.title=liveAllowed?'':'LIVE DAGA تحتاج تفعيل خدمة LIVE DAGA ورصيد حروف منفصل.';b.setAttribute('aria-disabled',String(!liveAllowed));});
+  document.querySelectorAll('button.liveBtn').forEach(b=>{b.hidden=!liveAllowed;b.disabled=!liveAllowed;b.title='LIVE DAGA متاحة؛ يلزم وجود رصيد حروف للتحدث.';b.setAttribute('aria-disabled',String(!liveAllowed));});
   document.querySelectorAll('button[onclick="showReports()"]').forEach(b=>{b.hidden=false;b.disabled=false;b.title=window.DAGA_AUTH_USER.historyEnabled?'':'تفاصيل الأيام السابقة متاحة بعد تفعيل اشتراك DAGA للشركة.';});
   loadStoreData(company.id);
   const header=document.querySelector('header.top .row');
