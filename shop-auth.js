@@ -164,7 +164,7 @@ async function me(request,env,db){
   const liveEntitlement=await db.prepare("SELECT id FROM daga_entitlements WHERE account_id=? AND store_id=? AND service='live_daga' AND status='active' AND starts_at<=? AND expires_at>? ORDER BY starts_at DESC,created_at DESC LIMIT 1").bind(account.id,store.id,now,now).first();
   let features={};try{features=JSON.parse(entitlement?.features_json||"{}");if(!features||typeof features!=="object"||Array.isArray(features))features={};}catch(_){features={};}
   const storeEnabled=Boolean(entitlement);
-  const company={id:store.id,publicId:store.public_id,displayName:store.display_name,role:"store_owner",permissions:{},ledgerEnabled:storeEnabled,smartAssistantEnabled:storeEnabled,historyEnabled:storeEnabled,liveDagaEnabled:Boolean(liveEntitlement&&Number(liveWordBalance?.remaining||0)>0),liveWordsRemaining:Number(liveWordBalance?.remaining||0)};
+  const company={id:store.id,publicId:store.public_id,displayName:store.display_name,role:"store_owner",permissions:{},ledgerEnabled:storeEnabled,smartAssistantEnabled:storeEnabled,historyEnabled:storeEnabled,liveDagaEnabled:Number(liveWordBalance?.remaining||0)>0,liveWordsRemaining:Number(liveWordBalance?.remaining||0)};
   const publicAccount={id:account.id,role:account.role,displayName:account.display_name,emailMasked:maskEmail(account.email),publicId:store.public_id};
   return json(env,{ok:true,account:publicAccount,companies:[company],shops:[company]});
 }
