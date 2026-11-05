@@ -49,7 +49,7 @@ export async function handleOwnerAdmin(request, env, url) {
     }
 
     if (path === "/owner/admin/plans" && request.method === "GET") {
-      const result = await db.prepare("SELECT id,service,name,price_minor,currency,duration_days,word_quota,features_json,is_active,version,updated_at FROM daga_plans ORDER BY service,name").all();
+      const result = await db.prepare("SELECT id,service,name,price_minor,currency,duration_days,word_quota,features_json,is_active,version,updated_at,owner_archived_at FROM daga_plans WHERE owner_archived_at IS NULL ORDER BY service,name").all();
       return json(env, { ok: true, plans: result.results || [] });
     }
     if (path === "/owner/admin/plans" && request.method === "POST") {
@@ -75,6 +75,17 @@ export async function handleOwnerAdmin(request, env, url) {
         .bind(id,service,name,price,String(b.currency || "EGP").slice(0,8),duration,quota,features,owner.id,now).run();
       await audit(db,owner.id,"plan_created","daga_plans",id,{service,name,priceMinor:price});
       return json(env, { ok:true,id },201);
+    }
+    const planArchiveMatch = path.match(/^\/owner\/admin\/plans\/([a-f0-9-]{36})\/archive$/i);
+    if (planArchiveMatch && request.method === "POST") {
+      const plan = await db.prepare("SELECT id,service,name FROM daga_plans WHERE id=? AND owner_archived_at IS NULL").bind(planArchiveMatch[1]).first();
+      if (!plan) return json(env,{error:"plan_not_found"},404);
+      const activeOrder = await db.prepare("SELECT id FROM daga_plan_orders WHERE plan_id=? AND status IN ('awaiting_payment','payment_submitted','under_review') LIMIT 1").bind(plan.id).first();
+      if (activeOrder) return json(env,{error:"plan_has_pending_orders"},409);
+      const now=new Date().toISOString();
+      await db.prepare("UPDATE daga_plans SET is_active=0,owner_archived_at=?,updated_at=?,updated_by=?,version=version+1 WHERE id=? AND owner_archived_at IS NULL").bind(now,now,owner.id,plan.id).run();
+      await audit(db,owner.id,"plan_archived","daga_plans",plan.id,{service:plan.service,name:plan.name});
+      return json(env,{ok:true,status:"archived"});
     }
     const planMatch = path.match(/^\/owner\/admin\/plans\/([a-f0-9-]{36})$/i);
     if (planMatch && request.method === "PATCH") {
@@ -321,8 +332,18 @@ export async function handleOwnerAdmin(request, env, url) {
     }
 
     if(path==="/owner/admin/payments"&&request.method==="GET"){
-      const r=await db.prepare("SELECT ps.id,ps.order_id,ps.payment_method_id,ps.claimed_amount_minor,ps.transaction_reference,ps.receipt_url,ps.submitted_at,ps.status,o.account_id,o.store_id,o.plan_id,o.agreed_price_minor,o.currency,o.status AS order_status,pm.provider,pm.display_label FROM daga_payment_submissions ps JOIN daga_plan_orders o ON o.id=ps.order_id JOIN daga_payment_methods pm ON pm.id=ps.payment_method_id ORDER BY ps.submitted_at DESC LIMIT 500").all();
+      const r=await db.prepare("SELECT ps.id,ps.order_id,ps.payment_method_id,ps.claimed_amount_minor,ps.transaction_reference,ps.receipt_url,ps.submitted_at,ps.status,o.account_id,o.store_id,o.plan_id,o.agreed_price_minor,o.currency,o.status AS order_status,pm.provider,pm.display_label FROM daga_payment_submissions ps JOIN daga_plan_orders o ON o.id=ps.order_id JOIN daga_payment_methods pm ON pm.id=ps.payment_method_id WHERE ps.owner_archived_at IS NULL ORDER BY ps.submitted_at DESC LIMIT 500").all();
       return json(env, {ok:true,payments:r.results||[]});
+    }
+    const paymentArchiveMatch=path.match(/^\/owner\/admin\/payments\/([a-f0-9-]{36})\/archive$/i);
+    if(paymentArchiveMatch&&request.method==="POST"){
+      const payment=await db.prepare("SELECT id,status FROM daga_payment_submissions WHERE id=? AND owner_archived_at IS NULL").bind(paymentArchiveMatch[1]).first();
+      if(!payment)return json(env,{error:"payment_not_found"},404);
+      if(payment.status==="pending_review")return json(env,{error:"pending_payment_cannot_be_archived"},409);
+      const now=new Date().toISOString();
+      await db.prepare("UPDATE daga_payment_submissions SET owner_archived_at=? WHERE id=? AND owner_archived_at IS NULL").bind(now,payment.id).run();
+      await audit(db,owner.id,"payment_record_archived","daga_payment_submissions",payment.id,{status:payment.status});
+      return json(env,{ok:true,status:"archived"});
     }
     const reviewMatch=path.match(/^\/owner\/admin\/payments\/([a-f0-9-]{36})\/review$/i);
     if(reviewMatch&&request.method==="POST"){
@@ -341,7 +362,7 @@ export async function handleOwnerAdmin(request, env, url) {
         const entitlementId=crypto.randomUUID(), starts=now, expires=new Date(Date.now()+Number(sub.duration_days)*86400000).toISOString();
         statements.push(db.prepare("INSERT INTO daga_entitlements (id,account_id,store_id,service,order_id,starts_at,expires_at,status) SELECT ?,?,?,?,?,?,?,'active' WHERE EXISTS (SELECT 1 FROM daga_payment_submissions ps JOIN daga_plan_orders o ON o.id=ps.order_id WHERE ps.id=? AND ps.status='confirmed' AND ps.reviewed_by=? AND ps.reviewed_at=? AND o.status='paid_approved')").bind(entitlementId,sub.account_id,sub.store_id,sub.service,sub.order_id,starts,expires,sub.id,owner.id,now));
         if(sub.service==="live_daga"&&Number(sub.word_quota)>0) statements.push(db.prepare("INSERT INTO daga_live_word_ledger (id,account_id,store_id,order_id,event_type,words,request_id,note) SELECT ?,?,?,?,'credit',?,?,? WHERE EXISTS (SELECT 1 FROM daga_payment_submissions ps JOIN daga_plan_orders o ON o.id=ps.order_id WHERE ps.id=? AND ps.status='confirmed' AND ps.reviewed_by=? AND ps.reviewed_at=? AND o.status='paid_approved')").bind(crypto.randomUUID(),sub.account_id,sub.store_id,sub.order_id,Number(sub.word_quota),"order:"+sub.order_id,"Owner-confirmed LIVE DAGA purchase",sub.id,owner.id,now));
-        if(sub.service==="store") statements.push(db.prepare("UPDATE daga_stores SET onboarding_status=CASE WHEN onboarding_status='preliminary_approved' THEN 'approved' ELSE onboarding_status END,onboarding_order_id=CASE WHEN onboarding_status='preliminary_approved' AND onboarding_order_id IS NULL THEN ? ELSE onboarding_order_id END,updated_at=? WHERE id=? AND status='approved' AND EXISTS (SELECT 1 FROM daga_plan_orders WHERE id=? AND status='paid_approved')").bind(sub.order_id,now,sub.store_id,sub.order_id));
+        if(sub.service==="store") statements.push(db.prepare("UPDATE daga_stores SET owner_list_removed_at=NULL,onboarding_status=CASE WHEN onboarding_status='preliminary_approved' THEN 'approved' ELSE onboarding_status END,onboarding_order_id=CASE WHEN onboarding_status='preliminary_approved' AND onboarding_order_id IS NULL THEN ? ELSE onboarding_order_id END,updated_at=? WHERE id=? AND status='approved' AND EXISTS (SELECT 1 FROM daga_plan_orders WHERE id=? AND status='paid_approved')").bind(sub.order_id,now,sub.store_id,sub.order_id));
       }
       const reviewResults = await db.batch(statements);
       if (Number(reviewResults?.[0]?.meta?.changes || 0) !== 1 ||
