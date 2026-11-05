@@ -69,7 +69,8 @@ export async function handleOwnerAdmin(request, env, url) {
       }
       if (!["store","live_daga"].includes(service) || !name || !Number.isSafeInteger(price) || price < 0 || !Number.isInteger(duration) || duration < 1 || duration > 3650 || (service === "live_daga" && quota === null) || (quota !== null && (!Number.isSafeInteger(quota) || quota < 1))) return json(env, { error: "invalid_plan_fields" }, 400);
       const id = crypto.randomUUID(), now = new Date().toISOString();
-      const features = service === "store" ? normalizeStoreFeatures(b.features) : safeObjectJson(b.features);
+      const features = service === "store" ? normalizeStoreFeatures({}) : safeObjectJson(b.features);
+      if (service === "store") await db.prepare("UPDATE daga_plans SET is_active=0,version=version+1,updated_by=?,updated_at=? WHERE service='store' AND is_active=1").bind(owner.id,now).run();
       await db.prepare("INSERT INTO daga_plans (id,service,name,price_minor,currency,duration_days,word_quota,features_json,is_active,version,updated_by,updated_at) VALUES (?,?,?,?,?,?,?,?,1,1,?,?)")
         .bind(id,service,name,price,String(b.currency || "EGP").slice(0,8),duration,quota,features,owner.id,now).run();
       await audit(db,owner.id,"plan_created","daga_plans",id,{service,name,priceMinor:price});
@@ -86,7 +87,7 @@ export async function handleOwnerAdmin(request, env, url) {
       const quota = b.wordQuota === undefined ? existing.word_quota : (b.wordQuota === null ? null : Number(b.wordQuota));
       const active = b.isActive === undefined ? existing.is_active : (b.isActive ? 1 : 0);
       const features = existing.service === "store"
-        ? normalizeStoreFeatures(b.features === undefined ? (() => { try { return JSON.parse(existing.features_json || "{}"); } catch (_) { return {}; } })() : b.features)
+        ? normalizeStoreFeatures({})
         : existing.features_json;
       if (existing.service === "live_daga") {
         if (quota === null || !Number.isSafeInteger(quota) || quota < 1) return json(env, { error: "live_daga_character_quota_required" }, 400);
@@ -419,9 +420,8 @@ export async function handleOwnerAdmin(request, env, url) {
 
 async function readJson(request){try{return await request.json()}catch(_){return null}}
 function normalizeStoreFeatures(value) {
-  const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
-  const smart = source.tier === "smart" || (source.tier !== "standard" && (source.smartAssistantEnabled === true || source.historyEnabled === true));
-  return JSON.stringify({ tier: smart ? "smart" : "standard", smartAssistantEnabled: smart, historyEnabled: smart });
+  void value;
+  return JSON.stringify({ tier: "single", smartAssistantEnabled: true, historyEnabled: true });
 }
 function safeObjectJson(value){return JSON.stringify(value&&typeof value==="object"&&!Array.isArray(value)?value:{}) .slice(0,10000)}
 async function audit(db,actor,action,targetType,targetId,details){
