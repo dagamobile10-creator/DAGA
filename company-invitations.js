@@ -17,7 +17,19 @@ export async function handleCompanyInvitations(request, env, url) {
   if (path === "/api/company/auth/register/verify" && request.method === "POST") return registerVerify(request, env, db);
   if (path === "/api/company/auth/login" && request.method === "POST") return companyLoginStart(request, env, db);
   if (path === "/api/company/auth/setup/start" && request.method === "POST") return companySetupStart(request, env, db);
-  if (path === "/api/company/auth/setup/verify" && request.method === "POST") return companySetupVerify(request, env, db);
+  if (path === "/api/company/auth/setup/verify" && request.method === "POST") {
+    try {
+      return await companySetupVerify(request, env, db);
+    } catch (error) {
+      console.error("company_setup_verify_failed", error instanceof Error ? error.name : "unknown_error", error instanceof Error ? error.message.slice(0, 240) : "unknown");
+      return json(env, {
+        error: "company_account_setup_failed",
+        ...(url.hostname === "daga-app-staging.dagamobile10.workers.dev"
+          ? { diagnostic: error instanceof Error ? error.message.slice(0, 240) : "unknown_error" }
+          : {})
+      }, 500);
+    }
+  }
   if (path === "/api/company/auth/recovery/start" && request.method === "POST") return companyRecoveryStart(request, env, db);
   if (path === "/api/company/auth/recovery/complete" && request.method === "POST") return companyRecoveryComplete(request, env, db);
   const account = await authenticatedAccount(request, db);
