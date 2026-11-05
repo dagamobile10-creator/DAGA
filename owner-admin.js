@@ -13,7 +13,7 @@ export async function handleOwnerAdmin(request, env, url) {
     const path = url.pathname.replace(/\/+$/, "");
     if (path === "/owner/admin/overview" && request.method === "GET") {
       const [stores, pendingAccounts, plans, pendingPayments, activeEntitlements, wordBalance] = await Promise.all([
-        db.prepare("SELECT status,COUNT(*) AS count FROM daga_stores GROUP BY status").all(),
+        db.prepare("SELECT status,COUNT(*) AS count FROM daga_stores WHERE owner_list_removed_at IS NULL GROUP BY status").all(),
         db.prepare("SELECT role,status,COUNT(*) AS count FROM daga_accounts WHERE role!='program_owner' GROUP BY role,status").all(),
         db.prepare("SELECT service,COUNT(*) AS count FROM daga_plans WHERE is_active=1 GROUP BY service").all(),
         db.prepare("SELECT COUNT(*) AS count FROM daga_payment_submissions WHERE status='pending_review'").first(),
@@ -195,10 +195,15 @@ export async function handleOwnerAdmin(request, env, url) {
       const now=new Date().toISOString();
       const active=await db.prepare("SELECT id FROM daga_entitlements WHERE store_id=? AND service='store' AND status='active' AND starts_at<=? AND expires_at>? LIMIT 1").bind(store.id,now,now).first();
       if(active)return json(env,{error:"active_subscription_must_be_cancelled_first"},409);
-      const pending=await db.prepare("SELECT o.id FROM daga_plan_orders o WHERE o.store_id=? AND o.status IN ('awaiting_payment','payment_submitted','under_review') LIMIT 1").bind(store.id).first();
-      if(pending)return json(env,{error:"pending_subscription_request_must_be_resolved_first"},409);
-      await db.prepare("UPDATE daga_stores SET owner_list_removed_at=?,updated_at=? WHERE id=?") .bind(now,now,store.id).run();
-      await audit(db,owner.id,"store_removed_from_owner_list","daga_stores",store.id,{archived:true});
+      // An order that is only awaiting payment has no submitted payment to review;
+      // cancel it as part of removing the store. Never auto-cancel a submitted payment.
+      const pendingReview=await db.prepare("SELECT o.id FROM daga_plan_orders o WHERE o.store_id=? AND o.status IN ('payment_submitted','under_review') LIMIT 1").bind(store.id).first();
+      if(pendingReview)return json(env,{error:"payment_review_must_be_resolved_before_removal"},409);
+      await db.batch([
+        db.prepare("UPDATE daga_plan_orders SET status='cancelled',updated_at=? WHERE store_id=? AND status='awaiting_payment'").bind(now,store.id),
+        db.prepare("UPDATE daga_stores SET owner_list_removed_at=?,updated_at=? WHERE id=?").bind(now,now,store.id)
+      ]);
+      await audit(db,owner.id,"store_removed_from_owner_list","daga_stores",store.id,{archived:true,cancelledUnpaidOrders:true});
       return json(env,{ok:true,status:"archived"});
     }
 
