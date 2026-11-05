@@ -82,10 +82,8 @@ async function companyAccountMe(env, db, account) {
     let features = {};
     try { features = JSON.parse(storeEntitlement?.features_json || "{}"); if (!features || typeof features !== "object" || Array.isArray(features)) features = {}; } catch (_) {}
     const remainingWords = Number(liveWordBalance?.remaining || 0);
-    const explicitTier = String(features.tier || "").trim().toLowerCase();
-    const planName = String(storeEntitlement?.name || "");
-    const smartEnabled = Boolean(storeEntitlement && (explicitTier === "smart" || /smart|ذكي|زكي/i.test(planName) || (!["standard", "smart"].includes(explicitTier) && (features.smartAssistantEnabled === true || features.historyEnabled === true))));
-    return { ...company, ledgerEnabled: Boolean(storeEntitlement), smartAssistantEnabled: smartEnabled, historyEnabled: Boolean(storeEntitlement && (features.historyEnabled === true || features.tier === "smart")), liveDagaEnabled: smartEnabled && remainingWords > 0, liveWordsRemaining: remainingWords };
+    const storeEnabled = Boolean(storeEntitlement);
+    return { ...company, ledgerEnabled: storeEnabled, smartAssistantEnabled: storeEnabled, historyEnabled: storeEnabled, liveDagaEnabled: Boolean(liveEntitlement && remainingWords > 0), liveWordsRemaining: remainingWords };
   }));
   return json(env, { ok: true, account: { id: account.id, publicId: account.public_id || null, displayName: account.display_name, role: account.role, status: account.status, emailMasked: maskCompanyEmail(account.email) }, companies });
 }
