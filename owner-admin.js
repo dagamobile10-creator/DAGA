@@ -171,9 +171,37 @@ export async function handleOwnerAdmin(request, env, url) {
 
     if(path==="/owner/admin/stores"&&request.method==="GET"){
       const now=new Date().toISOString();
-      const r=await db.prepare("SELECT s.id,s.public_id,s.owner_account_id,s.display_name,s.status,s.onboarding_status,s.contact_phone,s.created_at,a.email,a.display_name AS owner_name,(SELECT p.name FROM daga_entitlements e LEFT JOIN daga_plan_orders o ON o.id=e.order_id LEFT JOIN daga_plans p ON p.id=o.plan_id WHERE e.store_id=s.id AND e.service='store' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? ORDER BY e.expires_at DESC LIMIT 1) AS store_plan_name,(SELECT json_extract(p.features_json,'$.tier') FROM daga_entitlements e LEFT JOIN daga_plan_orders o ON o.id=e.order_id LEFT JOIN daga_plans p ON p.id=o.plan_id WHERE e.store_id=s.id AND e.service='store' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? ORDER BY e.expires_at DESC LIMIT 1) AS store_plan_tier,(SELECT e.expires_at FROM daga_entitlements e WHERE e.store_id=s.id AND e.service='store' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? ORDER BY e.expires_at DESC LIMIT 1) AS store_plan_expires_at,(SELECT COALESCE(SUM(CASE WHEN l.event_type IN ('credit','adjustment','refund') THEN l.words ELSE -l.words END),0) FROM daga_live_word_ledger l WHERE l.store_id=s.id) AS live_words_remaining FROM daga_stores s JOIN daga_accounts a ON a.id=s.owner_account_id ORDER BY s.created_at DESC LIMIT 500").bind(now,now,now,now,now,now).all();
+      const r=await db.prepare("SELECT s.id,s.public_id,s.owner_account_id,s.display_name,s.status,s.onboarding_status,s.contact_phone,s.created_at,a.email,a.display_name AS owner_name,(SELECT p.name FROM daga_entitlements e LEFT JOIN daga_plan_orders o ON o.id=e.order_id LEFT JOIN daga_plans p ON p.id=o.plan_id WHERE e.store_id=s.id AND e.service='store' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? ORDER BY e.expires_at DESC LIMIT 1) AS store_plan_name,(SELECT json_extract(p.features_json,'$.tier') FROM daga_entitlements e LEFT JOIN daga_plan_orders o ON o.id=e.order_id LEFT JOIN daga_plans p ON p.id=o.plan_id WHERE e.store_id=s.id AND e.service='store' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? ORDER BY e.expires_at DESC LIMIT 1) AS store_plan_tier,(SELECT e.expires_at FROM daga_entitlements e WHERE e.store_id=s.id AND e.service='store' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? ORDER BY e.expires_at DESC LIMIT 1) AS store_plan_expires_at,(SELECT COALESCE(SUM(CASE WHEN l.event_type IN ('credit','adjustment','refund') THEN l.words ELSE -l.words END),0) FROM daga_live_word_ledger l WHERE l.store_id=s.id) AS live_words_remaining FROM daga_stores s JOIN daga_accounts a ON a.id=s.owner_account_id WHERE s.status!='archived' ORDER BY s.created_at DESC LIMIT 500").bind(now,now,now,now,now,now).all();
       return json(env, {ok:true,stores:r.results||[]});
     }
+    const storeCancelMatch=path.match(/^\/owner\/admin\/stores\/([a-f0-9-]{36})\/cancel-subscription$/i);
+    if(storeCancelMatch&&request.method==="POST"){
+      const store=await db.prepare("SELECT id FROM daga_stores WHERE id=? AND status!='archived'").bind(storeCancelMatch[1]).first();
+      if(!store)return json(env,{error:"store_not_found"},404);
+      const now=new Date().toISOString();
+      const active=await db.prepare("SELECT id FROM daga_entitlements WHERE store_id=? AND service='store' AND status='active' AND starts_at<=? AND expires_at>? ORDER BY expires_at DESC LIMIT 1").bind(store.id,now,now).first();
+      if(!active)return json(env,{error:"no_active_store_subscription"},409);
+      await db.batch([
+        db.prepare("UPDATE daga_entitlements SET status='cancelled' WHERE store_id=? AND service='store' AND status='active'").bind(store.id),
+        db.prepare("UPDATE daga_stores SET updated_at=? WHERE id=?").bind(now,store.id)
+      ]);
+      await audit(db,owner.id,"store_subscription_cancelled","daga_stores",store.id,{cancelledByOwner:true});
+      return json(env,{ok:true,status:"cancelled"});
+    }
+    const storeArchiveMatch=path.match(/^\/owner\/admin\/stores\/([a-f0-9-]{36})\/archive$/i);
+    if(storeArchiveMatch&&request.method==="POST"){
+      const store=await db.prepare("SELECT id,status FROM daga_stores WHERE id=? AND status!='archived'").bind(storeArchiveMatch[1]).first();
+      if(!store)return json(env,{error:"store_not_found"},404);
+      const now=new Date().toISOString();
+      const active=await db.prepare("SELECT id FROM daga_entitlements WHERE store_id=? AND service='store' AND status='active' AND starts_at<=? AND expires_at>? LIMIT 1").bind(store.id,now,now).first();
+      if(active)return json(env,{error:"active_subscription_must_be_cancelled_first"},409);
+      const pending=await db.prepare("SELECT o.id FROM daga_plan_orders o WHERE o.store_id=? AND o.status IN ('awaiting_payment','payment_submitted','under_review') LIMIT 1").bind(store.id).first();
+      if(pending)return json(env,{error:"pending_subscription_request_must_be_resolved_first"},409);
+      await db.prepare("UPDATE daga_stores SET status='archived',updated_at=? WHERE id=?").bind(now,store.id).run();
+      await audit(db,owner.id,"store_removed_from_owner_list","daga_stores",store.id,{archived:true});
+      return json(env,{ok:true,status:"archived"});
+    }
+
     const storeContactMatch=path.match(/^\/owner\/admin\/stores\/([a-f0-9-]{36})\/contact$/i);
     if(storeContactMatch&&request.method==="PATCH"){
       const b=await readJson(request);if(!b)return json(env,{error:"invalid_json"},400);
