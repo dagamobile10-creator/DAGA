@@ -129,17 +129,13 @@ export default {
         // When enabled, persistent memory is bound to the verified server-side account.
         // Never trust a caller-supplied userId as proof of memory ownership.
         let userId;
-        if (String(env.DAGA_MEMORY_REQUIRE_AUTH || "").toLowerCase() === "true") {
+        if (true) {
           if (!env.DAGA_APP_DB) return json({ error: "authenticated_memory_not_configured" }, 503);
           const account = await authenticatedAccount(request, env.DAGA_APP_DB);
           if (!account || account.status !== "approved" || account.role === "program_owner") {
             return json({ error: "authenticated_account_required" }, 401);
           }
           userId = String(account.id || "").trim();
-        } else {
-          // Temporary compatibility mode for the existing anonymous LIVE DAGA client.
-          // Disable after the client has a supported sign-in and one-time memory-claim flow.
-          userId = String(url.searchParams.get("userId") || (request.method === "POST" ? body?.userId : "") || "").trim();
         }
         if (!/^[a-f0-9-]{32,36}$/i.test(userId)) return json({ error: "valid_user_identity_required" }, 400);
         if (!env.DAGA_MEMORY_DB) return json({ error: "persistent_memory_not_configured" }, 503);
@@ -189,12 +185,10 @@ export default {
     if (url.pathname === "/liveavatar/token" && request.method === "POST") {
       // This route returns a provider session token and exits before the shared chat/TTS gate below,
       // so enforce the staged identity requirement here as well when it is enabled.
-      if (String(env.DAGA_VOICE_REQUIRE_AUTH || "").toLowerCase() === "true") {
-        if (!env.DAGA_APP_DB) return json({ error: "authenticated_voice_not_configured" }, 503);
-        const account = await authenticatedAccount(request, env.DAGA_APP_DB);
-        if (!account || account.status !== "approved" || account.role === "program_owner") {
-          return json({ error: "authenticated_account_required" }, 401);
-        }
+      if (!env.DAGA_APP_DB) return json({ error: "authenticated_voice_not_configured" }, 503);
+      const account = await authenticatedAccount(request, env.DAGA_APP_DB);
+      if (!account || account.status !== "approved" || account.role === "program_owner") {
+        return json({ error: "authenticated_account_required" }, 401);
       }
       if (!env.LIVEAVATAR_API_KEY) return json({ error: "LIVEAVATAR_API_KEY secret is not configured" }, 503);
       try {
