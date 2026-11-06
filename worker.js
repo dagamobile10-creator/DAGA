@@ -10,11 +10,25 @@ import shopDashboardHtml from "./shop-dashboard-v30.html";
 import officialLandingHtml from "./go/index.html";
 import ownerConsoleHtml from "./owner-console.html";
 import liveDagaHtml from "./index.html";
+import entryHtml from "./entry/index.html";
 const VOICE_ID = "NG9zqiTuEbX3Nw0gjYcc"; // Previous voice ID backup: PF3gVGPrCr6Dw1WaSSiy
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+
+    if ((url.pathname === "/" || url.pathname === "/portal" || url.pathname === "/portal/") && request.method === "GET") {
+      return new Response(entryHtml, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/html; charset=utf-8",
+          "Cache-Control": "no-store",
+          "Referrer-Policy": "no-referrer",
+          "X-Content-Type-Options": "nosniff",
+          "Content-Security-Policy": "default-src 'none'; script-src 'none'; style-src 'unsafe-inline' https://fonts.googleapis.com; img-src data:; font-src https://fonts.gstatic.com; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"
+        }
+      });
+    }
 
     if ((url.pathname === "/go" || url.pathname === "/go/") && request.method === "GET") {
       return new Response(officialLandingHtml, {
