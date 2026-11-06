@@ -1,4 +1,5 @@
 import { authenticatedOwner } from "./owner-auth.js";
+import { sendCompanySetupCodeForStore } from "./company-invitations.js";
 
 export async function handleOwnerAdmin(request, env, url) {
   if (!url.pathname.startsWith("/owner/admin/")) return null;
@@ -12,7 +13,7 @@ export async function handleOwnerAdmin(request, env, url) {
     const path = url.pathname.replace(/\/+$/, "");
     if (path === "/owner/admin/overview" && request.method === "GET") {
       const [stores, pendingAccounts, plans, pendingPayments, activeEntitlements, wordBalance] = await Promise.all([
-        db.prepare("SELECT status,COUNT(*) AS count FROM daga_stores GROUP BY status").all(),
+        db.prepare("SELECT status,COUNT(*) AS count FROM daga_stores WHERE owner_list_removed_at IS NULL GROUP BY status").all(),
         db.prepare("SELECT role,status,COUNT(*) AS count FROM daga_accounts WHERE role!='program_owner' GROUP BY role,status").all(),
         db.prepare("SELECT service,COUNT(*) AS count FROM daga_plans WHERE is_active=1 GROUP BY service").all(),
         db.prepare("SELECT COUNT(*) AS count FROM daga_payment_submissions WHERE status='pending_review'").first(),
@@ -48,7 +49,7 @@ export async function handleOwnerAdmin(request, env, url) {
     }
 
     if (path === "/owner/admin/plans" && request.method === "GET") {
-      const result = await db.prepare("SELECT id,service,name,price_minor,currency,duration_days,word_quota,features_json,is_active,version,updated_at FROM daga_plans ORDER BY service,name").all();
+      const result = await db.prepare("SELECT id,service,name,price_minor,currency,duration_days,word_quota,features_json,is_active,version,updated_at,owner_archived_at FROM daga_plans WHERE owner_archived_at IS NULL ORDER BY service,name").all();
       return json(env, { ok: true, plans: result.results || [] });
     }
     if (path === "/owner/admin/plans" && request.method === "POST") {
@@ -68,11 +69,23 @@ export async function handleOwnerAdmin(request, env, url) {
       }
       if (!["store","live_daga"].includes(service) || !name || !Number.isSafeInteger(price) || price < 0 || !Number.isInteger(duration) || duration < 1 || duration > 3650 || (service === "live_daga" && quota === null) || (quota !== null && (!Number.isSafeInteger(quota) || quota < 1))) return json(env, { error: "invalid_plan_fields" }, 400);
       const id = crypto.randomUUID(), now = new Date().toISOString();
-      const features = service === "store" ? normalizeStoreFeatures(b.features) : safeObjectJson(b.features);
+      const features = service === "store" ? normalizeStoreFeatures({}) : safeObjectJson(b.features);
+      if (service === "store") await db.prepare("UPDATE daga_plans SET is_active=0,version=version+1,updated_by=?,updated_at=? WHERE service='store' AND is_active=1").bind(owner.id,now).run();
       await db.prepare("INSERT INTO daga_plans (id,service,name,price_minor,currency,duration_days,word_quota,features_json,is_active,version,updated_by,updated_at) VALUES (?,?,?,?,?,?,?,?,1,1,?,?)")
         .bind(id,service,name,price,String(b.currency || "EGP").slice(0,8),duration,quota,features,owner.id,now).run();
       await audit(db,owner.id,"plan_created","daga_plans",id,{service,name,priceMinor:price});
       return json(env, { ok:true,id },201);
+    }
+    const planArchiveMatch = path.match(/^\/owner\/admin\/plans\/([a-f0-9-]{36})\/archive$/i);
+    if (planArchiveMatch && request.method === "POST") {
+      const plan = await db.prepare("SELECT id,service,name FROM daga_plans WHERE id=? AND owner_archived_at IS NULL").bind(planArchiveMatch[1]).first();
+      if (!plan) return json(env,{error:"plan_not_found"},404);
+      const activeOrder = await db.prepare("SELECT id FROM daga_plan_orders WHERE plan_id=? AND status IN ('awaiting_payment','payment_submitted','under_review') LIMIT 1").bind(plan.id).first();
+      if (activeOrder) return json(env,{error:"plan_has_pending_orders"},409);
+      const now=new Date().toISOString();
+      await db.prepare("UPDATE daga_plans SET is_active=0,owner_archived_at=?,updated_at=?,updated_by=?,version=version+1 WHERE id=? AND owner_archived_at IS NULL").bind(now,now,owner.id,plan.id).run();
+      await audit(db,owner.id,"plan_archived","daga_plans",plan.id,{service:plan.service,name:plan.name});
+      return json(env,{ok:true,status:"archived"});
     }
     const planMatch = path.match(/^\/owner\/admin\/plans\/([a-f0-9-]{36})$/i);
     if (planMatch && request.method === "PATCH") {
@@ -85,7 +98,7 @@ export async function handleOwnerAdmin(request, env, url) {
       const quota = b.wordQuota === undefined ? existing.word_quota : (b.wordQuota === null ? null : Number(b.wordQuota));
       const active = b.isActive === undefined ? existing.is_active : (b.isActive ? 1 : 0);
       const features = existing.service === "store"
-        ? normalizeStoreFeatures(b.features === undefined ? (() => { try { return JSON.parse(existing.features_json || "{}"); } catch (_) { return {}; } })() : b.features)
+        ? normalizeStoreFeatures({})
         : existing.features_json;
       if (existing.service === "live_daga") {
         if (quota === null || !Number.isSafeInteger(quota) || quota < 1) return json(env, { error: "live_daga_character_quota_required" }, 400);
@@ -169,9 +182,58 @@ export async function handleOwnerAdmin(request, env, url) {
     }
 
     if(path==="/owner/admin/stores"&&request.method==="GET"){
-      const r=await db.prepare("SELECT s.id,s.public_id,s.owner_account_id,s.display_name,s.status,s.onboarding_status,s.contact_phone,s.created_at,a.email,a.display_name AS owner_name FROM daga_stores s JOIN daga_accounts a ON a.id=s.owner_account_id ORDER BY s.created_at DESC LIMIT 500").all();
+      const now=new Date().toISOString();
+      const r=await db.prepare("SELECT s.id,s.public_id,s.owner_account_id,s.display_name,s.status,s.onboarding_status,s.contact_phone,s.created_at,a.email,a.display_name AS owner_name,(SELECT p.name FROM daga_entitlements e LEFT JOIN daga_plan_orders o ON o.id=e.order_id LEFT JOIN daga_plans p ON p.id=o.plan_id WHERE e.store_id=s.id AND e.service='store' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? ORDER BY e.expires_at DESC LIMIT 1) AS store_plan_name,(SELECT json_extract(p.features_json,'$.tier') FROM daga_entitlements e LEFT JOIN daga_plan_orders o ON o.id=e.order_id LEFT JOIN daga_plans p ON p.id=o.plan_id WHERE e.store_id=s.id AND e.service='store' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? ORDER BY e.expires_at DESC LIMIT 1) AS store_plan_tier,(SELECT e.expires_at FROM daga_entitlements e WHERE e.store_id=s.id AND e.service='store' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? ORDER BY e.expires_at DESC LIMIT 1) AS store_plan_expires_at,EXISTS(SELECT 1 FROM daga_entitlements ea WHERE ea.store_id=s.id AND ea.service='store' AND ea.status='active' AND ea.starts_at<=? AND ea.expires_at>?) AS store_subscription_active,(SELECT COALESCE(SUM(CASE WHEN l.event_type IN ('credit','adjustment','refund') THEN l.words ELSE -l.words END),0) FROM daga_live_word_ledger l WHERE l.store_id=s.id) AS live_words_remaining FROM daga_stores s JOIN daga_accounts a ON a.id=s.owner_account_id WHERE s.owner_list_removed_at IS NULL ORDER BY s.created_at DESC LIMIT 500").bind(now,now,now,now,now,now,now,now).all();
       return json(env, {ok:true,stores:r.results||[]});
     }
+    const storeCancelMatch=path.match(/^\/owner\/admin\/stores\/([a-f0-9-]{36})\/cancel-subscription$/i);
+    if(storeCancelMatch&&request.method==="POST"){
+      const store=await db.prepare("SELECT id FROM daga_stores WHERE id=? AND status!='archived'").bind(storeCancelMatch[1]).first();
+      if(!store)return json(env,{error:"store_not_found"},404);
+      const now=new Date().toISOString();
+      const active=await db.prepare("SELECT id FROM daga_entitlements WHERE store_id=? AND service='store' AND status='active' AND starts_at<=? AND expires_at>? ORDER BY expires_at DESC LIMIT 1").bind(store.id,now,now).first();
+      if(!active)return json(env,{error:"no_active_store_subscription"},409);
+      await db.batch([
+        db.prepare("UPDATE daga_entitlements SET status='revoked' WHERE store_id=? AND service='store' AND status='active'").bind(store.id),
+        db.prepare("UPDATE daga_stores SET updated_at=? WHERE id=?").bind(now,store.id)
+      ]);
+      await audit(db,owner.id,"store_subscription_cancelled","daga_stores",store.id,{cancelledByOwner:true});
+      return json(env,{ok:true,status:"cancelled"});
+    }
+    const storeArchiveMatch=path.match(/^\/owner\/admin\/stores\/([a-f0-9-]{36})\/archive$/i);
+    if(storeArchiveMatch&&request.method==="POST"){
+      const store=await db.prepare("SELECT id,status FROM daga_stores WHERE id=? AND status!='archived'").bind(storeArchiveMatch[1]).first();
+      if(!store)return json(env,{error:"store_not_found"},404);
+      const now=new Date().toISOString();
+      const active=await db.prepare("SELECT id FROM daga_entitlements WHERE store_id=? AND service='store' AND status='active' AND starts_at<=? AND expires_at>? LIMIT 1").bind(store.id,now,now).first();
+      if(active)return json(env,{error:"active_subscription_must_be_cancelled_first"},409);
+      // An order that is only awaiting payment has no submitted payment to review;
+      // cancel it as part of removing the store. Never auto-cancel a submitted payment.
+      const pendingReview=await db.prepare("SELECT o.id FROM daga_plan_orders o WHERE o.store_id=? AND o.status IN ('payment_submitted','under_review') LIMIT 1").bind(store.id).first();
+      if(pendingReview)return json(env,{error:"payment_review_must_be_resolved_before_removal"},409);
+      await db.batch([
+        db.prepare("UPDATE daga_plan_orders SET status='cancelled',updated_at=? WHERE store_id=? AND status='awaiting_payment'").bind(now,store.id),
+        db.prepare("UPDATE daga_stores SET owner_list_removed_at=?,updated_at=? WHERE id=?").bind(now,now,store.id)
+      ]);
+      await audit(db,owner.id,"store_removed_from_owner_list","daga_stores",store.id,{archived:true,cancelledUnpaidOrders:true});
+      return json(env,{ok:true,status:"archived"});
+    }
+
+    const storeContactMatch=path.match(/^\/owner\/admin\/stores\/([a-f0-9-]{36})\/contact$/i);
+    if(storeContactMatch&&request.method==="PATCH"){
+      const b=await readJson(request);if(!b)return json(env,{error:"invalid_json"},400);
+      const store=await db.prepare("SELECT id FROM daga_stores WHERE id=?").bind(storeContactMatch[1]).first();
+      if(!store)return json(env,{error:"store_not_found"},404);
+      const raw=String(b.contactPhone??"").trim();
+      let contactPhone=raw.replace(/\D/g,"");
+      if(raw&&contactPhone.startsWith("00"))contactPhone=contactPhone.slice(2);
+      if(raw&&(contactPhone.length<10||contactPhone.length>15))return json(env,{error:"invalid_contact_phone"},400);
+      const now=new Date().toISOString();
+      await db.prepare("UPDATE daga_stores SET contact_phone=?,updated_at=? WHERE id=?").bind(contactPhone,now,store.id).run();
+      await audit(db,owner.id,"store_contact_phone_updated","daga_stores",store.id,{contactPhoneUpdated:true,hasContactPhone:Boolean(contactPhone)});
+      return json(env,{ok:true,contactPhone});
+    }
+
     const storeEditMatch=path.match(/^\/owner\/admin\/stores\/([a-f0-9-]{36})$/i);
     if(storeEditMatch&&request.method==="PATCH"){
       const b=await readJson(request);if(!b)return json(env,{error:"invalid_json"},400);
@@ -182,6 +244,14 @@ export async function handleOwnerAdmin(request, env, url) {
       await db.prepare("UPDATE daga_stores SET display_name=?,updated_at=? WHERE id=?").bind(displayName,new Date().toISOString(),store.id).run();
       await audit(db,owner.id,"store_display_name_changed","daga_stores",store.id,{shopNameUpdated:true});
       return json(env,{ok:true,displayName});
+    }
+
+    const setupEmailMatch=path.match(/^\/owner\/admin\/stores\/([a-f0-9-]{36})\/setup-email$/i);
+    if(setupEmailMatch&&request.method==="POST"){
+      const result=await sendCompanySetupCodeForStore(env,db,setupEmailMatch[1]);
+      if(!result.ok)return json(env,{error:result.error},502);
+      await audit(db,owner.id,result.alreadyConfigured?"store_password_already_configured":"store_password_setup_email_sent","daga_stores",setupEmailMatch[1],{emailMasked:result.emailMasked||null});
+      return json(env,{ok:true,...result});
     }
 
     const finalizeMatch=path.match(/^\/owner\/admin\/stores\/([a-f0-9-]{36})\/finalize$/i);
@@ -207,7 +277,9 @@ export async function handleOwnerAdmin(request, env, url) {
       ]);
       if(results.some(r=>Number(r?.meta?.changes||0)!==1))return json(env,{error:"store_final_activation_conflict_retry"},409);
       await audit(db,owner.id,"store_final_activation_completed","daga_stores",store.id,{orderId,planId:plan.id,agreedPriceMinor:price,paymentManuallyConfirmed:true});
-      return json(env,{ok:true,status:"approved",orderId,entitlementId,planName:plan.name,agreedPriceMinor:price,expiresAt:expires});
+      const setupEmail=await sendCompanySetupCodeForStore(env,db,store.id);
+      if(!setupEmail.ok)await audit(db,owner.id,"store_password_setup_email_failed","daga_stores",store.id,{error:setupEmail.error});
+      return json(env,{ok:true,status:"approved",orderId,entitlementId,planName:plan.name,agreedPriceMinor:price,expiresAt:expires,setupEmail});
     }
 
     const onboardingMatch=path.match(/^\/owner\/admin\/stores\/([a-f0-9-]{36})\/onboarding$/i);
@@ -260,8 +332,18 @@ export async function handleOwnerAdmin(request, env, url) {
     }
 
     if(path==="/owner/admin/payments"&&request.method==="GET"){
-      const r=await db.prepare("SELECT ps.id,ps.order_id,ps.payment_method_id,ps.claimed_amount_minor,ps.transaction_reference,ps.receipt_url,ps.submitted_at,ps.status,o.account_id,o.store_id,o.plan_id,o.agreed_price_minor,o.currency,o.status AS order_status,pm.provider,pm.display_label FROM daga_payment_submissions ps JOIN daga_plan_orders o ON o.id=ps.order_id JOIN daga_payment_methods pm ON pm.id=ps.payment_method_id ORDER BY ps.submitted_at DESC LIMIT 500").all();
+      const r=await db.prepare("SELECT ps.id,ps.order_id,ps.payment_method_id,ps.claimed_amount_minor,ps.transaction_reference,ps.receipt_url,ps.submitted_at,ps.status,o.account_id,o.store_id,o.plan_id,o.agreed_price_minor,o.currency,o.status AS order_status,pm.provider,pm.display_label FROM daga_payment_submissions ps JOIN daga_plan_orders o ON o.id=ps.order_id JOIN daga_payment_methods pm ON pm.id=ps.payment_method_id WHERE ps.owner_archived_at IS NULL ORDER BY ps.submitted_at DESC LIMIT 500").all();
       return json(env, {ok:true,payments:r.results||[]});
+    }
+    const paymentArchiveMatch=path.match(/^\/owner\/admin\/payments\/([a-f0-9-]{36})\/archive$/i);
+    if(paymentArchiveMatch&&request.method==="POST"){
+      const payment=await db.prepare("SELECT id,status FROM daga_payment_submissions WHERE id=? AND owner_archived_at IS NULL").bind(paymentArchiveMatch[1]).first();
+      if(!payment)return json(env,{error:"payment_not_found"},404);
+      if(payment.status==="pending_review")return json(env,{error:"pending_payment_cannot_be_archived"},409);
+      const now=new Date().toISOString();
+      await db.prepare("UPDATE daga_payment_submissions SET owner_archived_at=? WHERE id=? AND owner_archived_at IS NULL").bind(now,payment.id).run();
+      await audit(db,owner.id,"payment_record_archived","daga_payment_submissions",payment.id,{status:payment.status});
+      return json(env,{ok:true,status:"archived"});
     }
     const reviewMatch=path.match(/^\/owner\/admin\/payments\/([a-f0-9-]{36})\/review$/i);
     if(reviewMatch&&request.method==="POST"){
@@ -280,7 +362,7 @@ export async function handleOwnerAdmin(request, env, url) {
         const entitlementId=crypto.randomUUID(), starts=now, expires=new Date(Date.now()+Number(sub.duration_days)*86400000).toISOString();
         statements.push(db.prepare("INSERT INTO daga_entitlements (id,account_id,store_id,service,order_id,starts_at,expires_at,status) SELECT ?,?,?,?,?,?,?,'active' WHERE EXISTS (SELECT 1 FROM daga_payment_submissions ps JOIN daga_plan_orders o ON o.id=ps.order_id WHERE ps.id=? AND ps.status='confirmed' AND ps.reviewed_by=? AND ps.reviewed_at=? AND o.status='paid_approved')").bind(entitlementId,sub.account_id,sub.store_id,sub.service,sub.order_id,starts,expires,sub.id,owner.id,now));
         if(sub.service==="live_daga"&&Number(sub.word_quota)>0) statements.push(db.prepare("INSERT INTO daga_live_word_ledger (id,account_id,store_id,order_id,event_type,words,request_id,note) SELECT ?,?,?,?,'credit',?,?,? WHERE EXISTS (SELECT 1 FROM daga_payment_submissions ps JOIN daga_plan_orders o ON o.id=ps.order_id WHERE ps.id=? AND ps.status='confirmed' AND ps.reviewed_by=? AND ps.reviewed_at=? AND o.status='paid_approved')").bind(crypto.randomUUID(),sub.account_id,sub.store_id,sub.order_id,Number(sub.word_quota),"order:"+sub.order_id,"Owner-confirmed LIVE DAGA purchase",sub.id,owner.id,now));
-        if(sub.service==="store") statements.push(db.prepare("UPDATE daga_stores SET onboarding_status=CASE WHEN onboarding_status='preliminary_approved' THEN 'approved' ELSE onboarding_status END,onboarding_order_id=CASE WHEN onboarding_status='preliminary_approved' AND onboarding_order_id IS NULL THEN ? ELSE onboarding_order_id END,updated_at=? WHERE id=? AND status='approved' AND EXISTS (SELECT 1 FROM daga_plan_orders WHERE id=? AND status='paid_approved')").bind(sub.order_id,now,sub.store_id,sub.order_id));
+        if(sub.service==="store") statements.push(db.prepare("UPDATE daga_stores SET owner_list_removed_at=NULL,onboarding_status=CASE WHEN onboarding_status='preliminary_approved' THEN 'approved' ELSE onboarding_status END,onboarding_order_id=CASE WHEN onboarding_status='preliminary_approved' AND onboarding_order_id IS NULL THEN ? ELSE onboarding_order_id END,updated_at=? WHERE id=? AND status='approved' AND EXISTS (SELECT 1 FROM daga_plan_orders WHERE id=? AND status='paid_approved')").bind(sub.order_id,now,sub.store_id,sub.order_id));
       }
       const reviewResults = await db.batch(statements);
       if (Number(reviewResults?.[0]?.meta?.changes || 0) !== 1 ||
@@ -359,9 +441,8 @@ export async function handleOwnerAdmin(request, env, url) {
 
 async function readJson(request){try{return await request.json()}catch(_){return null}}
 function normalizeStoreFeatures(value) {
-  const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
-  const smart = source.tier === "smart" || (source.tier !== "standard" && (source.smartAssistantEnabled === true || source.historyEnabled === true));
-  return JSON.stringify({ tier: smart ? "smart" : "standard", smartAssistantEnabled: smart, historyEnabled: smart });
+  void value;
+  return JSON.stringify({ tier: "single", smartAssistantEnabled: true, historyEnabled: true });
 }
 function safeObjectJson(value){return JSON.stringify(value&&typeof value==="object"&&!Array.isArray(value)?value:{}) .slice(0,10000)}
 async function audit(db,actor,action,targetType,targetId,details){

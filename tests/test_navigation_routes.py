@@ -154,19 +154,23 @@ class NavigationRouteTests(unittest.TestCase):
                 self.assertIn(path, self.owner)
                 self.assertIn(path, self.owner_admin)
         self.assertIn("authenticatedOwner(request, db)", self.owner_admin)
+        self.assertIn("data-contact-edit", self.owner)
+        self.assertIn("store_contact_phone_updated", self.owner_admin)
+        self.assertIn("invalid_contact_phone", self.owner_admin)
 
-    def test_approved_shop_owner_is_sent_email_password_setup_code(self):
-        # The admin decision must persist approval first, then request the
-        # existing email-only setup OTP flow. Rejected/pending accounts must
-        # not receive a setup code, and invitation registration stays separate.
-        start = self.owner.index("document.addEventListener('click',async e=>")
-        end = self.owner.index("\n})();", start)
-        handler = self.owner[start:end]
-        self.assertIn("b.dataset.decision==='approved'", handler)
-        self.assertIn("'/api/company/auth/setup/start'", handler)
-        self.assertIn("JSON.stringify({email:approved.email})", handler)
-        self.assertIn("تم تسجيل الخطة والسعر وتأكيد استلام المبلغ وتفعيل الشركه", handler)
-        self.assertIn("company-invitations.js", self.worker)
+    def test_final_store_activation_sends_first_password_setup_email(self):
+        # Final activation sends the setup code server-side only after the
+        # paid entitlement is persisted; failed delivery can be retried.
+        self.assertIn("sendCompanySetupCodeForStore", self.owner_admin)
+        self.assertIn("store_final_activation_completed", self.owner_admin)
+        self.assertIn("store_password_setup_email_failed", self.owner_admin)
+        self.assertIn("/setup-email", self.owner_admin)
+        self.assertIn("companySendEmail(env,row.email", self.company_auth)
+        self.assertIn("daga_company_login_challenges", self.company_auth)
+        self.assertIn("finalized.setupEmail?.sent", self.owner)
+        self.assertIn("data-setup-email", self.owner)
+        self.assertIn("إعادة إرسال كود كلمة السر", self.owner)
+        self.assertNotIn("api('/api/company/auth/setup/start'", self.owner)
 
     def test_navigation_does_not_remove_live_voice_contract_markers(self):
         for marker in ("DAGA_API_BASE+'/chat'", "DAGA_API_BASE+'/tts'", "playVoiceTest", "daga_mh_memory_v1", "daga-app-staging.dagamobile10.workers.dev", "daga-voice.dagamobile10.workers.dev"):
