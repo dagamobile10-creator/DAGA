@@ -227,11 +227,9 @@ export default {
       return json({ ok: true, voiceConfigured: Boolean(env.ELEVENLABS_API_KEY), chatConfigured: Boolean(env.OPENAI_API_KEY), freeChatConfigured: Boolean(env.GROQ_API_KEY || env.AI), liveAvatarConfigured: Boolean(env.LIVEAVATAR_API_KEY), liveAvatarIdConfigured: Boolean(env.LIVEAVATAR_AVATAR_ID) });
     }
 
-    // Staged identity gate: off by default to preserve the legacy anonymous LIVE DAGA client.
-    // Enable only after the client has a supported sign-in/session flow.
+    // Mandatory account authentication for LIVE DAGA APIs. Anonymous requests are rejected.
     let voiceAccount = null;
-    const voiceIdentityRequired = String(env.DAGA_VOICE_REQUIRE_AUTH || "").toLowerCase() === "true";
-    if (voiceIdentityRequired && ["/chat", "/tts", "/liveavatar/token"].includes(url.pathname)) {
+    if (["/chat", "/tts", "/liveavatar/token"].includes(url.pathname)) {
       if (!env.DAGA_APP_DB) return json({ error: "authenticated_voice_not_configured" }, 503);
       voiceAccount = await authenticatedAccount(request, env.DAGA_APP_DB);
       if (!voiceAccount || voiceAccount.status !== "approved" || voiceAccount.role === "program_owner") {
