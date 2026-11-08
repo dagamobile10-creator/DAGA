@@ -16,7 +16,7 @@ export default {
     const url = new URL(request.url);
 
     if ((url.pathname === "/live" || url.pathname === "/live/") && request.method === "GET") {
-      return new Response(liveAssistantHtml.replaceAll("https://dagamobile10-creator.github.io/DAGA/daga_user_voice_reference.m4a", "https://dagamobile10-creator.github.io/DAGA/daga_user_voice_reference.m4a"), {
+      return new Response(liveAssistantHtml.replaceAll("https://daga-voice.dagamobile10.workers.dev", "https://daga-app-staging.dagamobile10.workers.dev").replace('src="daga_user_voice_reference.m4a"', 'src="https://dagamobile10-creator.github.io/DAGA/daga_user_voice_reference.m4a"'), {
         status: 200,
         headers: {
           "Content-Type": "text/html; charset=utf-8",
