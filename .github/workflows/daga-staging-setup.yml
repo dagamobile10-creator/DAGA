@@ -195,17 +195,13 @@ jobs:
           test "$chat_code" = "401" || { echo "::error::Anonymous staging chat must be rejected with HTTP 401; got $chat_code"; cat /tmp/chat-smoke.json; exit 1; }
           jq -e '.error == "authenticated_account_required"' /tmp/chat-smoke.json >/dev/null || { echo "::error::Anonymous staging chat returned an unexpected rejection"; cat /tmp/chat-smoke.json; exit 1; }
           echo "Staging anonymous chat rejection passed."
-          # Test TTS only when a provider is configured; never send secrets to logs.
-          if jq -e '.voiceConfigured == true' /tmp/health.json >/dev/null; then
-            tts_code="$(curl -sS -o /tmp/tts-smoke.bin -w '%{http_code}' --max-time 20 \
-              -H 'Content-Type: application/json' -d '{"text":"اختبار الصوت."}' \
-              https://daga-app-staging.dagamobile10.workers.dev/tts)"
-            test "$tts_code" = "200" || { echo "::error::Staging TTS smoke test returned HTTP $tts_code"; exit 1; }
-            test -s /tmp/tts-smoke.bin || { echo "::error::Staging TTS returned empty audio"; exit 1; }
-            echo "Staging TTS smoke test passed."
-          else
-            echo "::warning::Staging TTS smoke test skipped: ELEVENLABS_API_KEY is not configured."
-          fi
+          # TTS is tenant-authenticated too. Verify anonymous callers cannot spend voice credits.
+          tts_code="$(curl -sS -o /tmp/tts-smoke.json -w '%{http_code}' --max-time 20 \
+            -H 'Content-Type: application/json' -d '{"text":"اختبار الصوت."}' \
+            https://daga-app-staging.dagamobile10.workers.dev/tts)"
+          test "$tts_code" = "401" || { echo "::error::Anonymous staging TTS must be rejected with HTTP 401; got $tts_code"; cat /tmp/tts-smoke.json; exit 1; }
+          jq -e '.error == "authenticated_account_required"' /tmp/tts-smoke.json >/dev/null || { echo "::error::Anonymous staging TTS returned an unexpected rejection"; cat /tmp/tts-smoke.json; exit 1; }
+          echo "Staging anonymous TTS rejection passed."
           # Runtime CORS smoke test: only the configured staging origin may be authorized.
           curl -fsS -D /tmp/cors-allowed.headers -o /dev/null -X OPTIONS \
             -H 'Origin: https://dagamobile10-creator.github.io' \
