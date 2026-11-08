@@ -224,11 +224,13 @@ jobs:
             echo "::error::Owner API returned an allow-origin header for an untrusted origin"; exit 1
           fi
           echo "Staging company and owner API CORS checks passed: no wildcard origin was returned."
-          for path in /go/ /company/ /invite/ /owner/ /owner-console/ /shop/; do
+          for path in /go/ /live/ /company/ /invite/ /owner/ /owner-console/ /shop/; do
             code="$(curl -sS -o "/tmp/page-$(echo "$path" | tr '/' '_').html" -w '%{http_code}' --max-time 15 "https://daga-app-staging.dagamobile10.workers.dev$path")"
             if [ "$code" != "200" ]; then echo "::error::Staging page $path returned HTTP $code"; exit 1; fi
             echo "Staging page $path returned HTTP 200."
           done
+          grep -q 'requireDagaLogin' /tmp/page-_live_.html || { echo "::error::LIVE page is missing its mandatory account-login gate"; exit 1; }
+          grep -q 'dagaAccountVerified' /tmp/page-_live_.html || { echo "::error::LIVE page is missing verified-account session state"; exit 1; }
           grep -q 'إدارة مالك التطبيق' /tmp/page-_owner_.html || { echo "::error::Owner console route did not serve the owner console HTML"; exit 1; }
           grep -q 'const API=window.location.origin;' /tmp/page-_owner_.html || { echo "::error::Owner console is not configured to use its same-origin Worker API"; exit 1; }
           grep -q 'الاشتراكات والمدفوعات' /tmp/page-_company_.html || { echo "::error::Company portal checkout UI is missing from the served HTML"; exit 1; }
