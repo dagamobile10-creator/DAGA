@@ -60,6 +60,12 @@ async function companyAccountMe(env, db, account) {
       return { id: row.id, publicId: row.public_id || null, displayName: row.display_name, status: row.status, role: row.role, contactPhone: row.contact_phone || "", permissions };
     })
   ];
+  // Store owners have one canonical store_id on their account. Repair legacy
+  // LIVE DAGA credits that were attached to a different approved store row.
+  if (account.role === "store_owner" && rawCompanies.some(company => company.id === account.store_id && company.role === "store_owner")) {
+    await db.prepare("UPDATE daga_live_word_ledger SET store_id=? WHERE account_id=? AND store_id<>?")
+      .bind(account.store_id, account.id, account.store_id).run();
+  }
   const now = new Date().toISOString();
   const companies = await Promise.all(rawCompanies.map(async company => {
     const [storeEntitlement, liveEntitlement, liveWordBalance] = await Promise.all([
