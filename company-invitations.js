@@ -15,7 +15,9 @@ export async function handleCompanyInvitations(request, env, url) {
   if (!db) return json(env, { error: "application_database_not_configured" }, 503);
   if (path === "/api/company/auth/register" && request.method === "POST") return registerStart(request, env, db);
   if (path === "/api/company/auth/register/verify" && request.method === "POST") return registerVerify(request, env, db);
-  if (path === "/api/company/auth/login" && request.method === "POST") return companyLoginStart(request, env, db);
+  if (path === "/api/company/auth/login" && request.method === "POST") return companyLoginStart(request, env, db, "owner");
+  if (path === "/api/company/owner/auth/login" && request.method === "POST") return companyLoginStart(request, env, db, "owner");
+  if (path === "/api/company/team/auth/login" && request.method === "POST") return companyLoginStart(request, env, db, "team");
   if (path === "/api/company/auth/setup/start" && request.method === "POST") return companySetupStart(request, env, db);
   if (path === "/api/company/auth/setup/verify" && request.method === "POST") return companySetupVerify(request, env, db);
   if (path === "/api/company/auth/recovery/start" && request.method === "POST") return companyRecoveryStart(request, env, db);
