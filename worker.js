@@ -142,6 +142,14 @@ export default {
       if (!allowed) return json({ error: "rate_limited" }, 429);
     }
 
+    if (url.pathname === "/live/access" && request.method === "GET") {
+      if (!env.DAGA_APP_DB) return json({ error: "authenticated_voice_not_configured" }, 503);
+      const account = await authenticatedAccount(request, env.DAGA_APP_DB);
+      if (!account || account.status !== "approved" || account.role === "program_owner") return json({ error: "authenticated_account_required" }, 401);
+      const access = await getLiveQuota(env.DAGA_APP_DB, account);
+      return json({ ok: true, enabled: access.subscribed && access.balance > 0, subscribed: access.subscribed, balance: access.balance, message: !access.subscribed ? "اشتراك لايف ضجة غير مفعل لهذه الشركة." : access.balance <= 0 ? "رصيد حروف لايف ضجة انتهى." : "لايف ضجة متاح" });
+    }
+
     if (url.pathname === "/memory" && (request.method === "GET" || request.method === "POST")) {
       try {
         let body = null;
