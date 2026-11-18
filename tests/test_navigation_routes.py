@@ -49,7 +49,7 @@ class NavigationRouteTests(unittest.TestCase):
     def test_shop_portal_api_paths_have_server_handlers(self):
         for path in (
             "/api/company/auth/me",
-            "/api/company/auth/login",
+            "/api/company/owner/auth/login",
             "/api/company/auth/setup/start",
             "/api/company/auth/setup/verify",
             "/api/company/auth/recovery/start",
