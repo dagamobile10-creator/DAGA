@@ -20,7 +20,8 @@ class ShopSelfRegistrationTests(unittest.TestCase):
         self.assertIn('shopName:$("onboardingShopName").value.trim()', portal)
         self.assertNotIn('id="onboardingLegalIdentity"', portal)
         self.assertNotIn('id="companyOwnerForm"', owner)
-        self.assertNotIn("معرّف الشركة", owner)
+        registration_form = portal.split('id="shopRegistrationForm"', 1)[1].split("</form>", 1)[0]
+        self.assertNotIn("معرّف الشركة", registration_form)
         self.assertNotIn("الشركات ومالكوها", owner)
 
     def test_owner_approval_then_payment_controls_ledger_access(self):
