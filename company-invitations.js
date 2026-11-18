@@ -4,7 +4,7 @@ const MAX_INVITE_TTL_HOURS = 24 * 14;
 const DEFAULT_INVITE_TTL_HOURS = 72;
 export async function handleCompanyInvitations(request, env, url) {
   const path = url.pathname.replace(/\/+$/, "") || "/";
-  const publicPaths = ["/api/company/auth/register", "/api/company/auth/register/verify", "/api/company/auth/login", "/api/company/auth/setup/start", "/api/company/auth/setup/verify", "/api/company/auth/recovery/start", "/api/company/auth/recovery/complete"];
+  const publicPaths = ["/api/company/auth/register", "/api/company/auth/register/verify", "/api/company/auth/login", "/api/company/owner/auth/login", "/api/company/team/auth/login", "/api/company/auth/setup/start", "/api/company/auth/setup/verify", "/api/company/auth/recovery/start", "/api/company/auth/recovery/complete"];
   const accountPaths = ["/api/company/auth/me", "/api/company/auth/logout"];
   const isInvitationIdPath = /^\/api\/company\/invitations\/[0-9a-f-]{36}(?:\/revoke)?$/i.test(path);
   const isMemberPermissionPath = /^\/api\/company\/members\/[0-9a-f-]{36}\/permissions$/i.test(path);
@@ -144,13 +144,14 @@ async function companyAccountLogout(request, env, db) {
   return json(env, { ok: true });
 }
 
-async function companyLoginStart(request,env,db){
+async function companyLoginStart(request,env,db,mode="owner"){
 if(!env.DAGA_OTP_PEPPER)return json(env,{error:"company_login_not_configured"},503);
 const body=await safeJson(request);if(!body)return json(env,{error:"invalid_json"},400);
 const email=String(body.email||body.identifier||"").trim().toLowerCase(),password=String(body.password||"");
 if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||password.length>128)return json(env,{error:"invalid_credentials"},401);
 const ip=request.headers.get("CF-Connecting-IP")||"unknown";if(!await companyRateLimit(db,env,"company-login-ip:"+ip,8,900)||!await companyRateLimit(db,env,"company-login-email:"+await sha256(email),5,900))return json(env,{error:"rate_limited"},429);
-const a=await db.prepare("SELECT a.id,a.public_id,a.email,a.display_name,a.role,a.status,c.password_hash,c.password_salt,c.password_iterations FROM daga_accounts a LEFT JOIN daga_account_credentials c ON c.account_id=a.id WHERE lower(a.email)=? AND a.status='approved' AND a.role IN ('store_owner','manager','employee') LIMIT 1").bind(email).first();
+const roleFilter=mode==="team"?"a.role IN ('manager','employee') AND EXISTS (SELECT 1 FROM daga_store_memberships m WHERE m.account_id=a.id AND m.status='active')":"a.role='store_owner'";
+const a=await db.prepare("SELECT a.id,a.public_id,a.email,a.display_name,a.role,a.status,c.password_hash,c.password_salt,c.password_iterations FROM daga_accounts a LEFT JOIN daga_account_credentials c ON c.account_id=a.id WHERE lower(a.email)=? AND a.status='approved' AND "+roleFilter+" LIMIT 1").bind(email).first();
 if(!a)return json(env,{error:"invalid_credentials"},401);if(!a.password_hash)return json(env,{error:"company_account_password_setup_required"},409);
 if(!constantTimeEqualCompany(await companyDerivePassword(password,a.password_salt,a.password_iterations),a.password_hash))return json(env,{error:"invalid_credentials"},401);
 const token=companyRandomToken(32),now=new Date().toISOString(),expires=new Date(Date.now()+8*60*60*1000).toISOString();
