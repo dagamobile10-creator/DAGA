@@ -25,12 +25,9 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
 
     def test_portal_passes_session_and_selected_company(self):
         portal = (ROOT / "company" / "portal.html").read_text(encoding="utf-8")
-        self.assertIn('type:"DAGA_AUTH",token:sessionToken,companyId:activeCompany.id', portal)
-        self.assertIn('sessionStorage.setItem("daga_account_session_v1"', portal)
-        self.assertIn('type:"DAGA_AUTH",token:sessionToken,companyId:activeCompany.id', portal)
-        self.assertIn('window.open("about:blank","_blank")', portal)
-        self.assertIn('shopWindow.location.assign("/shop/")', portal)
-        self.assertIn('event.source!==shopWindow', portal)
+        self.assertIn('sessionStorage.setItem("daga_account_session_v1",sessionToken)', portal)
+        self.assertIn('sessionStorage.setItem("daga_company_id_v1",activeCompany.id)', portal)
+        self.assertIn('window.location.assign("/shop/")', portal)
 
     def test_role_is_normalized_and_not_used_as_security_boundary(self):
         dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
@@ -152,6 +149,7 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn("body?.mode === \"live_daga\"", chat)
         self.assertIn('permission = liveMode ? "useLiveDaga" : "useSmartAssistant"', chat)
         self.assertIn("service='live_daga'", chat)
+        self.assertIn("live_daga_subscription_required", chat)
         self.assertIn("store_subscription_required", chat)
         self.assertNotIn("smart_store_subscription_required", chat)
         self.assertIn("mode:'live_daga'", live)
