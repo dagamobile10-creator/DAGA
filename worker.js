@@ -274,8 +274,8 @@ export default {
         if (voiceIdentityRequired) {
           if (!voiceAccount?.store_id) return json({ error: "approved_shop_account_required" }, 401);
           const now = new Date().toISOString();
-          const smartPlan = await env.DAGA_APP_DB.prepare("SELECT e.id FROM daga_entitlements e JOIN daga_plan_orders o ON o.id=e.order_id AND o.status='paid_approved' JOIN daga_plans p ON p.id=o.plan_id WHERE e.account_id=? AND e.store_id=? AND e.service='store' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? AND (json_extract(p.features_json,'$.tier')='smart' OR json_extract(p.features_json,'$.smartAssistantEnabled')=1) LIMIT 1").bind(voiceAccount.id, voiceAccount.store_id, now, now).first();
-          if (!smartPlan) return json({ error: "smart_store_subscription_required" }, 402);
+          const liveWords = await env.DAGA_APP_DB.prepare("SELECT COALESCE(SUM(CASE WHEN event_type IN ('credit','adjustment','refund') THEN words ELSE -words END),0) AS remaining FROM daga_live_word_ledger WHERE store_id=?").bind(voiceAccount.store_id).first();
+          if (Number(liveWords?.remaining || 0) <= 0) return json({ error: "live_daga_quota_insufficient", remainingCharacters: 0 }, 402);
         }
         const parsed = await readBoundedJson(request, 32768);
         if (!parsed.ok) return json({ error: parsed.error }, parsed.status);
@@ -399,29 +399,21 @@ export default {
       text = text.replace(/ضَجَّة|ضَجّة|ضجّة|ضجه/gu, "ضَگَّة").replace(/\s{2,}/g, " ").trim();
 
       let quota = null;
-      if (body?.liveAvatar === true) {
-        if (!env.DAGA_APP_DB) return json({ error: "live_quota_not_configured" }, 503);
-        const account = voiceAccount || await authenticatedAccount(request, env.DAGA_APP_DB);
-        if (!account || account.status !== "approved" || account.role === "program_owner" || !account.store_id) return json({ error: "approved_shop_account_required" }, 401);
+      if (voiceAccount) {
+        if (!env.DAGA_APP_DB || !voiceAccount.store_id) return json({ error: "live_quota_not_configured" }, 503);
+        const account = voiceAccount;
         const quotaNow = new Date().toISOString();
-        const smartPlan = await env.DAGA_APP_DB.prepare("SELECT e.id FROM daga_entitlements e JOIN daga_plan_orders o ON o.id=e.order_id AND o.status='paid_approved' JOIN daga_plans p ON p.id=o.plan_id WHERE e.account_id=? AND e.store_id=? AND e.service='store' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? AND (json_extract(p.features_json,'$.tier')='smart' OR json_extract(p.features_json,'$.smartAssistantEnabled')=1) LIMIT 1").bind(account.id, account.store_id, quotaNow, quotaNow).first();
-        if (!smartPlan) return json({ error: "smart_store_subscription_required" }, 402);
-        const entitlement = await env.DAGA_APP_DB.prepare("SELECT e.id FROM daga_entitlements e JOIN daga_plan_orders o ON o.id=e.order_id AND o.status='paid_approved' WHERE e.store_id=? AND e.service='live_daga' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? LIMIT 1").bind(account.store_id, quotaNow, quotaNow).first();
-        if (!entitlement) return json({ error: "live_daga_subscription_required" }, 402);
-
-        // Count Unicode code points in the exact, pronunciation-adjusted text sent to ElevenLabs.
         const characters = Array.from(text).length;
         const requestId = "tts:" + crypto.randomUUID();
-        const debit = await env.DAGA_APP_DB.prepare("INSERT INTO daga_live_word_ledger (id,account_id,store_id,event_type,words,request_id,note) SELECT ?,?,?,'debit',?,?,? WHERE (SELECT COALESCE(SUM(CASE WHEN event_type IN ('credit','adjustment','refund') THEN words ELSE -words END),0) FROM daga_live_word_ledger WHERE store_id=?) >= ? AND EXISTS (SELECT 1 FROM daga_entitlements e JOIN daga_plan_orders o ON o.id=e.order_id AND o.status='paid_approved' WHERE e.store_id=? AND e.service='live_daga' AND e.status='active' AND e.starts_at<=? AND e.expires_at>?)")
-          .bind(crypto.randomUUID(), account.id, account.store_id, characters, requestId, "LIVE DAGA generated text characters", account.store_id, characters, account.store_id, quotaNow, quotaNow).run();
+        const debit = await env.DAGA_APP_DB.prepare("INSERT INTO daga_live_word_ledger (id,account_id,store_id,event_type,words,request_id,note) SELECT ?,?,?,'debit',?,?,? WHERE (SELECT COALESCE(SUM(CASE WHEN event_type IN ('credit','adjustment','refund') THEN words ELSE -words END),0) FROM daga_live_word_ledger WHERE store_id=?) >= ?")
+          .bind(crypto.randomUUID(), account.id, account.store_id, characters, requestId, "LIVE DAGA generated text characters", account.store_id, characters).run();
         if (!debit.meta || debit.meta.changes !== 1) {
           const ledger = await env.DAGA_APP_DB.prepare("SELECT COALESCE(SUM(CASE WHEN event_type IN ('credit','adjustment','refund') THEN words ELSE -words END),0) AS remaining FROM daga_live_word_ledger WHERE store_id=?").bind(account.store_id).first();
           const remaining = Number(ledger && ledger.remaining || 0);
-          return json({ error: remaining < characters ? "live_daga_quota_insufficient" : "live_daga_subscription_required", requiredCharacters: characters, remainingCharacters: remaining }, 402);
+          return json({ error: "live_daga_quota_insufficient", requiredCharacters: characters, remainingCharacters: remaining }, 402);
         }
         quota = { accountId: account.id, storeId: account.store_id, characters, requestId };
       }
-
       const refundQuota = async () => {
         if (!quota) return;
         await env.DAGA_APP_DB.prepare("INSERT INTO daga_live_word_ledger (id,account_id,store_id,event_type,words,request_id,note) VALUES (?,?,?,'refund',?,?,?)").bind(crypto.randomUUID(), quota.accountId, quota.storeId, quota.characters, quota.requestId + ":refund", "Refund for failed voice generation").run().catch(() => {});
