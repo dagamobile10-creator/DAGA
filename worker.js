@@ -299,9 +299,7 @@ export default {
           }
           const now = new Date().toISOString();
           if (liveMode) {
-            const liveEntitlement = await env.DAGA_APP_DB.prepare("SELECT id FROM daga_entitlements WHERE store_id=? AND service='live_daga' AND status='active' AND starts_at<=? AND expires_at>? LIMIT 1").bind(company.storeId, now, now).first();
-            if (!liveEntitlement) return json({ error: "live_daga_subscription_required" }, 402);
-            const words = await env.DAGA_APP_DB.prepare("SELECT COALESCE(SUM(CASE WHEN event_type IN ('credit','adjustment','refund') THEN words ELSE -words END),0) AS remaining FROM daga_live_word_ledger WHERE store_id=?").bind(company.storeId).first();
+const words = await env.DAGA_APP_DB.prepare("SELECT COALESCE(SUM(CASE WHEN event_type IN ('credit','adjustment','refund') THEN words ELSE -words END),0) AS remaining FROM daga_live_word_ledger WHERE store_id=?").bind(company.storeId).first();
             if (Number(words?.remaining || 0) <= 0) return json({ error: "live_daga_quota_insufficient", remainingCharacters: 0 }, 402);
           } else {
             const storePlan = await env.DAGA_APP_DB.prepare("SELECT id FROM daga_entitlements WHERE store_id=? AND service='store' AND status='active' AND starts_at<=? AND expires_at>? LIMIT 1").bind(company.storeId, now, now).first();
@@ -442,14 +440,12 @@ export default {
         if (company.role !== "store_owner" && company.permissions.useLiveDaga !== true) return json({ error: "company_voice_permission_denied", permission: "useLiveDaga" }, 403);
         const storeId = company.storeId;
         const quotaNow = new Date().toISOString();
-        const entitlement = await env.DAGA_APP_DB.prepare("SELECT id FROM daga_entitlements WHERE store_id=? AND service='live_daga' AND status='active' AND starts_at<=? AND expires_at>? LIMIT 1").bind(storeId, quotaNow, quotaNow).first();
-        if (!entitlement) return json({ error: "live_daga_subscription_required" }, 402);
 
         // Count Unicode code points in the exact, pronunciation-adjusted text sent to ElevenLabs.
         const characters = Array.from(text).length;
         const requestId = "tts:" + crypto.randomUUID();
-        const debit = await env.DAGA_APP_DB.prepare("INSERT INTO daga_live_word_ledger (id,account_id,store_id,event_type,words,request_id,note) SELECT ?,?,?,'debit',?,?,? WHERE (SELECT COALESCE(SUM(CASE WHEN event_type IN ('credit','adjustment','refund') THEN words ELSE -words END),0) FROM daga_live_word_ledger WHERE store_id=?) >= ? AND EXISTS (SELECT 1 FROM daga_entitlements WHERE store_id=? AND service='live_daga' AND status='active' AND starts_at<=? AND expires_at>?)")
-          .bind(crypto.randomUUID(), account.id, storeId, characters, requestId, "LIVE DAGA generated text characters", storeId, characters, storeId, quotaNow, quotaNow).run();
+        const debit = await env.DAGA_APP_DB.prepare("INSERT INTO daga_live_word_ledger (id,account_id,store_id,event_type,words,request_id,note) SELECT ?,?,?,'debit',?,?,? WHERE (SELECT COALESCE(SUM(CASE WHEN event_type IN ('credit','adjustment','refund') THEN words ELSE -words END),0) FROM daga_live_word_ledger WHERE store_id=?) >= ?")
+          .bind(crypto.randomUUID(), account.id, storeId, characters, requestId, "LIVE DAGA generated text characters", storeId, characters).run();
         if (!debit.meta || debit.meta.changes !== 1) {
           const ledger = await env.DAGA_APP_DB.prepare("SELECT COALESCE(SUM(CASE WHEN event_type IN ('credit','adjustment','refund') THEN words ELSE -words END),0) AS remaining FROM daga_live_word_ledger WHERE store_id=?").bind(storeId).first();
           const remaining = Number(ledger && ledger.remaining || 0);
