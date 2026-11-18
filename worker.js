@@ -8,6 +8,7 @@ import inviteHtml from "./invite/index.html";
 import shopPortalHtml from "./company/portal.html";
 import shopDashboardHtml from "./shop-dashboard-v30.html";
 import officialLandingHtml from "./go/index.html";
+import mainPortalHtml from "./portal/index.html";
 import ownerConsoleHtml from "./owner-console.html";
 import liveDagaHtml from "./index.html";
 const VOICE_ID = "NG9zqiTuEbX3Nw0gjYcc"; // Previous voice ID backup: PF3gVGPrCr6Dw1WaSSiy
@@ -16,9 +17,18 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
-    // The public root URL is the entry point; route it to the existing V30 landing page.
-    if (url.pathname === "/" && request.method === "GET") {
-      return Response.redirect(new URL("/go/", url.origin), 302);
+    // V30 unified avatar portal is the first page and central navigation hub.
+    if ((url.pathname === "/" || url.pathname === "/portal" || url.pathname === "/portal/") && request.method === "GET") {
+      return new Response(mainPortalHtml, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/html; charset=utf-8",
+          "Cache-Control": "no-store",
+          "Referrer-Policy": "no-referrer",
+          "X-Content-Type-Options": "nosniff",
+          "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"
+        }
+      });
     }
 
     if ((url.pathname === "/go" || url.pathname === "/go/") && request.method === "GET") {
