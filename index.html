@@ -231,17 +231,20 @@ function playReference(){audio.currentTime=0;audio.play()}
  function busy(button,fn){button.disabled=true;return fn().catch(e=>{state.textContent=messageFor(e.message);state.style.color='var(--red)' }).finally(()=>button.disabled=false)}
  async function refreshIdentity(){let token='';try{token=sessionStorage.getItem('daga_account_session_v1')||''}catch(e){}if(!token){state.textContent='المساعد متاح؛ سجّل الدخول لربط هويتك';state.style.color='var(--muted)';logout.style.display='none';return}try{const data=await authApi('/api/company/auth/me',undefined,'GET',true);state.textContent='الحساب مربوط: '+(data.account?.displayName||data.account?.emailMasked||'تم التحقق');
 const companies=data.companies||data.shops||[];let selectedCompanyId='';try{selectedCompanyId=sessionStorage.getItem('daga_company_id_v1')||''}catch(_){}const liveCompany=selectedCompanyId?companies.find(company=>company.id===selectedCompanyId):companies[0];if(!liveCompany)throw new Error('company_context_missing');const balance=Math.max(0,Number(liveCompany.liveWordsRemaining||0));$('liveBalanceValue').textContent=balance.toLocaleString('en-US');$('liveBalance').style.display='block';state.style.color='var(--green)';logout.style.display='inline-block';$('dagaAuthFields').style.display='none';send.style.display='none'}catch(e){try{sessionStorage.removeItem('daga_account_session_v1')}catch(_){}state.textContent='الجلسة غير صالحة؛ سجّل الدخول من جديد';state.style.color='var(--red)';logout.style.display='none'}}
- if(new URLSearchParams(location.search).get('api')==='staging' && window.opener){
-  const stagingOrigin='https://daga-app-staging.dagamobile10.workers.dev';
-  window.addEventListener('message',async event=>{
-   const data=event.data;
-   if(event.origin!==stagingOrigin||event.source!==window.opener||!data||data.type!=='DAGA_AUTH'||typeof data.token!=='string'||data.token.length<20||data.token.length>4096||typeof data.companyId!=='string')return;
-   try{sessionStorage.setItem('daga_account_session_v1',data.token);sessionStorage.setItem('daga_company_id_v1',data.companyId);}catch(_){state.textContent='تعذر حفظ جلسة الشركة على هذا المتصفح';state.style.color='var(--red)';return;}
-   state.textContent='تم استلام جلسة الشركة؛ جاري التحقق…';state.style.color='var(--muted)';await refreshIdentity();
-  });
+ if(new URLSearchParams(location.search).get('api')==='staging'){
+  // Same-tab V30 flow: refresh the visible balance after each successful TTS response.
   window.addEventListener('daga-live-balance-refresh',refreshIdentity);
   window.addEventListener('pageshow',()=>{if(sessionStorage.getItem('daga_account_session_v1'))refreshIdentity()});
-  window.addEventListener('load',()=>{try{window.opener.postMessage('DAGA_LIVE_READY',new URLSearchParams(location.search).get('api')==='staging'?'https://daga-app-staging.dagamobile10.workers.dev':'https://dagamobile10-creator.github.io')}catch(_){}});
+  if(window.opener){
+   const stagingOrigin='https://daga-app-staging.dagamobile10.workers.dev';
+   window.addEventListener('message',async event=>{
+    const data=event.data;
+    if(event.origin!==stagingOrigin||event.source!==window.opener||!data||data.type!=='DAGA_AUTH'||typeof data.token!=='string'||data.token.length<20||data.token.length>4096||typeof data.companyId!=='string')return;
+    try{sessionStorage.setItem('daga_account_session_v1',data.token);sessionStorage.setItem('daga_company_id_v1',data.companyId);}catch(_){state.textContent='تعذر حفظ جلسة الشركة على هذا المتصفح';state.style.color='var(--red)';return;}
+    state.textContent='تم استلام جلسة الشركة؛ جاري التحقق…';state.style.color='var(--muted)';await refreshIdentity();
+   });
+   window.addEventListener('load',()=>{try{window.opener.postMessage('DAGA_LIVE_READY',stagingOrigin)}catch(_){}});
+  }
  }
  send.addEventListener('click',()=>busy(send,async()=>{const email=$('dagaAuthIdentifier').value.trim(),password=$('dagaAuthPassword').value;if(!email||!password)throw new Error('اكتب البريد الإلكتروني وكلمة المرور');const data=await authApi('/api/company/auth/login',{email,password},'POST',false);if(!data.sessionToken)throw new Error('session_token_missing');sessionStorage.removeItem('daga_company_id_v1');sessionStorage.setItem('daga_account_session_v1',data.sessionToken);state.textContent='تم تسجيل الدخول، جاري التحقق…';await refreshIdentity()}));
  logout.addEventListener('click',()=>busy(logout,async()=>{try{await authApi('/api/company/auth/logout',{},'POST',true)}finally{try{sessionStorage.removeItem('daga_account_session_v1')}catch(e){}$('dagaAuthFields').style.display='grid';send.style.display='inline-block';logout.style.display='none';state.textContent='تم فصل الحساب؛ المساعد متاح بدون ربط';state.style.color='var(--muted)'}}));
