@@ -648,7 +648,7 @@ async function bootAuthenticatedDashboard(token,selectedCompanyId){
   let role=String(company.role||data.account.role||'').toLowerCase();
   if(role==='owner')role='store_owner';
   if(!['store_owner','manager','employee'].includes(role)){window.location.replace('/shop-access/');return;}
-  window.DAGA_SESSION_TOKEN=token;window.DAGA_AUTH_USER={id:data.account.id,displayName:data.account.displayName||'',role:role,storeId:company.id,storeName:company.displayName||'ضجه',contactPhone:company.contactPhone||'',permissions:company.permissions||{},smartAssistantEnabled:company.smartAssistantEnabled===true&&(role==='store_owner'||company.permissions?.useSmartAssistant===true),historyEnabled:company.historyEnabled===true,liveDagaEnabled:company.liveDagaEnabled===true&&(role==='store_owner'||company.permissions?.useLiveDaga===true)};
+  window.DAGA_SESSION_TOKEN=token;window.DAGA_AUTH_USER={id:data.account.id,displayName:data.account.displayName||'',role:role,storeId:company.id,storeName:company.displayName||'ضجه',contactPhone:company.contactPhone||'',permissions:company.permissions||{},smartAssistantEnabled:company.smartAssistantEnabled===true&&(role==='store_owner'||company.permissions?.useSmartAssistant===true),historyEnabled:company.historyEnabled===true,liveDagaEnabled:company.liveDagaEnabled===true&&(role==='store_owner'||company.permissions?.useLiveDaga===true),liveWordsRemaining:Number(company.liveWordsRemaining||0)};
   // Keep both premium actions visible on every plan; entitlement controls whether they can run.
   const smartAllowed=window.DAGA_AUTH_USER.smartAssistantEnabled===true;
   const liveAllowed=window.DAGA_AUTH_USER.liveDagaEnabled===true;
