@@ -48,7 +48,7 @@ export async function handleOwnerAdmin(request, env, url) {
     }
 
     if (path === "/owner/admin/plans" && request.method === "GET") {
-      const result = await db.prepare("SELECT id,service,name,price_minor,currency,duration_days,word_quota,features_json,is_active,version,updated_at FROM daga_plans ORDER BY service,name").all();
+      const result = await db.prepare("SELECT id,service,name,price_minor,currency,duration_days,word_quota,features_json,is_active,version,updated_at FROM daga_plans WHERE is_deleted=0 ORDER BY service,name").all();
       return json(env, { ok: true, plans: result.results || [] });
     }
     if (path === "/owner/admin/plans" && request.method === "POST") {
@@ -75,9 +75,19 @@ export async function handleOwnerAdmin(request, env, url) {
       return json(env, { ok:true,id },201);
     }
     const planMatch = path.match(/^\/owner\/admin\/plans\/([a-f0-9-]{36})$/i);
+    if (planMatch && request.method === "DELETE") {
+      const existing = await db.prepare("SELECT * FROM daga_plans WHERE id=? AND is_deleted=0").bind(planMatch[1]).first();
+      if (!existing) return json(env, { error: "plan_not_found" }, 404);
+      if (Number(existing.is_active) !== 0) return json(env, { error: "active_plan_cannot_be_deleted", message: "أوقف الخطة أولًا قبل حذفها." }, 409);
+      const references = await db.prepare("SELECT (SELECT COUNT(*) FROM daga_plan_orders WHERE plan_id=?) AS orders, (SELECT COUNT(*) FROM daga_entitlements WHERE order_id IN (SELECT id FROM daga_plan_orders WHERE plan_id=?)) AS entitlements").bind(planMatch[1],planMatch[1]).first();
+      if (Number(references?.orders || 0) > 0 || Number(references?.entitlements || 0) > 0) return json(env, { error: "plan_has_history", message: "الخطة مرتبطة بطلبات أو اشتراكات سابقة؛ تم منع حذفها لحماية السجلات المالية." }, 409);
+      await db.prepare("UPDATE daga_plans SET is_deleted=1,updated_by=?,updated_at=? WHERE id=? AND is_active=0 AND is_deleted=0").bind(owner.id,new Date().toISOString(),planMatch[1]).run();
+      await audit(db,owner.id,"plan_deleted","daga_plans",planMatch[1],{service:existing.service,name:existing.name,priceMinor:existing.price_minor});
+      return json(env,{ok:true,deleted:true});
+    }
     if (planMatch && request.method === "PATCH") {
       const b = await readJson(request); if (!b) return json(env, { error: "invalid_json" }, 400);
-      const existing = await db.prepare("SELECT * FROM daga_plans WHERE id=?").bind(planMatch[1]).first();
+      const existing = await db.prepare("SELECT * FROM daga_plans WHERE id=? AND is_deleted=0").bind(planMatch[1]).first();
       if (!existing) return json(env, { error: "plan_not_found" },404);
       const name = b.name === undefined ? existing.name : String(b.name).trim().slice(0,100);
       let price = b.priceMinor === undefined ? existing.price_minor : Number(b.priceMinor);
