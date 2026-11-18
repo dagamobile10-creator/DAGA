@@ -16,6 +16,11 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
+    // The public root URL is the entry point; route it to the existing V30 landing page.
+    if (url.pathname === "/" && request.method === "GET") {
+      return Response.redirect(new URL("/go/", url.origin), 302);
+    }
+
     if ((url.pathname === "/go" || url.pathname === "/go/") && request.method === "GET") {
       return new Response(officialLandingHtml, {
         status: 200,
