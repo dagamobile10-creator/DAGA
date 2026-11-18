@@ -79,7 +79,7 @@ export default {
           "Cache-Control": "no-store",
           "Referrer-Policy": "no-referrer",
           "X-Content-Type-Options": "nosniff",
-          "Content-Security-Policy": "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+          "Content-Security-Policy": "default-src 'none'; script-src 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
         }
       });
     }
