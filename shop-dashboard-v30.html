@@ -492,18 +492,17 @@ function showLiveComingSoon(){
   if(user.liveDagaEnabled!==true){alert('رصيد حروف LIVE DAGA غير ظاهر للشركة حتى الآن. حدّث الصفحة بعد شحن الرصيد، ولو استمرت الرسالة راجع مالك التطبيق ليتأكد من ربط الرصيد بالشركة الصحيحة.');return;}
   const token=String(window.DAGA_SESSION_TOKEN||'');
   if(!token){alert('جلسة الشركة انتهت. سجّل الدخول مرة تانية.');return;}
-  const liveOrigin='https://daga-app-staging.dagamobile10.workers.dev';
-  const liveWindow=window.open('about:blank','_blank');
-  if(!liveWindow){alert('اسمح بفتح نافذة LIVE DAGA علشان نربط حساب الشركة بأمان.');return;}
-  let completed=false;
-  const onLiveReady=event=>{
-    if(completed||event.origin!==liveOrigin||event.source!==liveWindow||event.data!=='DAGA_LIVE_READY')return;
-    completed=true;window.removeEventListener('message',onLiveReady);
-    liveWindow.postMessage({type:'DAGA_AUTH',token,companyId:String(user.storeId||'')},liveOrigin);
-  };
-  window.addEventListener('message',onLiveReady);
-  liveWindow.location.assign(liveOrigin+'/live/?api=staging');
-  setTimeout(()=>{if(!completed)window.removeEventListener('message',onLiveReady);},15000);
+  // Use same-tab navigation: Android browsers/WebViews may block window.open
+  // even when called from a user gesture. The LIVE page is same-origin and
+  // reads this short-lived authenticated session from sessionStorage.
+  try{
+    sessionStorage.setItem('daga_account_session_v1',token);
+    sessionStorage.setItem('daga_company_id_v1',String(user.storeId||''));
+  }catch(_){
+    alert('تعذر تجهيز جلسة LIVE DAGA على هذا المتصفح. حدّث المتصفح وحاول مرة تانية.');
+    return;
+  }
+  window.location.assign(liveOrigin+'/live/?api=staging');
 }
 function closeDagaLiveFullscreen(){
  const screen=document.getElementById('dagaLiveFullscreen');
