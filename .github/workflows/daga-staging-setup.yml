@@ -253,7 +253,7 @@ jobs:
             echo "::error::Owner API returned an allow-origin header for an untrusted origin"; exit 1
           fi
           echo "Staging company and owner API CORS checks passed: no wildcard origin was returned."
-          for path in /portal/ /go/ /shop-access/ /company/ /invite/ /owner/ /owner-console/ /shop/ /live/; do
+          for path in /portal/ /go/ /shop-access/ /company/ /team/ /invite/ /owner/ /owner-console/ /shop/ /live/; do
             code="$(curl -sS -o "/tmp/page-$(echo "$path" | tr '/' '_').html" -w '%{http_code}' --max-time 15 "https://daga-app-staging.dagamobile10.workers.dev$path")"
             if [ "$code" != "200" ]; then echo "::error::Staging page $path returned HTTP $code"; exit 1; fi
             echo "Staging page $path returned HTTP 200."
@@ -262,6 +262,8 @@ jobs:
           grep -q 'تسجيل دخول مالك الشركة' /tmp/page-_portal_.html || { echo "::error::Unified avatar portal company entry is missing"; exit 1; }
           grep -q 'إدارة مالك التطبيق' /tmp/page-_owner_.html || { echo "::error::Owner console route did not serve the owner console HTML"; exit 1; }
           grep -q 'const API=window.location.origin;' /tmp/page-_owner_.html || { echo "::error::Owner console is not configured to use its same-origin Worker API"; exit 1; }
+          grep -q 'تسجيل دخول الفريق' /tmp/page-_team_.html || { echo "::error::Team login portal is missing"; exit 1; }
+          grep -q '/api/company/team/auth/login' /tmp/page-_team_.html || { echo "::error::Team login is not using the role-restricted API"; exit 1; }
           grep -q 'الاشتراكات والمدفوعات' /tmp/page-_company_.html || { echo "::error::Company portal checkout UI is missing from the served HTML"; exit 1; }
           grep -q '/api/company/offers?service=' /tmp/page-_company_.html || { echo "::error::Company portal offer selection is missing from the served HTML"; exit 1; }
           grep -q 'DAGA_API_BASE' /tmp/page-_live_.html || { echo "::error::LIVE DAGA staging route did not serve the authenticated app"; exit 1; }
