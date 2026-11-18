@@ -366,6 +366,8 @@ export default {
 
     if (url.pathname !== "/tts" || request.method !== "POST") return json({ error: "Not found" }, 404);
 
+    let liveDebit = null;
+    let billedCharacters = 0;
     try {
       if (!env.ELEVENLABS_API_KEY) return json({ error: "DAGA voice is not configured" }, 503);
       const parsed = await readBoundedJson(request, 16384);
@@ -376,8 +378,8 @@ export default {
       if (text.length > 2500) return json({ error: "text_too_long", maxLength: 2500 }, 413);
 
       // LIVE DAGA character billing: reserve from the company's shared balance before generating audio.
-      const billedCharacters = Array.from(text).length;
-      const liveDebit = await reserveLiveCharacters(env.DAGA_APP_DB, voiceAccount, billedCharacters);
+      billedCharacters = Array.from(text).length;
+      liveDebit = await reserveLiveCharacters(env.DAGA_APP_DB, voiceAccount, billedCharacters);
       if (!liveDebit.ok) {
         if (liveDebit.reason === "subscription") return json({ error: "live_daga_subscription_required", message: "اشتراك لايف ضجة غير مفعل لهذه الشركة." }, 403);
         return json({ error: "live_daga_characters_exhausted", balance: liveDebit.balance || 0, message: "رصيد حروف لايف ضجة غير كافٍ. اشحن رصيد الشركة للمتابعة." }, 402);
@@ -400,7 +402,7 @@ export default {
       }
       return new Response(response.body, { headers: cors({ allowedOrigins: env.DAGA_ALLOWED_ORIGINS || "", "Content-Type": response.headers.get("content-type") || "audio/mpeg", "Cache-Control": "no-store" }) });
     } catch (_) {
-      if (typeof liveDebit !== "undefined" && liveDebit?.ok && typeof billedCharacters === "number") {
+      if (liveDebit?.ok && billedCharacters > 0) {
         await refundLiveCharacters(env.DAGA_APP_DB, voiceAccount, billedCharacters, liveDebit.requestId);
       }
       return json({ error: "tts_request_failed" }, 500);
