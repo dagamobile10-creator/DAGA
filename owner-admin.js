@@ -164,7 +164,7 @@ export async function handleOwnerAdmin(request, env, url) {
     }
 
     if(path==="/owner/admin/accounts"&&request.method==="GET"){
-      const r=await db.prepare("SELECT a.id,a.public_id,a.display_name,a.role,a.status,a.created_at,a.email,s.display_name AS company_name,s.public_id AS company_public_id FROM daga_accounts a LEFT JOIN daga_stores s ON s.id=a.store_id ORDER BY a.created_at DESC LIMIT 1000").all();
+      const r=await db.prepare("SELECT a.id,a.public_id,a.display_name,a.role,a.status,a.created_at,a.email,a.store_id,s.display_name AS company_name,s.public_id AS company_public_id FROM daga_accounts a LEFT JOIN daga_stores s ON s.id=a.store_id ORDER BY a.created_at DESC LIMIT 1000").all();
       return json(env,{ok:true,accounts:r.results||[]});
     }
 
@@ -299,10 +299,11 @@ export async function handleOwnerAdmin(request, env, url) {
       const adjustmentNote=note||"Owner adjustment";
       const account=await db.prepare("SELECT id,role,status,store_id FROM daga_accounts WHERE id=?").bind(accountId).first();
       if(!account||account.status!=="approved"||account.role!=="store_owner")return json(env, {error:"approved_store_owner_required"},404);
-      const ownedStore=await db.prepare("SELECT id FROM daga_stores WHERE owner_account_id=? AND status='approved' ORDER BY created_at DESC LIMIT 1").bind(accountId).first();
-      if(!ownedStore)return json(env,{error:"approved_owned_store_required"},409);
+      const ownedStore=storeId
+        ? await db.prepare("SELECT id FROM daga_stores WHERE id=? AND owner_account_id=? AND status='approved' LIMIT 1").bind(storeId,accountId).first()
+        : await db.prepare("SELECT id FROM daga_stores WHERE id=? AND owner_account_id=? AND status='approved' LIMIT 1").bind(account.store_id||"",accountId).first();
+      if(!ownedStore)return json(env,{error:storeId?"store_account_mismatch":"approved_owned_store_required"},409);
       const resolvedStoreId=ownedStore.id;
-      if(storeId&&storeId!==resolvedStoreId)return json(env, {error:"store_account_mismatch"},409);
       const prior=await db.prepare("SELECT id,account_id,store_id,event_type,words,note FROM daga_live_word_ledger WHERE request_id=?").bind(requestId).first();
       if(prior){
         const same=prior.account_id===accountId&&prior.store_id===resolvedStoreId&&prior.event_type==="credit"&&Number(prior.words)===words&&prior.note===adjustmentNote;
