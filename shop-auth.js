@@ -9,7 +9,9 @@ export async function handleShopAuth(request, env, url) {
   const routes = new Set([
     "/api/shop/registration/start", "/api/shop/registration/verify",
     "/api/shop/auth/setup/start", "/api/shop/auth/setup/verify",
-    "/api/shop/auth/login", "/api/shop/auth/me", "/api/shop/auth/logout", "/api/shop/auth/recovery/start", "/api/shop/auth/recovery/complete"
+    "/api/shop/auth/login", "/api/shop/auth/me", "/api/shop/auth/logout", "/api/shop/auth/recovery/start", "/api/shop/auth/recovery/complete",
+    // V30 company routes are aliases for the existing shop account handlers.
+    "/api/company/auth/login", "/api/company/auth/me", "/api/company/auth/logout"
   ]);
   if (!routes.has(path)) return null;
   if (request.method === "OPTIONS") return new Response(null, {status:204,headers:cors(env)});
@@ -20,11 +22,11 @@ export async function handleShopAuth(request, env, url) {
     if (path === "/api/shop/registration/verify" && request.method === "POST") return await registrationVerify(request,env,db);
     if (path === "/api/shop/auth/setup/start" && request.method === "POST") return await setupStart(request,env,db);
     if (path === "/api/shop/auth/setup/verify" && request.method === "POST") return await setupVerify(request,env,db);
-    if (path === "/api/shop/auth/login" && request.method === "POST") return await login(request,env,db);
+    if ((path === "/api/shop/auth/login" || path === "/api/company/auth/login") && request.method === "POST") return await login(request,env,db);
     if (path === "/api/shop/auth/recovery/start" && request.method === "POST") return await recoveryStart(request,env,db);
     if (path === "/api/shop/auth/recovery/complete" && request.method === "POST") return await recoveryComplete(request,env,db);
-    if (path === "/api/shop/auth/me" && request.method === "GET") return await me(request,env,db);
-    if (path === "/api/shop/auth/logout" && request.method === "POST") return await logout(request,env,db);
+    if ((path === "/api/shop/auth/me" || path === "/api/company/auth/me") && request.method === "GET") return await me(request,env,db);
+    if ((path === "/api/shop/auth/logout" || path === "/api/company/auth/logout") && request.method === "POST") return await logout(request,env,db);
     return json(env,{error:"method_not_allowed"},405);
   } catch (e) {
     console.error("shop_auth_error",path,e instanceof Error?e.name:"unknown");
