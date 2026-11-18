@@ -507,7 +507,7 @@ function showLiveComingSoon(){
     alert('تعذر تجهيز جلسة LIVE DAGA على هذا المتصفح. حدّث المتصفح وحاول مرة تانية.');
     return;
   }
-  window.location.assign(liveOrigin+'/live/?api=staging');
+  window.location.assign(location.origin+'/live/?api=staging');
 }
 function closeDagaLiveFullscreen(){
  const screen=document.getElementById('dagaLiveFullscreen');
