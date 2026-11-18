@@ -489,7 +489,7 @@ function executeOrder(){
 let dagaLiveSnapshotTimer=null;
 function showLiveComingSoon(){
   const user=window.DAGA_AUTH_USER||{};
-  if(user.liveDagaEnabled!==true){alert('زر LIVE DAGA هيتفعل بعد شحن رصيد الحروف للشركة وتفعيل اشتراك LIVE DAGA.');return;}
+  if(user.liveDagaEnabled!==true){alert('رصيد حروف LIVE DAGA غير ظاهر للشركة حتى الآن. حدّث الصفحة بعد شحن الرصيد، ولو استمرت الرسالة راجع مالك التطبيق ليتأكد من ربط الرصيد بالشركة الصحيحة.');return;}
   const token=String(window.DAGA_SESSION_TOKEN||'');
   if(!token){alert('جلسة الشركة انتهت. سجّل الدخول مرة تانية.');return;}
   const liveOrigin='https://daga-app-staging.dagamobile10.workers.dev';
