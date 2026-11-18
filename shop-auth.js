@@ -165,7 +165,7 @@ async function me(request,env,db){
   let features={};try{features=JSON.parse(entitlement?.features_json||"{}");if(!features||typeof features!=="object"||Array.isArray(features))features={};}catch(_){features={};}
   const smartAssistantEnabled=Boolean(entitlement);
   const historyEnabled=Boolean(entitlement&&(features.historyEnabled===true||features.tier==="smart"));
-  const company={id:store.id,publicId:store.public_id,displayName:store.display_name,role:"store_owner",permissions:{},ledgerEnabled:Boolean(entitlement),smartAssistantEnabled,historyEnabled,liveDagaEnabled:Boolean(liveEntitlement)&&Number(liveWordBalance?.remaining||0)>0,liveWordsRemaining:Number(liveWordBalance?.remaining||0)};
+  const company={id:store.id,publicId:store.public_id,displayName:store.display_name,role:"store_owner",permissions:{},ledgerEnabled:Boolean(entitlement),smartAssistantEnabled,historyEnabled,liveDagaEnabled:Number(liveWordBalance?.remaining||0)>0,liveWordsRemaining:Number(liveWordBalance?.remaining||0)};
   const publicAccount={id:account.id,role:account.role,displayName:account.display_name,emailMasked:maskEmail(account.email),publicId:store.public_id};
   return json(env,{ok:true,account:publicAccount,companies:[company],shops:[company]});
 }
