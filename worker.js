@@ -467,6 +467,8 @@ const words = await env.DAGA_APP_DB.prepare("SELECT COALESCE(SUM(CASE WHEN event
         if (company.role !== "store_owner" && company.permissions.useLiveDaga !== true) return json({ error: "company_voice_permission_denied", permission: "useLiveDaga" }, 403);
         const storeId = company.storeId;
         const quotaNow = new Date().toISOString();
+        const liveEntitlement = await env.DAGA_APP_DB.prepare("SELECT id FROM daga_entitlements WHERE store_id=? AND service='live_daga' AND status='active' AND starts_at<=? AND expires_at>? LIMIT 1").bind(storeId, quotaNow, quotaNow).first();
+        if (!liveEntitlement) return json({ error: "live_daga_subscription_required" }, 402);
 
         // Count Unicode code points in the exact, pronunciation-adjusted text sent to ElevenLabs.
         const characters = Array.from(text).length;
