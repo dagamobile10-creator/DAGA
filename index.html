@@ -180,7 +180,7 @@ const token=++speechToken;
 if(window.__dagaAudio){try{window.__dagaAudio.pause();window.__dagaAudio.currentTime=0}catch(e){}window.__dagaAudio=null}
 if('speechSynthesis' in window)speechSynthesis.cancel();
 fetch(DAGA_API_BASE+'/tts',{method:'POST',headers:dagaAuthHeaders({'Content-Type':'application/json'}),body:JSON.stringify({mode:'live_daga',text})})
-.then(async r=>{if(!r.ok)throw new Error(await r.text());const blob=await r.blob();if(token!==speechToken)return;state.textContent='ضجه بيتكلم…';
+.then(async r=>{if(!r.ok)throw new Error(await r.text());const blob=await r.blob();window.dispatchEvent(new Event('daga-live-balance-refresh'));if(token!==speechToken)return;state.textContent='ضجه بيتكلم…';
 const url=URL.createObjectURL(blob);if(token!==speechToken){URL.revokeObjectURL(url);return}const a=new Audio(url);window.__dagaAudio=a;
 a.onended=()=>{URL.revokeObjectURL(url);if(window.__dagaAudio===a)window.__dagaAudio=null;replying=false;if(live&&!muted){state.textContent='مستعد أسمعك';setTimeout(startListening,100)}else{singleMode=false;mic.textContent='🎙️';status.textContent='جاهز';state.textContent='خلصنا الأمر. اضغط المايك لو عندك أمر تاني'}};
 a.onerror=()=>{URL.revokeObjectURL(url);if(window.__dagaAudio===a)window.__dagaAudio=null;replying=false;state.textContent='حصلت مشكلة في صوت ضجه';if(live&&!muted)setTimeout(startListening,100);else singleMode=false};
@@ -239,6 +239,8 @@ const companies=data.companies||data.shops||[];let selectedCompanyId='';try{sele
    try{sessionStorage.setItem('daga_account_session_v1',data.token);sessionStorage.setItem('daga_company_id_v1',data.companyId);}catch(_){state.textContent='تعذر حفظ جلسة الشركة على هذا المتصفح';state.style.color='var(--red)';return;}
    state.textContent='تم استلام جلسة الشركة؛ جاري التحقق…';state.style.color='var(--muted)';await refreshIdentity();
   });
+  window.addEventListener('daga-live-balance-refresh',refreshIdentity);
+  window.addEventListener('pageshow',()=>{if(sessionStorage.getItem('daga_account_session_v1'))refreshIdentity()});
   window.addEventListener('load',()=>{try{window.opener.postMessage('DAGA_LIVE_READY',new URLSearchParams(location.search).get('api')==='staging'?'https://daga-app-staging.dagamobile10.workers.dev':'https://dagamobile10-creator.github.io')}catch(_){}});
  }
  send.addEventListener('click',()=>busy(send,async()=>{const email=$('dagaAuthIdentifier').value.trim(),password=$('dagaAuthPassword').value;if(!email||!password)throw new Error('اكتب البريد الإلكتروني وكلمة المرور');const data=await authApi('/api/company/auth/login',{email,password},'POST',false);if(!data.sessionToken)throw new Error('session_token_missing');sessionStorage.removeItem('daga_company_id_v1');sessionStorage.setItem('daga_account_session_v1',data.sessionToken);state.textContent='تم تسجيل الدخول، جاري التحقق…';await refreshIdentity()}));
