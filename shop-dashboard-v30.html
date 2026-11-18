@@ -682,7 +682,13 @@ async function refreshLiveWordBalance(){
  }catch(error){console.warn('live_balance_refresh_failed',error);}
 }
 window.addEventListener('pageshow',()=>refreshLiveWordBalance());
-if(window.opener){
+// Prefer the authenticated same-tab V30 session. Keep the old opener bridge for
+// backward compatibility with already-open dashboard tabs.
+let savedToken='',savedCompanyId='';
+try{savedToken=sessionStorage.getItem('daga_account_session_v1')||'';savedCompanyId=sessionStorage.getItem('daga_company_id_v1')||'';}catch(_){}
+if(savedToken&&savedCompanyId){
+ bootAuthenticatedDashboard(savedToken,savedCompanyId);
+}else if(window.opener){
  const receiveAuthMessage=event=>{
   if(event.origin!==location.origin||event.source!==window.opener||!event.data||event.data.type!=='DAGA_AUTH'||typeof event.data.token!=='string'||!event.data.token||typeof event.data.companyId!=='string')return;
   window.removeEventListener('message',receiveAuthMessage);
