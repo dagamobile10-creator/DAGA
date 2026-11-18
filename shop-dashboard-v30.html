@@ -492,8 +492,16 @@ function executeOrder(){
 }
 let dagaLiveSnapshotTimer=null;
 function showLiveComingSoon(){
-  // Open LIVE DAGA as a top-level HTTPS page so Android Chrome can request speech recognition/microphone permissions reliably.
-  window.location.assign('/live/');
+  const token=window.DAGA_AUTH_TOKEN,companyId=window.DAGA_AUTH_COMPANY_ID;
+  if(!token||!companyId){alert('سجّل الدخول من بوابة الشركة أولًا.');return;}
+  const liveWindow=window.open('/live/','_blank');
+  if(!liveWindow){alert('اسمح بفتح نافذة لايف ضجة للمتابعة.');return;}
+  const bridgeListener=event=>{
+    if(event.origin!==location.origin||event.source!==liveWindow||event.data!=='DAGA_LIVE_READY')return;
+    liveWindow.postMessage({type:'DAGA_LIVE_AUTH',token,companyId},location.origin);
+    window.removeEventListener('message',bridgeListener);
+  };
+  window.addEventListener('message',bridgeListener);
 }
 function closeDagaLiveFullscreen(){
  const screen=document.getElementById('dagaLiveFullscreen');
@@ -601,6 +609,13 @@ function open(s){document.getElementById('sheet').innerHTML=s;document.getElemen
 let dashboardBooted=false;
 async function bootAuthenticatedDashboard(token,selectedCompanyId){
  if(dashboardBooted)return;dashboardBooted=true;
+ window.DAGA_AUTH_TOKEN=token;
+ window.DAGA_AUTH_COMPANY_ID=selectedCompanyId;
+ try{
+  const liveResponse=await fetch('/live/access',{method:'GET',headers:{Authorization:'Bearer '+token},cache:'no-store'});
+  const liveAccess=await liveResponse.json().catch(()=>({}));
+  document.querySelectorAll('.liveBtn').forEach(button=>{button.style.display=liveResponse.ok&&liveAccess.enabled?'':'none';});
+ }catch(_){document.querySelectorAll('.liveBtn').forEach(button=>button.style.display='none');}
  try{
   const response=await fetch('/api/company/auth/me',{method:'GET',headers:{Authorization:'Bearer '+token},cache:'no-store',credentials:'omit'});
   const data=await response.json().catch(()=>({}));
