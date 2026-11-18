@@ -21,6 +21,7 @@ on:
       - "shop-dashboard-v30.html"
       - "go/**"
       - "portal/**"
+      - "team/**"
       - "tests/**"
 
 permissions:
@@ -258,7 +259,7 @@ jobs:
             if [ "$code" != "200" ]; then echo "::error::Staging page $path returned HTTP $code"; exit 1; fi
             echo "Staging page $path returned HTTP 200."
           done
-          grep -q "أهلاً بيك في ضجّة" /tmp/page-_portal_.html || { echo "::error::Unified avatar portal route did not serve the new home page"; exit 1; }
+          grep -q "أهلاً بيك في ضجه" /tmp/page-_portal_.html || { echo "::error::Unified avatar portal route did not serve the new home page"; exit 1; }
           grep -q 'تسجيل دخول مالك الشركة' /tmp/page-_portal_.html || { echo "::error::Unified avatar portal company entry is missing"; exit 1; }
           grep -q 'إدارة مالك التطبيق' /tmp/page-_owner_.html || { echo "::error::Owner console route did not serve the owner console HTML"; exit 1; }
           grep -q 'const API=window.location.origin;' /tmp/page-_owner_.html || { echo "::error::Owner console is not configured to use its same-origin Worker API"; exit 1; }
