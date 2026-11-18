@@ -181,6 +181,9 @@ export default {
     }
 
     if (url.pathname === "/liveavatar/avatars" && request.method === "GET") {
+      const liveAccess = await getLiveQuota(env.DAGA_APP_DB, account);
+      if (!liveAccess.subscribed) return json({ error: "live_daga_subscription_required", message: "اشتراك لايف ضجة غير مفعل لهذه الشركة." }, 403);
+      if (liveAccess.balance <= 0) return json({ error: "live_daga_characters_exhausted", balance: 0, message: "رصيد حروف لايف ضجة انتهى. اشحن رصيد الشركة لتشغيل الخدمة." }, 402);
       if (!env.LIVEAVATAR_API_KEY) return json({ error: "LIVEAVATAR_API_KEY secret is not configured" }, 503);
       try {
         const response = await fetch("https://api.liveavatar.com/v1/avatars?page=1&page_size=100", {
@@ -372,6 +375,14 @@ export default {
       if (!text) return json({ error: "text is required" }, 400);
       if (text.length > 2500) return json({ error: "text_too_long", maxLength: 2500 }, 413);
 
+      // LIVE DAGA character billing: reserve from the company's shared balance before generating audio.
+      const billedCharacters = Array.from(text).length;
+      const liveDebit = await reserveLiveCharacters(env.DAGA_APP_DB, voiceAccount, billedCharacters);
+      if (!liveDebit.ok) {
+        if (liveDebit.reason === "subscription") return json({ error: "live_daga_subscription_required", message: "اشتراك لايف ضجة غير مفعل لهذه الشركة." }, 403);
+        return json({ error: "live_daga_characters_exhausted", balance: liveDebit.balance || 0, message: "رصيد حروف لايف ضجة غير كافٍ. اشحن رصيد الشركة للمتابعة." }, 402);
+      }
+
       // Keep the generated text unchanged; pronunciation should follow general language rules.
       // No word-specific phonetic substitutions or pronunciation exceptions.
       // TTS-only pronunciation hint: use گ to cue the hard Egyptian /g/ sound.
@@ -383,9 +394,17 @@ export default {
         headers: { "xi-api-key": env.ELEVENLABS_API_KEY, "Content-Type": "application/json", "Accept": "audio/mpeg" },
         body: JSON.stringify({ text, model_id: "eleven_flash_v2_5", language_code: "ar", voice_settings: { stability: 0.32, similarity_boost: 0.80, style: 0.22, speed: 0.88, use_speaker_boost: true } })
       });
-      if (!response.ok) return json({ error: "tts_provider_request_failed", status: response.status }, response.status >= 400 && response.status <= 599 ? response.status : 502);
+      if (!response.ok) {
+        await refundLiveCharacters(env.DAGA_APP_DB, voiceAccount, billedCharacters, liveDebit.requestId);
+        return json({ error: "tts_provider_request_failed", status: response.status }, response.status >= 400 && response.status <= 599 ? response.status : 502);
+      }
       return new Response(response.body, { headers: cors({ allowedOrigins: env.DAGA_ALLOWED_ORIGINS || "", "Content-Type": response.headers.get("content-type") || "audio/mpeg", "Cache-Control": "no-store" }) });
-    } catch (_) { return json({ error: "tts_request_failed" }, 500); }
+    } catch (_) {
+      if (typeof liveDebit !== "undefined" && liveDebit?.ok && typeof billedCharacters === "number") {
+        await refundLiveCharacters(env.DAGA_APP_DB, voiceAccount, billedCharacters, liveDebit.requestId);
+      }
+      return json({ error: "tts_request_failed" }, 500);
+    }
   }
 };
 
@@ -476,4 +495,40 @@ function extractModelText(result) {
     if (joined) return joined;
   }
   return "";
+}
+
+
+
+async function getLiveQuota(db, account) {
+  const storeId = String(account?.store_id || "").trim();
+  if (!db || !storeId) return { subscribed: false, balance: 0 };
+  const now = new Date().toISOString();
+  const store = await db.prepare("SELECT id FROM daga_stores WHERE id=? AND status='approved'").bind(storeId).first();
+  if (!store) return { subscribed: false, balance: 0 };
+  const entitlement = await db.prepare("SELECT e.id FROM daga_entitlements e JOIN daga_plan_orders o ON o.id=e.order_id WHERE e.store_id=? AND e.service='live_daga' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? AND o.status='paid_approved' ORDER BY e.expires_at DESC LIMIT 1").bind(storeId, now, now).first();
+  if (!entitlement) return { subscribed: false, balance: 0 };
+  const ledger = await db.prepare("SELECT COALESCE(SUM(CASE WHEN event_type IN ('credit','refund','adjustment') THEN words WHEN event_type='debit' THEN -words ELSE 0 END),0) AS balance FROM daga_live_word_ledger WHERE store_id=?").bind(storeId).first();
+  return { subscribed: true, balance: Math.max(0, Number(ledger?.balance || 0)), storeId };
+}
+
+async function reserveLiveCharacters(db, account, characters) {
+  const storeId = String(account?.store_id || "").trim();
+  const accountId = String(account?.id || "").trim();
+  if (!db || !storeId || !accountId) return { ok: false, reason: "subscription", balance: 0 };
+  const requestId = "live-tts:" + crypto.randomUUID();
+  const now = new Date().toISOString();
+  try {
+    const result = await db.prepare("INSERT INTO daga_live_word_ledger (id,account_id,store_id,order_id,event_type,words,request_id,note) SELECT ?,?,?,NULL,'debit',?,?,? WHERE EXISTS (SELECT 1 FROM daga_stores s JOIN daga_entitlements e ON e.store_id=s.id JOIN daga_plan_orders o ON o.id=e.order_id WHERE s.id=? AND s.status='approved' AND e.service='live_daga' AND e.status='active' AND e.starts_at<=? AND e.expires_at>? AND o.status='paid_approved') AND (SELECT COALESCE(SUM(CASE WHEN event_type IN ('credit','refund','adjustment') THEN words WHEN event_type='debit' THEN -words ELSE 0 END),0) FROM daga_live_word_ledger WHERE store_id=?)>=?").bind(crypto.randomUUID(), accountId, storeId, characters, requestId, "LIVE DAGA response characters", storeId, now, now, storeId, characters).run();
+    if (Number(result?.meta?.changes || 0) === 1) return { ok: true, requestId, storeId };
+  } catch (_) {}
+  const access = await getLiveQuota(db, account);
+  return { ok: false, reason: access.subscribed ? "balance" : "subscription", balance: access.balance || 0 };
+}
+
+async function refundLiveCharacters(db, account, characters, requestId) {
+  if (!db || !account?.id || !account?.store_id || !requestId) return;
+  const refundRequestId = "refund:" + requestId;
+  try {
+    await db.prepare("INSERT INTO daga_live_word_ledger (id,account_id,store_id,order_id,event_type,words,request_id,note) VALUES (?,?,?,NULL,'refund',?,?,?)").bind(crypto.randomUUID(), String(account.id), String(account.store_id), characters, refundRequestId, "Refund failed LIVE DAGA audio generation").run();
+  } catch (_) {}
 }
