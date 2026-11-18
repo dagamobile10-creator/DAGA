@@ -6,6 +6,7 @@ import { handleShopAuth } from "./shop-auth.js";
 import { authenticatedAccount } from "./owner-auth.js";
 import inviteHtml from "./invite/index.html";
 import shopPortalHtml from "./company/portal.html";
+import teamPortalHtml from "./team/index.html";
 import shopDashboardHtml from "./shop-dashboard-v30.html";
 import officialLandingHtml from "./go/index.html";
 import mainPortalHtml from "./portal/index.html";
@@ -92,6 +93,19 @@ export default {
           "Referrer-Policy": "no-referrer",
           "X-Content-Type-Options": "nosniff",
           "Content-Security-Policy": "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"
+        }
+      });
+    }
+
+    if ((url.pathname === "/team" || url.pathname === "/team/") && request.method === "GET") {
+      return new Response(teamPortalHtml, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/html; charset=utf-8",
+          "Cache-Control": "no-store",
+          "Referrer-Policy": "no-referrer",
+          "X-Content-Type-Options": "nosniff",
+          "Content-Security-Policy": "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
         }
       });
     }
