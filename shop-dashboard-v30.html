@@ -489,7 +489,9 @@ function executeOrder(){
 let dagaLiveSnapshotTimer=null;
 function showLiveComingSoon(){
   const user=window.DAGA_AUTH_USER||{};
-  if(user.liveDagaEnabled!==true||!(Number(user.liveWordsRemaining)>0)){alert('لازم يكون للشركة رصيد حروف LIVE DAGA متاح.');return;}
+  if(user.smartAssistantEnabled!==true){alert('تشغيل LIVE DAGA يتطلب الاشتراك الذكي أولًا.');return;}
+  if(user.liveDagaEnabled!==true){alert('الاشتراك الذكي مفعّل. لإضافة LIVE DAGA، اشترك في الإضافة المدفوعة أولًا.');return;}
+  if(!(Number(user.liveWordsRemaining)>0)){alert('رصيد حروف LIVE DAGA خلص. اشحن رصيد حروف الأول.');return;}
   const token=String(window.DAGA_SESSION_TOKEN||'');
   if(!token){alert('انتهت جلسة الشركة. سجّل الدخول من جديد.');return;}
   // Register the handshake listener BEFORE opening the assistant. Otherwise a fast
@@ -622,7 +624,7 @@ async function bootAuthenticatedDashboard(token,selectedCompanyId){
   window.DAGA_SESSION_TOKEN=token;window.DAGA_AUTH_USER={id:data.account.id,displayName:data.account.displayName||'',role:role,storeId:company.id,storeName:company.displayName||'ضجه',supportWhatsApp:String(data.supportWhatsApp||'').replace(/[^0-9]/g,''),permissions:company.permissions||{},smartAssistantEnabled:company.smartAssistantEnabled===true,historyEnabled:company.historyEnabled===true,liveDagaEnabled:company.liveDagaEnabled===true,liveWordsRemaining:Number(company.liveWordsRemaining||0)};
   // Keep both premium actions visible on every plan; entitlement controls whether they can run.
   const smartAllowed=window.DAGA_AUTH_USER.smartAssistantEnabled===true;
-  const liveAllowed=window.DAGA_AUTH_USER.liveDagaEnabled===true&&Number(window.DAGA_AUTH_USER.liveWordsRemaining)>0;
+  const liveAllowed=smartAllowed&&window.DAGA_AUTH_USER.liveDagaEnabled===true&&Number(window.DAGA_AUTH_USER.liveWordsRemaining)>0;
   document.querySelectorAll('button[onclick="voiceDaga()"]').forEach(b=>{b.hidden=false;b.disabled=!smartAllowed;b.title=smartAllowed?'':'متاح في الاشتراك الذكي فقط';b.setAttribute('aria-disabled',String(!smartAllowed));});
   document.querySelectorAll('button.liveBtn').forEach(b=>{b.hidden=false;b.disabled=!liveAllowed;b.title=liveAllowed?'':(!smartAllowed?'يتطلب الاشتراك الذكي':(!window.DAGA_AUTH_USER.liveDagaEnabled?'يتطلب إضافة LIVE DAGA المدفوعة':'رصيد حروف LIVE DAGA غير كافٍ'));b.setAttribute('aria-disabled',String(!liveAllowed));});
   document.querySelectorAll('button[onclick="showReports()"]').forEach(b=>{b.hidden=false;b.disabled=!window.DAGA_AUTH_USER.historyEnabled;b.title=window.DAGA_AUTH_USER.historyEnabled?'':'تفاصيل الأيام السابقة متاحة في الاشتراك الذكي فقط';});
