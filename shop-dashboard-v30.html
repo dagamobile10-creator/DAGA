@@ -230,7 +230,7 @@ function moneyImpactForManualEdit(ci,entryName,delta,existingEntry=null){
   if(agent){if(delta>0)return {delta:0,agentDelta:delta,agentName:agent,description:'إضافة شحن جديدة لخدمة '+agent+'؛ تزيد رصيد المندوب فقط بلا تأثير على الفلوس.'};return {delta:-delta,agentDelta:delta,agentName:agent,description:'استهلاك من رصيد خدمة '+agent+'؛ يقل رصيد المندوب بنفس المبلغ وتزيد الفلوس الأساسية بالمبلغ المستهلك.'};}
   return {delta:-delta,agentDelta:0,agentName:null,description:'تغيير رصيد بند نقدي داخل الكروت يقابله تغيير عكسي في الفلوس الأساسية.'};
  }
- if(col==='الرصيد'){if(canonicalServiceAgent(entryName))return {delta:0,agentDelta:0,agentName:null,description:'رصيد مندوب خدمة '+canonicalServiceAgent(entryName)+' مستقل عن الفلوس الأساسية؛ الشحن والاستهلاك يُعالجان من خلال قواعد الخدمة.'};return {delta:-delta,agentDelta:0,agentName:null,description:'البند العادي في عمود الرصيد مرتبط بالفلوس الأساسية عكسيًا؛ زيادة الرصيد تخصم من الفلوس، وتقليله أو حذفه يعيد الفرق للفلوس.'};}
+ if(col==='الرصيد'){if(canonicalServiceAgent(entryName))return {delta:0,agentDelta:0,agentName:null,description:'رصيد مندوب خدمة '+canonicalServiceAgent(entryName)+' مستقل عن الفلوس الأساسية؛ الشحن والاستهلاك يُعالجان من خلال قواعد الخدمة.'};return {delta:delta,agentDelta:0,agentName:null,description:'البند العادي في عمود الرصيد مرتبط بالفلوس الأساسية مباشرة؛ زيادة الرصيد تزود الفلوس، وتقليله أو حذفه يقلل الفلوس بنفس الفرق.'};}
  if(/^خارج/.test(col)){
   const deltaToMoney=existingEntry&&isDailyWithdrawalName(entryName)&&existingEntry[2]?.moneyPosted!==true?-(num(existingEntry[1])+delta):-delta;
   return {delta:deltaToMoney,agentDelta:0,agentName:null,description:'كل إضافة أو تعديل أو حذف في الخارج يؤثر على الفلوس الأساسية فور التأكيد؛ والسحب اليومي غير المرحّل يُرحّل بقيمته الجديدة مرة واحدة.'};
@@ -574,7 +574,7 @@ function executeOrderCore(){
    if((p.moneyDelta||0)!==0&&(!money||num(money.entry[1])!==p.moneyBefore)){alert('الفلوس الأساسية اتغيرت من وقت المراجعة. راجع الإضافة من جديد.');pendingOrder=null;return;}
    if(serviceAgent){const applied=applyServiceAgentDelta(serviceAgent,p.amount);if(!applied.ok){alert(applied.message);pendingOrder=null;return;}}
    else addToNamed(p.balanceIndex,agentName,p.amount);
-   if((p.moneyDelta||0)!==0)money.entry[1]=String(num(money.entry[1])+p.moneyDelta);
+   if(!serviceAgent&&money)money.entry[1]=String(num(money.entry[1])+p.amount);
    addLedger('إضافة رصيد في عمود الرصيد',agentName+' — '+fmt(p.amount)+' جنيه؛ تأثير الفلوس الأساسية '+fmt(p.moneyDelta||0)+' جنيه.',{column:'الرصيد',entryName:agentName,amount:p.amount,moneyDelta:p.moneyDelta||0,agentName:serviceAgent?agentName:null,agentDelta:serviceAgent?p.amount:0});
  }else if(p.mode==='balancePayout'){
   const serviceAgent=canonicalServiceAgent(p.name),moneyCheck=findMoneyEntry();
@@ -655,7 +655,7 @@ function describeLiveOrder(p){
  if(p.mode==='accessorySale'||p.mode==='accessoryAdd')return 'هسجل '+fmt(p.amount)+' جنيه في عمود الإكسسوار باسم '+(p.product||'مبيعات أكسسوار')+'. الفلوس الأساسية هتزيد '+fmt(p.amount)+' جنيه.';
  if(p.mode==='dailyWithdrawal')return 'هسجل سحب '+fmt(p.amount)+' جنيه من '+p.name+' في عمود الخارج، والفلوس الأساسية هتقل '+fmt(p.amount)+' جنيه.';
  if(p.mode==='namedEntrySet')return 'هعدل بند '+p.entryName+' من '+fmt(p.oldAmount)+' إلى '+fmt(p.newAmount)+' جنيه. تأثير الفلوس الأساسية '+fmt(p.moneyDelta)+' جنيه.';
- if(p.mode==='balanceAdd')return 'هضيف '+fmt(p.amount)+' جنيه باسم '+p.name+' في عمود الرصيد، من غير تغيير الفلوس الأساسية.';
+ if(p.mode==='balanceAdd')return 'هضيف '+fmt(p.amount)+' جنيه باسم '+p.name+' في عمود الرصيد، والفلوس الأساسية هتزيد بنفس المبلغ إلا لو الرصيد تابع لفوري أو ممكن أو سوبر بي.';
  if(p.mode==='balanceToOutsideTransfer')return 'هسوي '+fmt(p.transfer)+' جنيه من رصيد '+p.name+' وأسجل المتبقي في الخارج. تأثير الفلوس الأساسية صفر.';
  if(p.mode==='balancePayout'||p.mode==='outgoing')return 'هسجل صرف '+fmt(p.amount)+' جنيه باسم '+p.name+' حسب رصيده الحالي. راجع تفاصيل العملية.';
  if(p.mode==='receipt')return 'هسجل تحصيل '+fmt(p.amount)+' جنيه من '+p.name+' وأسوي المستحق عليه حسب الحساب الحالي.';
