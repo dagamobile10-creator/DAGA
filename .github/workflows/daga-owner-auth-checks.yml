@@ -67,7 +67,7 @@ jobs:
                   "INSERT INTO daga_live_word_ledger" in worker
                   and "WHERE store_id=?) >= ?" in worker
                   and 'company.storeId' in worker
-                  and 'live_daga_subscription_required' not in worker,
+                  and "service='live_daga'" not in worker,
               "owner console labels LIVE DAGA quota as characters and requires it":
                   "رصيد الحروف (إلزامي لباقة LIVE DAGA)" in open("owner-console.html", encoding="utf-8").read()
                   and "$('planQuota').required=$('planService').value==='live_daga'" in open("owner-console.html", encoding="utf-8").read(),
