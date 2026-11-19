@@ -616,32 +616,48 @@ async function createTeamInvitation(){
 }
 async function openTeamPermissions(){
  if(!isShopOwner()){alert("الصلاحيات دي خاصة بصاحب الشركه فقط");return;}
- open('<h2>صلاحيات الفريق</h2><p class="small">اختار عضو علشان تعدّل صلاحياته بشكل مستقل.</p><div id="teamPermissionMembers">جاري تحميل أعضاء الفريق...</div><button onclick="showTeam()">رجوع</button>');
+ open('<h2>صلاحيات الفريق</h2><p class="small">اختار عضو علشان تعدّل صلاحياته بشكل مستقل.</p><div id="teamPermissionMembers">جاري تحميل أعضاء الفريق...</div><button type="button" data-team-permissions-back>رجوع</button>');
+ const sheet=document.getElementById('sheet');
+ sheet.onclick=async event=>{
+  const back=event.target.closest('[data-team-permissions-back]');
+  if(back){await showTeam();return;}
+  const edit=event.target.closest('[data-edit-team-member]');
+  if(edit){await editTeamMemberPermissions(edit.getAttribute('data-edit-team-member'));return;}
+ };
  try{
-  const response=await fetch('/api/company/members?storeId='+encodeURIComponent(window.DAGA_AUTH_USER.storeId),{headers:{Authorization:'Bearer '+window.DAGA_SESSION_TOKEN},cache:'no-store'});
+  const response=await fetch('/api/company/members?storeId='+encodeURIComponent(window.DAGA_AUTH_USER.storeId),{headers:{Authorization:'Bearer '+window.DAGA_SESSION_TOKEN},cache:'no-store',credentials:'omit'});
   const data=await response.json().catch(()=>({}));
-  if(!response.ok)throw new Error(data.error||'تعذر تحميل أعضاء الشركه');
+  if(!response.ok)throw new Error(data.error||'تعذر تحميل أعضاء الشركة ('+response.status+')');
   const rows=data.members||[];
-  document.getElementById('teamPermissionMembers').innerHTML=rows.length?rows.map(m=>'<div class="reconMini"><div><b>'+esc(m.displayName||m.emailMasked||m.role)+'</b><span class="small"> — '+(m.role==='manager'?'مدير':'موظف')+' — '+esc(m.emailMasked||'')+'</span></div><button onclick="editTeamMemberPermissions('+JSON.stringify(m.accountId).replace(/</g,'\\u003c')+')">تعديل الصلاحيات</button></div>').join(''):'<p class="small">مفيش أعضاء نشطين غير صاحب الشركه.</p>';
- }catch(e){document.getElementById('teamPermissionMembers').textContent=e.message}
+  const host=document.getElementById('teamPermissionMembers');
+  if(!host)return;
+  host.innerHTML=rows.length?rows.map(m=>'<div class="reconMini"><div><b>'+esc(m.displayName||m.emailMasked||m.role)+'</b><span class="small"> — '+(m.role==='manager'?'مدير':'موظف')+' — '+esc(m.emailMasked||'')+'</span></div><button type="button" data-edit-team-member="'+esc(m.accountId)+'">تعديل الصلاحيات</button></div>').join(''):'<p class="small">مفيش أعضاء نشطين غير صاحب الشركة. تأكد إن دعوة المدير اتقبلت وإن عضويته نشطة.</p>';
+ }catch(e){const host=document.getElementById('teamPermissionMembers');if(host)host.textContent=e.message||'تعذر تحميل أعضاء الشركة';}
 }
 async function editTeamMemberPermissions(memberId){
  try{
-  const response=await fetch('/api/company/members?storeId='+encodeURIComponent(window.DAGA_AUTH_USER.storeId),{headers:{Authorization:'Bearer '+window.DAGA_SESSION_TOKEN},cache:'no-store'});
-  const data=await response.json();if(!response.ok)throw new Error(data.error||'تعذر تحميل الصلاحيات');
-  const member=(data.members||[]).find(m=>m.accountId===memberId);if(!member)throw new Error('العضو غير موجود');
+  const response=await fetch('/api/company/members?storeId='+encodeURIComponent(window.DAGA_AUTH_USER.storeId),{headers:{Authorization:'Bearer '+window.DAGA_SESSION_TOKEN},cache:'no-store',credentials:'omit'});
+  const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.error||'تعذر تحميل الصلاحيات ('+response.status+')');
+  const member=(data.members||[]).find(m=>m.accountId===memberId);if(!member)throw new Error('العضو غير موجود أو عضويته غير نشطة');
   const labels={inviteEmployees:'دعوة موظفين',manageUsers:'إدارة المستخدمين',manageInventory:'إدارة المخزون',viewReports:'مشاهدة التقارير',useSmartAssistant:'استخدام كلم ضجة',useLiveDaga:'استخدام LIVE DAGA'};
   const keys=member.role==='manager'?Object.keys(labels):Object.keys(labels).filter(k=>k!=='inviteEmployees');
-  open('<h2>صلاحيات '+(member.role==='manager'?'المدير':'الموظف')+'</h2><p class="small">'+esc(member.displayName||member.emailMasked||'')+'</p>'+keys.map(k=>'<label class="row" style="display:flex;align-items:center;gap:10px"><input type="checkbox" data-team-permission="'+k+'" '+(member.permissions&&member.permissions[k]?'checked':'')+'><span>'+labels[k]+'</span></label>').join('')+'<button class="primary" data-member-id="'+esc(memberId)+'" onclick="saveTeamMemberPermissions(this.dataset.memberId)">حفظ الصلاحيات</button><button onclick="openTeamPermissions()">رجوع</button>');
- }catch(e){alert(e.message)}
+  open('<h2>صلاحيات '+(member.role==='manager'?'المدير':'الموظف')+'</h2><p class="small">'+esc(member.displayName||member.emailMasked||'')+'</p>'+keys.map(k=>'<label class="row" style="display:flex;align-items:center;gap:10px"><input type="checkbox" data-team-permission="'+k+'" '+(member.permissions&&member.permissions[k]?'checked':'')+'><span>'+labels[k]+'</span></label>').join('')+'<button class="primary" type="button" data-save-team-member="'+esc(memberId)+'">حفظ الصلاحيات</button><button type="button" data-back-team-permissions>رجوع</button>');
+  const sheet=document.getElementById('sheet');
+  sheet.onclick=async event=>{
+   const save=event.target.closest('[data-save-team-member]');
+   if(save){save.disabled=true;await saveTeamMemberPermissions(save.getAttribute('data-save-team-member'));return;}
+   const back=event.target.closest('[data-back-team-permissions]');
+   if(back)await openTeamPermissions();
+  };
+ }catch(e){alert(e.message||'تعذر فتح شاشة الصلاحيات');}
 }
 async function saveTeamMemberPermissions(memberId){
  const permissions={};document.querySelectorAll('[data-team-permission]').forEach(el=>permissions[el.dataset.teamPermission]=el.checked);
  try{
-  const response=await fetch('/api/company/members/'+encodeURIComponent(memberId)+'/permissions',{method:'PATCH',headers:{'Content-Type':'application/json',Authorization:'Bearer '+window.DAGA_SESSION_TOKEN},body:JSON.stringify({storeId:window.DAGA_AUTH_USER.storeId,permissions}),cache:'no-store'});
-  const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.error||'تعذر حفظ الصلاحيات');
+  const response=await fetch('/api/company/members/'+encodeURIComponent(memberId)+'/permissions',{method:'PATCH',headers:{'Content-Type':'application/json',Authorization:'Bearer '+window.DAGA_SESSION_TOKEN},body:JSON.stringify({storeId:window.DAGA_AUTH_USER.storeId,permissions}),cache:'no-store',credentials:'omit'});
+  const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.error||'تعذر حفظ الصلاحيات ('+response.status+')');
   alert('تم حفظ صلاحيات العضو.');await openTeamPermissions();
- }catch(e){alert(e.message)}
+ }catch(e){alert(e.message||'تعذر حفظ الصلاحيات');}
 }
 function openTeamInvites(){showTeam()}
 function showSettings(){open(`<h2>الإعدادات</h2><p class="small">إعدادات نموذج الداشبورد الحالي.</p><button onclick="exportBackup()">تصدير نسخة احتياطية JSON</button><button onclick="importBackupPrompt()">استيراد نسخة احتياطية JSON</button><button onclick="showSupport()">الدعم والمساعدة</button><p class="small">التخزين حاليًا على هذا المتصفح فقط، وليس إنتاجيًا أو متزامنًا بين الأجهزة.</p>`)}
