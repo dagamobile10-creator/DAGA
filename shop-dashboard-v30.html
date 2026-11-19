@@ -710,6 +710,19 @@ async function bootAuthenticatedDashboard(token,selectedCompanyId){
   render();
  }catch(_){window.location.replace('/shop-access/');}
 }
+let bridgeConsumed=false;
+function consumeShopAuthBridge(){
+ if(bridgeConsumed)return;
+ try{
+  const raw=sessionStorage.getItem('DAGA_SHOP_AUTH_BRIDGE');
+  if(!raw)return;
+  const bridge=JSON.parse(raw);
+  sessionStorage.removeItem('DAGA_SHOP_AUTH_BRIDGE');
+  if(!bridge||typeof bridge.token!=='string'||!bridge.token||typeof bridge.companyId!=='string'||!bridge.companyId||!Number.isFinite(bridge.createdAt)||Date.now()-bridge.createdAt>120000)return;
+  bridgeConsumed=true;
+  bootAuthenticatedDashboard(bridge.token,bridge.companyId);
+ }catch(_){}
+}
 if(window.opener){
  const receiveAuthMessage=event=>{
   if(event.origin!==location.origin||event.source!==window.opener||!event.data||event.data.type!=='DAGA_AUTH'||typeof event.data.token!=='string'||!event.data.token||typeof event.data.companyId!=='string')return;
@@ -718,6 +731,8 @@ if(window.opener){
  };
  window.addEventListener('message',receiveAuthMessage);
  window.opener.postMessage('DAGA_SHOP_READY',location.origin);
-}else{window.location.replace('/shop-access/');}
+}
+consumeShopAuthBridge();
+if(!window.opener&&!bridgeConsumed)setTimeout(()=>{if(!dashboardBooted)window.location.replace('/shop-access/');},800);
 </script>
 </body></html>
