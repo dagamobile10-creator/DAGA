@@ -276,7 +276,10 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertIn("UPDATE daga_store_invitations SET status='accepted',use_count=1", handler)
         self.assertIn("AND status='pending' AND use_count=0 AND max_uses=1", handler)
         self.assertIn("INSERT INTO daga_store_memberships", handler)
-        self.assertIn("await db.batch([", handler)
+        self.assertIn("results=await db.batch([", handler)
+        self.assertIn("INSERT INTO daga_accounts", handler)
+        self.assertLess(handler.index("INSERT INTO daga_accounts"), handler.index("UPDATE daga_store_invitations SET status='accepted'"))
+        self.assertLess(handler.index("UPDATE daga_store_invitations SET status='accepted'"), handler.index("INSERT INTO daga_account_credentials"))
         self.assertIn("WHERE EXISTS (SELECT 1 FROM daga_store_invitations WHERE id=? AND status='accepted' AND accepted_by_account_id=? AND use_count=1)", handler)
         self.assertIn("[1,2,3,4,5,6].some(i=>Number(results?.[i]?.meta?.changes||0)!==1)", handler)
         self.assertIn("[1,2,3,4,5,6].some(i=>Number(results?.[i]?.meta?.changes||0)!==1)", handler)
@@ -719,13 +722,15 @@ class InvitationSchemaTests(unittest.TestCase):
         start = worker.index('if (url.pathname === "/liveavatar/token" && request.method === "POST")')
         end = worker.index('if (url.pathname === "/health")', start)
         route = worker[start:end]
-        self.assertIn('DAGA_VOICE_REQUIRE_AUTH', route)
         self.assertIn('authenticatedAccount(request, env.DAGA_APP_DB)', route)
+        self.assertIn('resolveCompanyVoiceContext(env, account', route)
         self.assertIn('account.status !== "approved"', route)
         self.assertIn('account.role === "program_owner"', route)
+        self.assertIn('company.permissions.useLiveDaga !== true', route)
+        self.assertIn('daga_live_word_ledger WHERE store_id=?', route)
         self.assertIn('https://api.liveavatar.com/v1/avatars/public', route)
         self.assertIn('LIVEAVATAR_AVATAR_ID', route)
-        self.assertLess(route.index('DAGA_VOICE_REQUIRE_AUTH'), route.index('if (!env.LIVEAVATAR_API_KEY)'))
+        self.assertLess(route.index('authenticatedAccount(request, env.DAGA_APP_DB)'), route.index('if (!env.LIVEAVATAR_API_KEY)'))
 
 
     def test_core_worker_cors_uses_allowlist_not_wildcard(self):
