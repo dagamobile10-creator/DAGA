@@ -466,11 +466,11 @@ function review(){
  }
 
  if(p.type==='balanceAdd'){
-   const serviceAgent=canonicalServiceAgent(p.name),moneyDelta=serviceAgent?0:-p.amount,money=findMoneyEntry();
+   const serviceAgent=canonicalServiceAgent(p.name),moneyDelta=serviceAgent?0:p.amount,money=findMoneyEntry();
    if(moneyDelta!==0&&!money){out.innerHTML='<p class="status">مش لاقي بند الفلوس الأساسية؛ لم يتم تجهيز العملية.</p>';return;}
    if(money&&num(money.entry[1])+moneyDelta<0){out.innerHTML='<p class="status">إضافة الرصيد هتخلي الفلوس الأساسية بالسالب. راجع المبلغ.</p>';return;}
    pendingOrder={...p,mode:'balanceAdd',balanceIndex,cardsIndex,serviceAgent,moneyDelta,moneyBefore:money?num(money.entry[1]):null};
-   out.innerHTML=`<div class="reconMini"><div><span>تاريخ ووقت المراجعة</span><b>${esc(localStamp())}</b></div><div><span>الأمر المفهوم</span><b>تسجيل ${fmt(p.amount)} جنيه في الرصيد باسم ${esc(p.name)}.</b></div><div>تأثير الفلوس الأساسية <b>${moneyDelta>0?'+':''}${fmt(moneyDelta)} ج.م</b></div>${money?`<div>الفلوس قبل <b>${fmt(num(money.entry[1]))} ج.م</b></div><div>الفلوس بعد <b>${fmt(num(money.entry[1])+moneyDelta)} ج.م</b></div>`:''}<p class="small">${serviceAgent?'ده رصيد مندوب '+esc(serviceAgent)+'؛ مستقل عن الفلوس الأساسية.':'ده بند رصيد عادي؛ إضافته تخصم نفس المبلغ من الفلوس الأساسية.'}</p><button class="primary" onclick="executeOrder()">تأكيد وتنفيذ</button><button onclick="pendingOrder=null;document.getElementById('orderPreview').innerHTML='تم إلغاء العملية.'">إلغاء</button></div>`;return;
+   out.innerHTML=`<div class="reconMini"><div><span>تاريخ ووقت المراجعة</span><b>${esc(localStamp())}</b></div><div><span>الأمر المفهوم</span><b>تسجيل ${fmt(p.amount)} جنيه في الرصيد باسم ${esc(p.name)}.</b></div><div>تأثير الفلوس الأساسية <b>${moneyDelta>0?'+':''}${fmt(moneyDelta)} ج.م</b></div>${money?`<div>الفلوس قبل <b>${fmt(num(money.entry[1]))} ج.م</b></div><div>الفلوس بعد <b>${fmt(num(money.entry[1])+moneyDelta)} ج.م</b></div>`:''}<p class="small">${serviceAgent?'ده رصيد مندوب '+esc(serviceAgent)+'؛ مستقل عن الفلوس الأساسية.':'ده بند رصيد عادي؛ إضافته تزود الفلوس الأساسية بنفس المبلغ.'}</p><button class="primary" onclick="executeOrder()">تأكيد وتنفيذ</button><button onclick="pendingOrder=null;document.getElementById('orderPreview').innerHTML='تم إلغاء العملية.'">إلغاء</button></div>`;return;
  }
  if(p.type==='balancePayout'){
    const owed=Math.max(0,p.person.balance),paid=Math.min(p.amount,owed),excess=Math.max(0,p.amount-paid);
