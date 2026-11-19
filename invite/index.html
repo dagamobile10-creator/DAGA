@@ -20,11 +20,23 @@ button{cursor:pointer;border:0;border-radius:11px;padding:13px 15px;font:inherit
 </head>
 <body>
 <main>
-  <nav class="app-nav" aria-label="وجهات ضجة"><a href="/company/">بوابة الشركة</a><a href="/owner-console/">لوحة مالك التطبيق</a><a href="/go/">صفحة ضجة العامة</a></nav>
+  <nav class="app-nav" aria-label="وجهات ضجة"><a href="/">الصفحة الرئيسية</a><a href="/company/">بوابة الشركة</a><a href="/owner-console/">لوحة مالك التطبيق</a><a href="/go/">صفحة ضجة العامة</a></nav>
   <div class="brand">DAGA</div>
   <div class="mark">ضجّة</div>
   <p class="sub">أهلاً بيك. سجّل حسابك أو ادخل لحسابك الحالي علشان تقبل دعوة الانضمام للشركة.</p>
   <div id="invalid" class="notice error hidden">رابط الدعوة ناقص أو غير صالح. اطلب رابط جديد من مالك الشركة أو المدير.</div>
+  <section id="memberLogin" class="hidden">
+    <h2 style="color:var(--gold);margin:8px 0 12px">دخول المدير أو الموظف</h2>
+    <p class="sub">اكتب نفس البريد الإلكتروني وكلمة المرور اللي أنشأت بيهم حسابك وقبلت بيهم دعوة الشركة.</p>
+    <label for="memberEmail">البريد الإلكتروني</label><input id="memberEmail" type="email" autocomplete="username" maxlength="254" placeholder="name@example.com" required>
+    <label for="memberPassword">كلمة المرور</label><input id="memberPassword" type="password" autocomplete="current-password" maxlength="128" required>
+    <button id="memberSignIn" type="button">تسجيل الدخول</button>
+    <div id="memberCompanies" class="hidden">
+      <label for="memberCompany">اختار الشركة</label><select id="memberCompany"></select>
+      <button id="openMemberDashboard" type="button">فتح واجهة الشركة</button>
+    </div>
+    <div id="memberMessage" class="notice hidden" role="status" aria-live="polite"></div>
+  </section>
   <div id="app">
     <div class="tabs"><button id="newTab" class="active" type="button">حساب جديد</button><button id="oldTab" class="secondary" type="button">عندي حساب</button></div>
     <section id="register">
@@ -55,7 +67,81 @@ button{cursor:pointer;border:0;border-radius:11px;padding:13px 15px;font:inherit
   const $ = id => document.getElementById(id);
   let sessionToken = "";
   const validToken = /^[A-Za-z0-9_-]{40,64}$/.test(token);
-  if (!validToken) { $("invalid").classList.remove("hidden"); $("app").classList.add("hidden"); return; }
+  if (!validToken) {
+    $("invalid").classList.add("hidden");
+    $("app").classList.add("hidden");
+    $("memberLogin").classList.remove("hidden");
+    let memberSession = "";
+    let memberCompanies = [];
+    const memberSay = (message, kind) => {
+      const el = $("memberMessage");
+      el.textContent = message;
+      el.className = "notice" + (kind ? " " + kind : "");
+      el.classList.remove("hidden");
+    };
+    $("memberSignIn").addEventListener("click", async () => {
+      const button = $("memberSignIn");
+      button.disabled = true;
+      try {
+        const email = $("memberEmail").value.trim();
+        const password = $("memberPassword").value;
+        if (!email || !password) throw new Error("اكتب البريد الإلكتروني وكلمة المرور.");
+        const response = await fetch(API + "/api/company/auth/login", {
+          method: "POST", headers: {"Content-Type":"application/json"},
+          body: JSON.stringify({email, password}), cache: "no-store", credentials: "omit"
+        });
+        const login = await response.json().catch(() => ({}));
+        if (!response.ok || !login.sessionToken) {
+          const errors = {
+            invalid_credentials: "البريد الإلكتروني أو كلمة المرور غير صحيحة.",
+            company_login_not_configured: "تسجيل الدخول غير متاح حاليًا على الخادم.",
+            rate_limited: "محاولات كتير. استنى شوية وحاول تاني.",
+            company_account_password_setup_required: "لازم تكمّل إعداد كلمة المرور من رابط الدعوة أولًا."
+          };
+          throw new Error(errors[login.error] || "تعذّر تسجيل الدخول: " + (login.error || "خطأ غير معروف"));
+        }
+        memberSession = login.sessionToken;
+        const meResponse = await fetch(API + "/api/company/auth/me", {
+          headers: {Authorization: "Bearer " + memberSession}, cache: "no-store", credentials: "omit"
+        });
+        const me = await meResponse.json().catch(() => ({}));
+        if (!meResponse.ok || !Array.isArray(me.companies)) throw new Error("تعذّر تحميل عضوية الشركة.");
+        memberCompanies = me.companies.filter(c => ["manager","employee","store_owner"].includes(String(c.role || "")));
+        if (!memberCompanies.length) throw new Error("الحساب دخل بنجاح، لكنه غير مرتبط بشركة حتى الآن. افتح رابط الدعوة الذي أرسله لك مالك الشركة واقبل الدعوة أولًا.");
+        $("memberCompany").innerHTML = "";
+        for (const company of memberCompanies) {
+          const option = document.createElement("option");
+          option.value = company.id;
+          option.textContent = company.displayName + " — " + (company.role === "manager" ? "مدير" : company.role === "employee" ? "موظف" : "مالك الشركة");
+          $("memberCompany").appendChild(option);
+        }
+        $("memberCompanies").classList.remove("hidden");
+        $("memberEmail").disabled = true;
+        $("memberPassword").disabled = true;
+        button.classList.add("hidden");
+        memberSay("تم تسجيل الدخول. اختار الشركة واضغط فتح واجهة الشركة.", "ok");
+      } catch (error) {
+        memberSay(error.message || "تعذّر تسجيل الدخول.", "error");
+      } finally {
+        button.disabled = false;
+      }
+    });
+    $("openMemberDashboard").addEventListener("click", () => {
+      const company = memberCompanies.find(c => c.id === $("memberCompany").value);
+      if (!company) { memberSay("اختار الشركة الأول.", "error"); return; }
+      if (company.ledgerEnabled !== true) { memberSay("الشركة لسه ما اتفعلش لها اشتراك نظام الشركة من مالك التطبيق.", "error"); return; }
+      const shopWindow = window.open("about:blank", "_blank");
+      if (!shopWindow) { memberSay("اسمح بفتح نافذة جديدة علشان نفتح لوحة الشركة بأمان.", "error"); return; }
+      const bridgeListener = event => {
+        if (event.origin !== location.origin || event.source !== shopWindow || event.data !== "DAGA_SHOP_READY") return;
+        shopWindow.postMessage({type:"DAGA_AUTH", token:memberSession, companyId:company.id}, location.origin);
+        window.removeEventListener("message", bridgeListener);
+      };
+      window.addEventListener("message", bridgeListener);
+      shopWindow.location.assign("/shop/");
+    });
+    return;
+  }
   // Keep the bearer invitation token only in this page's memory, not the visible URL/history.
   history.replaceState(null, "", location.pathname);
 

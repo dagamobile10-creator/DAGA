@@ -746,5 +746,18 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertIn('function json(data, status = 200) {\n  return new Response(JSON.stringify(data), { status, headers: cors({ "Content-Type": "application/json; charset=utf-8" }) });\n}', worker)
 
 
+    def test_invitation_registration_does_not_insert_into_undefined_security_events_table(self):
+        source = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
+        migrations = "\\n".join(path.read_text(encoding="utf-8") for path in (ROOT / "migrations").glob("*.sql"))
+        self.assertNotIn("daga_security_events", source)
+        self.assertNotIn("CREATE TABLE IF NOT EXISTS daga_security_events", migrations)
+        self.assertIn('await audit(db,aid,"company_invitation_accepted"', source)
+
+    def test_android_invitation_copy_has_clipboard_fallback(self):
+        portal = (ROOT / "company" / "portal.html").read_text(encoding="utf-8")
+        self.assertIn("navigator.clipboard.writeText(value)", portal)
+        self.assertIn('document.execCommand("copy")', portal)
+        self.assertIn('field.setSelectionRange(0,field.value.length)', portal)
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
