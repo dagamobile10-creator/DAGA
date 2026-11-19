@@ -693,7 +693,7 @@ async function refreshLiveWordBalance(){
   const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.error||'تعذر تحديث رصيد لايف ضجه');
   const company=(data.companies||data.shops||[]).find(c=>c.id===user.storeId);if(!company)return;
   const remaining=Math.max(0,Math.floor(Number(company.liveWordsRemaining)||0));
-  user.liveWordsRemaining=remaining;user.liveDagaEnabled=remaining>0&&(user.role==='store_owner'||user.permissions?.useLiveDaga===true);
+  user.liveWordsRemaining=remaining;user.liveDagaEnabled=company.liveDagaEnabled===true&&(user.role==='store_owner'||user.permissions?.useLiveDaga===true);
   const card=document.getElementById('liveBalanceCard'),value=document.getElementById('liveWordsRemaining');
   if(card)card.hidden=false;if(value)value.textContent=remaining.toLocaleString('en-US')+' حرف';
   document.querySelectorAll('button.liveBtn').forEach(button=>{button.hidden=false;button.disabled=!user.liveDagaEnabled;button.title=user.liveDagaEnabled?'':'رصيد لايف ضجه غير متاح أو انتهى. راجع مالك التطبيق لشحن الرصيد.';});
