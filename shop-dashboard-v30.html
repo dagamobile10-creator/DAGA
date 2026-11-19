@@ -230,7 +230,7 @@ function moneyImpactForManualEdit(ci,entryName,delta,existingEntry=null){
   if(agent){if(delta>0)return {delta:0,agentDelta:delta,agentName:agent,description:'إضافة شحن جديدة لخدمة '+agent+'؛ تزيد رصيد المندوب فقط بلا تأثير على الفلوس.'};return {delta:-delta,agentDelta:delta,agentName:agent,description:'استهلاك من رصيد خدمة '+agent+'؛ يقل رصيد المندوب بنفس المبلغ وتزيد الفلوس الأساسية بالمبلغ المستهلك.'};}
   return {delta:-delta,agentDelta:0,agentName:null,description:'تغيير رصيد بند نقدي داخل الكروت يقابله تغيير عكسي في الفلوس الأساسية.'};
  }
- if(col==='الرصيد')return {delta:0,agentDelta:0,agentName:null,description:'أرصدة المندوبين مستقلة تمامًا عن الفلوس؛ الإضافة أو الخصم أو الحذف لا يغيّر الفلوس.'};
+ if(col==='الرصيد'){if(canonicalServiceAgent(entryName))return {delta:0,agentDelta:0,agentName:null,description:'رصيد مندوب خدمة '+canonicalServiceAgent(entryName)+' مستقل عن الفلوس الأساسية؛ الشحن والاستهلاك يُعالجان من خلال قواعد الخدمة.'};return {delta:-delta,agentDelta:0,agentName:null,description:'البند العادي في عمود الرصيد مرتبط بالفلوس الأساسية عكسيًا؛ زيادة الرصيد تخصم من الفلوس، وتقليله أو حذفه يعيد الفرق للفلوس.'};}
  if(/^خارج/.test(col)){
   const deltaToMoney=existingEntry&&isDailyWithdrawalName(entryName)&&existingEntry[2]?.moneyPosted!==true?-(num(existingEntry[1])+delta):-delta;
   return {delta:deltaToMoney,agentDelta:0,agentName:null,description:'كل إضافة أو تعديل أو حذف في الخارج يؤثر على الفلوس الأساسية فور التأكيد؛ والسحب اليومي غير المرحّل يُرحّل بقيمته الجديدة مرة واحدة.'};
@@ -466,8 +466,11 @@ function review(){
  }
 
  if(p.type==='balanceAdd'){
-   pendingOrder={...p,mode:'balanceAdd',balanceIndex,cardsIndex};
-   out.innerHTML=`<div class="reconMini"><div><span>تاريخ ووقت المراجعة</span><b>${esc(localStamp())}</b></div><div><span>الأمر المفهوم</span><b>تسجيل ${fmt(p.amount)} جنيه في الرصيد باسم ${esc(p.name)}.</b></div><p class="small">إضافة رصيد للمندوب تسجل في عمود الرصيد فقط. الفلوس الأساسية لا تزيد ولا تنقص.</p><button class="primary" onclick="executeOrder()">تأكيد وتنفيذ</button><button onclick="pendingOrder=null;document.getElementById('orderPreview').innerHTML='تم إلغاء العملية.'">إلغاء</button></div>`;return;
+   const serviceAgent=canonicalServiceAgent(p.name),moneyDelta=serviceAgent?0:-p.amount,money=findMoneyEntry();
+   if(moneyDelta!==0&&!money){out.innerHTML='<p class="status">مش لاقي بند الفلوس الأساسية؛ لم يتم تجهيز العملية.</p>';return;}
+   if(money&&num(money.entry[1])+moneyDelta<0){out.innerHTML='<p class="status">إضافة الرصيد هتخلي الفلوس الأساسية بالسالب. راجع المبلغ.</p>';return;}
+   pendingOrder={...p,mode:'balanceAdd',balanceIndex,cardsIndex,serviceAgent,moneyDelta,moneyBefore:money?num(money.entry[1]):null};
+   out.innerHTML=`<div class="reconMini"><div><span>تاريخ ووقت المراجعة</span><b>${esc(localStamp())}</b></div><div><span>الأمر المفهوم</span><b>تسجيل ${fmt(p.amount)} جنيه في الرصيد باسم ${esc(p.name)}.</b></div><div>تأثير الفلوس الأساسية <b>${moneyDelta>0?'+':''}${fmt(moneyDelta)} ج.م</b></div>${money?`<div>الفلوس قبل <b>${fmt(num(money.entry[1]))} ج.م</b></div><div>الفلوس بعد <b>${fmt(num(money.entry[1])+moneyDelta)} ج.م</b></div>`:''}<p class="small">${serviceAgent?'ده رصيد مندوب '+esc(serviceAgent)+'؛ مستقل عن الفلوس الأساسية.':'ده بند رصيد عادي؛ إضافته تخصم نفس المبلغ من الفلوس الأساسية.'}</p><button class="primary" onclick="executeOrder()">تأكيد وتنفيذ</button><button onclick="pendingOrder=null;document.getElementById('orderPreview').innerHTML='تم إلغاء العملية.'">إلغاء</button></div>`;return;
  }
  if(p.type==='balancePayout'){
    const owed=Math.max(0,p.person.balance),paid=Math.min(p.amount,owed),excess=Math.max(0,p.amount-paid);
@@ -567,10 +570,12 @@ function executeOrderCore(){
    const outsideEntry=[p.name,String(p.amount)];if(isDailyWithdrawalName(p.name))outsideEntry[2]={moneyPosted:true};cols[p.targetIndex].entries.push(outsideEntry);
    addLedger('تسجيل خارج',`${p.name} — ${fmt(p.amount)} جنيه في الخارج؛ نقصت الفلوس الموجودة في عمود الكروت بنفس المبلغ.`,{column:cols[p.targetIndex].name,entryName:p.name,amount:p.amount,moneyDelta:-p.amount});
  }else if(p.mode==='balanceAdd'){
-   const agentName=normalizeServiceAgentLabel(p.name),serviceAgent=canonicalServiceAgent(agentName);
+   const agentName=normalizeServiceAgentLabel(p.name),serviceAgent=canonicalServiceAgent(agentName),money=findMoneyEntry();
+   if((p.moneyDelta||0)!==0&&(!money||num(money.entry[1])!==p.moneyBefore)){alert('الفلوس الأساسية اتغيرت من وقت المراجعة. راجع الإضافة من جديد.');pendingOrder=null;return;}
    if(serviceAgent){const applied=applyServiceAgentDelta(serviceAgent,p.amount);if(!applied.ok){alert(applied.message);pendingOrder=null;return;}}
    else addToNamed(p.balanceIndex,agentName,p.amount);
-   addLedger('إضافة رصيد مندوب',agentName+' — '+fmt(p.amount)+' جنيه في عمود الرصيد؛ الفلوس الأساسية لم تتغير.',{column:'الرصيد',entryName:agentName,amount:p.amount,moneyDelta:0,agentName,agentDelta:p.amount});
+   if((p.moneyDelta||0)!==0)money.entry[1]=String(num(money.entry[1])+p.moneyDelta);
+   addLedger('إضافة رصيد في عمود الرصيد',agentName+' — '+fmt(p.amount)+' جنيه؛ تأثير الفلوس الأساسية '+fmt(p.moneyDelta||0)+' جنيه.',{column:'الرصيد',entryName:agentName,amount:p.amount,moneyDelta:p.moneyDelta||0,agentName:serviceAgent?agentName:null,agentDelta:serviceAgent?p.amount:0});
  }else if(p.mode==='balancePayout'){
   const serviceAgent=canonicalServiceAgent(p.name),moneyCheck=findMoneyEntry();
   if(!serviceAgent){if(!moneyCheck){alert('مش لاقي بند الفلوس الأساسية. لم يتغير حساب الشخص.');pendingOrder=null;return}if(num(moneyCheck.entry[1])<p.amount){alert('الفلوس الأساسية أقل من المبلغ المطلوب. لم يتغير أي حساب.');pendingOrder=null;return}}
