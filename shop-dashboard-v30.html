@@ -90,11 +90,11 @@ button{transition:filter .15s,transform .15s;border-radius:14px}button:active{tr
 <div class="tablewrap"><table><thead><tr id="headers"></tr></thead><tbody><tr id="cells"></tr></tbody></table></div>
 <div class="actions">
 <button class="primary" onclick="voiceDaga()">🎙️ كلّم DAGA</button>
-<button class="liveBtn" onclick="showLiveComingSoon()">LIVE DAGA</button>
+<button class="liveBtn" onclick="openLiveDagaPanel()">LIVE DAGA</button>
 <button onclick="closeDay()">✓ تسوية اليوم</button>
 </div>
 </main>
-<nav class="bottom" aria-label="التنقل الرئيسي"><button class="active" onclick="showHome()">الرئيسية</button><button onclick="showTeam()">الفريق</button><button class="liveBtn" onclick="showLiveComingSoon()">LIVE DAGA</button><button onclick="voiceDaga()">🎙️ كلم ضجه</button><button onclick="showReports()">التقارير</button><button onclick="showSettings()">الإعدادات</button></nav>
+<nav class="bottom" aria-label="التنقل الرئيسي"><button class="active" onclick="showHome()">الرئيسية</button><button onclick="showTeam()">الفريق</button><button class="liveBtn" onclick="openLiveDagaPanel()">LIVE DAGA</button><button onclick="voiceDaga()">🎙️ كلم ضجه</button><button onclick="showReports()">التقارير</button><button onclick="showSettings()">الإعدادات</button></nav>
 <div class="modal" id="modal"><div class="sheet"><button class="close" onclick="closeModal()">×</button><div id="sheet"></div></div></div>
 <div id="dagaLivePanel" aria-hidden="true"><div class="livePanelHead"><span>LIVE DAGA</span><button type="button" onclick="closeLiveDagaPanel()">رجوع للداشبورد ×</button></div><iframe id="dagaLiveFrame" title="LIVE DAGA" allow="microphone; autoplay" referrerpolicy="no-referrer"></iframe></div>
 <script>
@@ -115,6 +115,7 @@ function loadStoreData(storeId){
  STORE_KEY='daga_dashboard_v30_store_'+encodeURIComponent(String(storeId));
  cols=JSON.parse(JSON.stringify(defaultCols));ledger=[];closedDays=[];
  try{const saved=JSON.parse(localStorage.getItem(STORE_KEY)||'null');if(saved){if(Array.isArray(saved.cols)&&saved.cols.length===10)cols=saved.cols;if(Array.isArray(saved.ledger))ledger=saved.ledger;if(Array.isArray(saved.closedDays))closedDays=saved.closedDays;}}catch(e){}
+ ensureMoneyEntry();
 }
 function persist(){try{localStorage.setItem(STORE_KEY,JSON.stringify({cols,ledger,closedDays}));return true}catch(e){alert('تعذر الحفظ على هذا الجهاز. صدّر نسخة احتياطية قبل المتابعة.');return false}}
 function num(v){return Number(String(v).replace(/[^0-9.-]/g,''))||0} function fmt(v){return Math.round(v).toLocaleString('en-US')} function esc(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
@@ -217,7 +218,7 @@ function confirmCreateEntry(){
 }
 function removeEntry(i){if(!cols[i].entries.length)return alert('مفيش بنود في العمود');open(`<h2>اختار البند للحذف</h2><p class="small">من عمود ${esc(cols[i].name)}. الحذف سيتسجل في سجل الحركات.</p>${cols[i].entries.map((e,j)=>`<button class="removeRow" onclick="confirmDelete(${i},${j})"><span>${esc(e[0])}</span><b>${fmt(num(e[1]))} ج.م</b></button>`).join('')}`)}
 function confirmDelete(i,j){const e=cols[i].entries[j],money=findMoneyEntry();let impact=moneyImpactForManualEdit(i,e[0],-num(e[1]),e);if(i===0&&!(money&&money.entry[0]===e[0]))impact={delta:0,description:'حذف بند من قائمة الكروت لا ينشئ حركة فلوس تلقائيًا؛ أي تسوية فعلية تُراجع وتسجل كعملية مستقلة.'};if(i===0&&money&&money.entry[0]===e[0]){open(`<h2>حذف بند الفلوس الأساسية؟</h2><p class="small">ده البند اللي باقي الحسابات مرتبطة بيه. حذفه هيوقف المزامنة المالية، لذلك مش هيتحذف من الشاشة دي. غيّر اسمه أو راجع إعدادات البند بدلًا من ذلك.</p><button class="primary" onclick="closeModal()">فهمت</button>`);return}if(impact.delta!==0&&!money){alert('مش لاقي بند الفلوس الأساسية؛ مش هحذف بندًا مرتبطًا ماليًا من غير ما أقدر أراجع أثره.');return}if(money&&num(money.entry[1])+impact.delta<0){alert('حذف البند هيخلي الفلوس الأساسية بالسالب. راجع الحساب.');return}open(`<h2>مراجعة حذف بند</h2><div class="reconMini"><div>وقت المراجعة <b>${esc(localStamp())}</b></div><div>البند <b>${esc(e[0])} — ${esc(cols[i].name)}</b></div><div>القيمة المراد حذفها <b>${fmt(num(e[1]))} ج.م</b></div><div>تأثير الفلوس الأساسية <b>${impact.delta>0?'+':''}${fmt(impact.delta)} ج.م</b></div>${money?`<div>الفلوس قبل <b>${fmt(num(money.entry[1]))} ج.م</b></div><div>الفلوس بعد <b>${fmt(num(money.entry[1])+impact.delta)} ج.م</b></div>`:''}</div><p class="small">سيختفي البند من العرض الحالي، مع الاحتفاظ بسجل الحذف في التاريخ. حذف بند من الكروت وحده لا يغيّر الفلوس تلقائيًا.</p><div class="grid"><button class="primary" onclick="doDelete(${i},${j},${impact.delta},${money?num(money.entry[1]):'null'})">تأكيد الحذف</button><button onclick="removeEntry(${i})">رجوع</button></div>`)}
-function doDelete(i,j,impactDelta=0,moneyBefore=null){const e=cols[i].entries[j];if(!e)return;const money=findMoneyEntry();if(impactDelta!==0&&(!money||num(money.entry[1])!==moneyBefore)){alert('الفلوس الأساسية اتغيرت من وقت المراجعة. راجع الحذف من جديد.');render();return}if(impactDelta!==0)money.entry[1]=String(num(money.entry[1])+impactDelta);const removed=cols[i].entries.splice(j,1)[0];addLedger('حذف بند بعد مراجعة',`${removed[0]} — ${fmt(num(removed[1]))} جنيه من ${cols[i].name}; تأثير الفلوس ${impactDelta>0?'+':''}${fmt(impactDelta)} جنيه.`,{column:cols[i].name,entryName:removed[0],oldValue:num(removed[1]),newValue:null,moneyDelta:impactDelta});closeModal();persist();render()}
+function doDelete(i,j,impactDelta=0,moneyBefore=null){const backup={cols:JSON.parse(JSON.stringify(cols)),ledger:JSON.parse(JSON.stringify(ledger)),closedDays:JSON.parse(JSON.stringify(closedDays))};const e=cols[i].entries[j];if(!e)return;const money=findMoneyEntry();if(impactDelta!==0&&(!money||num(money.entry[1])!==moneyBefore)){alert('الفلوس الأساسية اتغيرت من وقت المراجعة. راجع الحذف من جديد.');render();return}if(impactDelta!==0)money.entry[1]=String(num(money.entry[1])+impactDelta);const removed=cols[i].entries.splice(j,1)[0];addLedger('حذف بند بعد مراجعة',`${removed[0]} — ${fmt(num(removed[1]))} جنيه من ${cols[i].name}; تأثير الفلوس ${impactDelta>0?'+':''}${fmt(impactDelta)} جنيه.`,{column:cols[i].name,entryName:removed[0],oldValue:num(removed[1]),newValue:null,moneyDelta:impactDelta});closeModal();if(!persist()){cols=backup.cols;ledger=backup.ledger;closedDays=backup.closedDays;persist();render();return;}render()}
 function editEntry(i,j){const e=cols[i].entries[j];open(`<h2>تعديل البند</h2><p class="small">العمود: <b>${esc(cols[i].name)}</b></p><label>الاسم / البيان</label><input id="n" value="${esc(e[0])}"><label>المبلغ / القيمة</label><input id="a" value="${esc(e[1])}" inputmode="decimal"><p class="small">وقت طلب التعديل: ${esc(localStamp())}. قبل الحفظ هتظهر مراجعة بالفرق وتأثيره المتوقع على الفلوس الأساسية.</p><div class="grid"><button class="primary" onclick="saveEntry(${i},${j})">مراجعة التعديل</button><button onclick="deleteEntry(${i},${j})">حذف البند</button></div>`)}
 let pendingManualEdit=null;
 function moneyImpactForManualEdit(ci,entryName,delta,existingEntry=null){
@@ -230,8 +231,14 @@ function moneyImpactForManualEdit(ci,entryName,delta,existingEntry=null){
   return {delta:-delta,agentDelta:0,agentName:null,description:'تغيير رصيد بند نقدي داخل الكروت يقابله تغيير عكسي في الفلوس الأساسية.'};
  }
  if(col==='الرصيد')return {delta:0,agentDelta:0,agentName:null,description:'أرصدة المندوبين مستقلة تمامًا عن الفلوس؛ الإضافة أو الخصم أو الحذف لا يغيّر الفلوس.'};
- if(/^خارج/.test(col)){if(existingEntry&&isDailyWithdrawalName(entryName)&&existingEntry[2]?.moneyPosted!==true)return {delta:0,agentDelta:0,agentName:null,description:'ده سحب يومي قديم لم يُرحّل بعد؛ هيُحسب في التسوية مرة واحدة.'};return {delta:-delta,agentDelta:0,agentName:null,description:'زيادة المستحق/الخارج تقلل الفلوس الأساسية، وتقليله يزيدها.'};}
- if(/^كاش/.test(col)||normAccountingName(col)==='الاكسسوار'){if(existingEntry&&existingEntry[2]?.moneyPosted!==true)return {delta:0,agentDelta:0,agentName:null,description:'ده رصيد يومي قديم لم يُرحّل بعد؛ هيُحسب في التسوية مرة واحدة.'};return {delta,agentDelta:0,agentName:null,description:'الكاش والإكسسوار ينعكسوا على الفلوس الأساسية فور التسجيل.'};}
+ if(/^خارج/.test(col)){
+  const deltaToMoney=existingEntry&&isDailyWithdrawalName(entryName)&&existingEntry[2]?.moneyPosted!==true?-(num(existingEntry[1])+delta):-delta;
+  return {delta:deltaToMoney,agentDelta:0,agentName:null,description:'كل إضافة أو تعديل أو حذف في الخارج يؤثر على الفلوس الأساسية فور التأكيد؛ والسحب اليومي غير المرحّل يُرحّل بقيمته الجديدة مرة واحدة.'};
+ }
+ if(/^كاش/.test(col)||normAccountingName(col)==='الاكسسوار'){
+  const deltaToMoney=existingEntry&&existingEntry[2]?.moneyPosted!==true?num(existingEntry[1])+delta:delta;
+  return {delta:deltaToMoney,agentDelta:0,agentName:null,description:'الكاش والإكسسوار يؤثران على الفلوس الأساسية فور التأكيد؛ وأي بند يومي قديم غير مرحّل يُحتسب بقيمته الجديدة مرة واحدة.'};
+ }
  return {delta:0,agentDelta:0,agentName:null,description:'لم تُحدد قاعدة ربط تلقائية لهذا العمود؛ سيتم حفظ تعديل البند فقط.'};
 }
 
@@ -248,6 +255,7 @@ function saveEntry(i,j){
  open(`<h2>مراجعة تعديل يدوي</h2><div class="reconMini"><div>وقت المراجعة <b>${esc(localStamp(pendingManualEdit.requestedAt))}</b></div><div>البند <b>${esc(old[0])} — ${esc(cols[i].name)}</b></div><div>القيمة القديمة <b>${fmt(num(old[1]))} ج.م</b></div><div>القيمة الجديدة <b>${fmt(newAmount)} ج.م</b></div><div>الفرق في البند <b>${delta>0?'+':''}${fmt(delta)} ج.م</b></div><div>تأثير الفلوس الأساسية <b>${impact.delta>0?'+':''}${fmt(impact.delta)} ج.م</b></div>${impact.agentName?`<div>المندوب ${esc(impact.agentName)} <b>${impact.agentDelta>0?'+':''}${fmt(impact.agentDelta)} ج.م</b></div>`:''}${money?`<div>الفلوس قبل <b>${fmt(num(money.entry[1]))} ج.م</b></div><div>الفلوس بعد <b>${fmt(num(money.entry[1])+impact.delta)} ج.م</b></div>`:''}</div><p class="small">${esc(impact.description)}</p><p class="small">دي مراجعة فقط. لن يتغير أي رقم قبل التأكيد.</p><div class="grid"><button class="primary" onclick="confirmManualEdit()">تأكيد وتنفيذ</button><button onclick="pendingManualEdit=null;editEntry(${i},${j})">رجوع</button></div>`);
 }
 function confirmManualEdit(){
+ const transactionBackup={cols:JSON.parse(JSON.stringify(cols)),ledger:JSON.parse(JSON.stringify(ledger)),closedDays:JSON.parse(JSON.stringify(closedDays))};
  const p=pendingManualEdit;if(!p)return;const current=cols[p.i]?.entries[p.j];
  if(!current||current[0]!==p.old[0]||num(current[1])!==num(p.old[1])){pendingManualEdit=null;alert('البند اتغير من وقت المراجعة. افتح التعديل من جديد.');render();return}
  const money=findMoneyEntry();
@@ -255,9 +263,10 @@ function confirmManualEdit(){
  if(p.impact.agentDelta&&getServiceAgentBalance(p.impact.agentName).value!==p.agentBefore){pendingManualEdit=null;alert('رصيد المندوب اتغير من وقت المراجعة. راجع العملية من جديد.');render();return}
  if(p.impact.agentDelta){const a=applyServiceAgentDelta(p.impact.agentName,p.impact.agentDelta);if(!a.ok){alert(a.message);return}}
  if(p.impact.delta!==0)money.entry[1]=String(num(money.entry[1])+p.impact.delta);
- cols[p.i].entries[p.j]=[p.n,String(p.newAmount),...(p.old[2]!==undefined?[p.old[2]]:[])];
+ const updatedMeta={...(p.old[2]||{})};if(/^خارج/.test(cols[p.i].name)||isDailyMoneyColumn(p.i))updatedMeta.moneyPosted=true;
+ cols[p.i].entries[p.j]=[p.n,String(p.newAmount),updatedMeta];
  addLedger('تعديل يدوي مع مراجعة',p.old[0]+' ('+fmt(num(p.old[1]))+') ← '+p.n+' ('+fmt(p.newAmount)+') في '+cols[p.i].name+'؛ فرق البند '+fmt(p.delta)+'؛ تأثير الفلوس '+fmt(p.impact.delta)+(p.impact.agentName?'؛ رصيد '+p.impact.agentName+' '+fmt(p.impact.agentDelta):''),{column:cols[p.i].name,entryName:p.n,previousName:p.old[0],oldValue:num(p.old[1]),newValue:p.newAmount,moneyDelta:p.impact.delta,agentName:p.impact.agentName||null,agentDelta:p.impact.agentDelta||0});
- pendingManualEdit=null;persist();closeModal();render();open('<h2>تم تنفيذ التعديل</h2><p class="status">تم الحفظ بعد تأكيدك.</p><button class="primary" onclick="closeModal()">تمام</button>');
+ pendingManualEdit=null;if(!persist()){cols=transactionBackup.cols;ledger=transactionBackup.ledger;closedDays=transactionBackup.closedDays;render();return;}closeModal();render();open('<h2>تم تنفيذ التعديل</h2><p class="status">تم الحفظ بعد تأكيدك.</p><button class="primary" onclick="closeModal()">تمام</button>');
 }
 function showEntryHistory(ci,ei){
  const col=cols[ci],entry=col?.entries[ei];if(!entry)return;
@@ -503,7 +512,7 @@ function answerClarification(choice){
  pendingClarification=null;
  if(out)out.innerHTML=`<div class="reconMini"><div>الإجابة <b>تسوية/نقل من الرصيد</b></div><div>الاسم <b>${esc(q.person.name)}</b></div><div>الموجود في الرصيد <b>${fmt(currentBalance)} جنيه</b></div><div>هيتنقل من الرصيد للخارج <b>${fmt(transfer)} جنيه</b></div><div>هيتسجل كمبلغ جديد في الخارج <b>${fmt(remaining)} جنيه</b></div><div>تأثير بند فلوس <b>صفر؛ دي تسوية داخلية بين بندين</b></div></div><p class="small">راجع التوزيع قبل التنفيذ. مش هيتغير أي رقم قبل التأكيد.</p><button class="primary" onclick="executeOrder()">تأكيد وتنفيذ</button><button onclick="pendingOrder=null;document.getElementById('orderPreview').innerHTML='تم إلغاء العملية.'">إلغاء</button>`;
 }
-function executeOrder(){
+function executeOrderCore(){
  dagaLastOrderSaved=false;
  if(!pendingOrder)return; const p=pendingOrder;
  const findEntry=(ci,name)=>cols[ci].entries.findIndex(e=>e[0]===name);
@@ -584,12 +593,20 @@ function executeOrder(){
  pendingOrder=null; dagaLastOrderSaved=persist(); render();
  const box=document.getElementById('orderPreview'); if(box)box.innerHTML='<p class="status">تم تسجيل الحركة بعد التأكيد، وتم تحديث بند الفلوس الموجود في عمود الكروت مباشرةً. راجع الإجماليات.</p>';
 }
+
+function executeOrder(){
+ const backup={cols:JSON.parse(JSON.stringify(cols)),ledger:JSON.parse(JSON.stringify(ledger)),closedDays:JSON.parse(JSON.stringify(closedDays))};
+ dagaLastOrderSaved=false;
+ try{executeOrderCore()}catch(error){console.error('DAGA order execution failed',error);}
+ if(dagaLastOrderSaved!==true){cols=backup.cols;ledger=backup.ledger;closedDays=backup.closedDays;persist();render();}
+}
+
 let dagaLastOrderSaved=false;
 let dagaLiveSnapshotTimer=null;
 let dagaLiveWindow=null;
 let dagaLiveOrderPending=false;
 let dagaLiveOrderSummary='';
-function showLiveComingSoon(){
+function openLiveDagaPanel(){
  const user=window.DAGA_AUTH_USER||{};
  if(user.smartAssistantEnabled!==true||user.liveDagaEnabled!==true)return;
  if(!window.DAGA_SESSION_TOKEN)return;
