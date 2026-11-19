@@ -567,7 +567,9 @@ function executeOrderCore(){
    const outsideEntry=[p.name,String(p.amount)];if(isDailyWithdrawalName(p.name))outsideEntry[2]={moneyPosted:true};cols[p.targetIndex].entries.push(outsideEntry);
    addLedger('تسجيل خارج',`${p.name} — ${fmt(p.amount)} جنيه في الخارج؛ نقصت الفلوس الموجودة في عمود الكروت بنفس المبلغ.`,{column:cols[p.targetIndex].name,entryName:p.name,amount:p.amount,moneyDelta:-p.amount});
  }else if(p.mode==='balanceAdd'){
-   const agentName=normalizeServiceAgentLabel(p.name);addToNamed(p.balanceIndex,agentName,p.amount);
+   const agentName=normalizeServiceAgentLabel(p.name),serviceAgent=canonicalServiceAgent(agentName);
+   if(serviceAgent){const applied=applyServiceAgentDelta(serviceAgent,p.amount);if(!applied.ok){alert(applied.message);pendingOrder=null;return;}}
+   else addToNamed(p.balanceIndex,agentName,p.amount);
    addLedger('إضافة رصيد مندوب',agentName+' — '+fmt(p.amount)+' جنيه في عمود الرصيد؛ الفلوس الأساسية لم تتغير.',{column:'الرصيد',entryName:agentName,amount:p.amount,moneyDelta:0,agentName,agentDelta:p.amount});
  }else if(p.mode==='balancePayout'){
   const serviceAgent=canonicalServiceAgent(p.name),moneyCheck=findMoneyEntry();
