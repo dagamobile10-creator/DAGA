@@ -14,7 +14,7 @@ export async function handleCompanyInvitations(request, env, url) {
   const db = env.DAGA_APP_DB;
   if (!db) return json(env, { error: "application_database_not_configured" }, 503);
   if (path === "/api/company/auth/register" && request.method === "POST") return registerStart(request, env, db);
-  if (path === "/api/company/auth/register/verify" && request.method === "POST") return registerVerify(request, env, db);
+  if (path === "/api/company/auth/register/verify" && request.method === "POST") { try { return await registerVerify(request, env, db); } catch (error) { console.error("company_invitation_register_verify_failed", error instanceof Error ? error.name : "unknown_error", error instanceof Error ? error.message.slice(0, 240) : "unknown"); return json(env, { error: "account_registration_unexpected_failure", ...(url.hostname === "daga-app-staging.dagamobile10.workers.dev" ? { diagnostic: error instanceof Error ? error.message.slice(0, 240) : "unknown_error" } : {}) }, 500); } }
   if (path === "/api/company/auth/login" && request.method === "POST") return companyLoginStart(request, env, db);
   if (path === "/api/company/auth/setup/start" && request.method === "POST") return companySetupStart(request, env, db);
   if (path === "/api/company/auth/setup/verify" && request.method === "POST") {
@@ -267,9 +267,9 @@ db.prepare("INSERT INTO daga_accounts (id,public_id,email,display_name,role,stat
 db.prepare("INSERT INTO daga_account_credentials (account_id,password_hash,password_salt,password_iterations,recovery_code_hash,created_at,updated_at) SELECT ?,?,?,100000,?,?,? WHERE EXISTS (SELECT 1 FROM daga_accounts WHERE id=?)").bind(aid,passwordHash,salt,rh,now,now,aid),
 db.prepare("INSERT INTO daga_store_memberships (id,store_id,account_id,role,status,permissions_json,invited_by_account_id,created_at,updated_at) SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM daga_accounts WHERE id=?) AND EXISTS (SELECT 1 FROM daga_store_invitations WHERE id=? AND status='accepted' AND accepted_by_account_id=? AND use_count=1)").bind(mid,invite.store_id,aid,invite.intended_role,"active",invite.permissions_json||"{}",invite.inviter_account_id,now,now,aid,invite.id,aid),
 db.prepare("INSERT INTO daga_auth_sessions (id,account_id,token_hash,created_at,expires_at,last_seen_at) SELECT ?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM daga_store_memberships WHERE id=? AND account_id=?)").bind(sid,aid,sessionHash,now,expiry,now,mid,aid),
-db.prepare("INSERT INTO daga_security_events (id,account_id,event_type,outcome,details_json) SELECT ?,?,'company_invitation_accepted','success',? WHERE EXISTS (SELECT 1 FROM daga_store_memberships WHERE id=? AND account_id=?)").bind(crypto.randomUUID(),aid,JSON.stringify({storeId:invite.store_id,role:invite.intended_role}),mid,aid)
+/* membership and session are recorded atomically; audit follows after commit */
 ]);}catch(error){console.error("company_invitation_registration_batch_failed",error instanceof Error?error.name:"unknown_error",error instanceof Error?error.message.slice(0,240):"unknown");return json(env,{error:"account_registration_conflict_or_failed",...(new URL(request.url).hostname==="daga-app-staging.dagamobile10.workers.dev"?{diagnostic:error instanceof Error?error.message.slice(0,240):"unknown_error"}:{})},409);}
-if([1,2,3,4,5,6].some(i=>Number(results?.[i]?.meta?.changes||0)!==1))return json(env,{error:"registration_race_or_conflict_retry"},409);
+if([1,2,3,4,5].some(i=>Number(results?.[i]?.meta?.changes||0)!==1))return json(env,{error:"registration_race_or_conflict_retry"},409);
 await audit(db,aid,"company_invitation_accepted",invite.id,{storeId:invite.store_id,role:invite.intended_role});
 return json(env,{ok:true,account:{id:aid,publicId,displayName:name,role:invite.intended_role,emailMasked:maskCompanyEmail(email)},membership:{id:mid,companyPublicId:null,role:invite.intended_role,status:"active"},sessionToken:tokenOut,expiresAt:expiry,nextStep:"complete"},201);
 }
