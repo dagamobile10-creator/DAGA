@@ -677,7 +677,7 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertIn('const resolvedStoreId=ownedStore.id', handler)
         self.assertIn('account.role!==\"store_owner\"', handler)
         self.assertIn('const ownedStore=storeId', handler)
-        self.assertIn('owner_account_id=? AND status=\\'approved\\'', handler)
+        self.assertIn("owner_account_id=? AND status='approved'", handler)
         self.assertIn('Number(prior.words)===words&&prior.note===adjustmentNote', handler)
         self.assertIn('error:"word_adjustment_conflict"', handler)
         self.assertIn('request_id TEXT UNIQUE', (ROOT / "migrations" / "0001_daga_core.sql").read_text(encoding="utf-8"))
