@@ -240,7 +240,7 @@ class InvitationSchemaTests(unittest.TestCase):
 
     def test_company_portal_supports_invite_creation_and_revocation(self):
         portal = (ROOT / "company" / "portal.html").read_text(encoding="utf-8")
-        self.assertIn("/api/company/auth/login", portal)
+        self.assertIn("/api/company/owner/auth/login", portal)
         self.assertIn("/api/company/auth/me", portal)
         self.assertIn("/api/company/invitations", portal)
         self.assertIn("/revoke", portal)
@@ -676,7 +676,8 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertIn('prior.account_id===accountId&&prior.store_id===resolvedStoreId', handler)
         self.assertIn('const resolvedStoreId=ownedStore.id', handler)
         self.assertIn('account.role!==\"store_owner\"', handler)
-        self.assertIn('ownedStore=await db.prepare("SELECT id FROM daga_stores WHERE owner_account_id=? AND status=', handler)
+        self.assertIn('const ownedStore=storeId', handler)
+        self.assertIn('owner_account_id=? AND status=\\'approved\\'', handler)
         self.assertIn('Number(prior.words)===words&&prior.note===adjustmentNote', handler)
         self.assertIn('error:"word_adjustment_conflict"', handler)
         self.assertIn('request_id TEXT UNIQUE', (ROOT / "migrations" / "0001_daga_core.sql").read_text(encoding="utf-8"))
