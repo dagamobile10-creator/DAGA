@@ -2,8 +2,8 @@
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>DAGA | ضجه — لوحة صاحب الشركه v21 (إصلاح بند الفلوس الأساسية وربط الإكسسوار)</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#0d0d0c">
+<title>DAGA | ضجه — تطبيق إدارة الشركة</title>
 <style>
 *{box-sizing:border-box}body{margin:0;background:#070707;color:#f4f1e9;font-family:Arial,"Noto Sans Arabic",sans-serif}
 .top{background:#0d0d0c;border-bottom:1px solid #29261f;padding:14px 16px}.row{display:flex;justify-content:space-between;align-items:center}
@@ -30,7 +30,47 @@ td{padding:8px;min-width:165px;height:520px}td:first-child{position:sticky;right
 @media(max-width:520px){.avatar{width:76px;height:76px}.num{font-size:29px}}
 
 .colTotal{display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding:9px 2px 8px;border-top:1px solid #25221c;color:#9f9889;font-size:11px}.colTotal b{color:#e8d09a;font-size:13px}.colFooter{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:2px;padding-top:8px;border-top:1px solid #25221c}.miniBtn{padding:8px 6px!important;border-radius:10px!important;font-size:11px!important}.miniBtn.danger{border-color:#5a3028;color:#f0c0b5}.entryList{min-height:520px}.removeRow{width:100%;display:flex;justify-content:space-between;align-items:center;margin:7px 0;padding:12px;background:#12110f}.confirmItem{display:flex;justify-content:space-between;background:#0d0d0c;border:1px solid #302a21;border-radius:14px;padding:13px;margin:12px 0}
-button{cursor:pointer}button:disabled{opacity:.55;cursor:not-allowed}.removeRow{display:flex;justify-content:space-between;width:100%;margin:6px 0}.entryList{padding-bottom:3px}.reconMini button{width:100%;margin-top:7px}.liveBtn{background:linear-gradient(135deg,#35280f,#17130b);border:1px solid #b9903d;color:#f2cf7a;font-weight:800;box-shadow:inset 0 0 0 1px rgba(255,220,140,.08)}.liveSoon{border:1px solid #6f572a;background:#15120c;border-radius:16px;padding:16px;margin:12px 0}.liveSoon .liveDot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#d7ad52;margin-left:7px;box-shadow:0 0 12px rgba(215,173,82,.45)}</style>
+button{cursor:pointer}button:disabled{opacity:.55;cursor:not-allowed}.removeRow{display:flex;justify-content:space-between;width:100%;margin:6px 0}.entryList{padding-bottom:3px}.reconMini button{width:100%;margin-top:7px}.liveBtn{background:linear-gradient(135deg,#35280f,#17130b);border:1px solid #b9903d;color:#f2cf7a;font-weight:800;box-shadow:inset 0 0 0 1px rgba(255,220,140,.08)}.liveSoon{border:1px solid #6f572a;background:#15120c;border-radius:16px;padding:16px;margin:12px 0}.liveSoon .liveDot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#d7ad52;margin-left:7px;box-shadow:0 0 12px rgba(215,173,82,.45)}
+/* DAGA mobile app shell — presentation only; existing accounting and actions remain unchanged */
+:root{color-scheme:dark;--daga-gold:#d7ae58;--daga-gold-soft:#f0d28f;--daga-bg:#070706;--daga-panel:#11110f;--daga-line:#302a20}
+html{background:var(--daga-bg);scroll-behavior:smooth}
+body{min-height:100vh;background:radial-gradient(ellipse at 50% -12%,rgba(215,174,88,.12),transparent 38%),linear-gradient(180deg,#090908 0%,#070706 62%,#0b0a08 100%);padding-bottom:env(safe-area-inset-bottom)}
+.top{position:sticky;top:0;z-index:18;padding:calc(11px + env(safe-area-inset-top)) max(16px,calc((100vw - 1160px)/2));background:rgba(13,13,12,.94);backdrop-filter:blur(18px);border-bottom:1px solid rgba(215,174,88,.18);box-shadow:0 8px 28px rgba(0,0,0,.22)}
+.brand{font-size:clamp(21px,3vw,25px);letter-spacing:.2px}.brand b{color:var(--daga-gold-soft);text-shadow:0 0 18px rgba(215,174,88,.16)}
+.company{font-size:12px;letter-spacing:.15px}.date{font-variant-numeric:tabular-nums;font-size:12px;line-height:1.65}
+main{max-width:1160px;padding:20px 16px calc(112px + env(safe-area-inset-bottom))}
+.hero{position:relative;overflow:hidden;min-height:120px;background:linear-gradient(115deg,rgba(215,174,88,.09),transparent 52%),linear-gradient(180deg,#141410,#10100e);border-color:#453923;box-shadow:0 14px 38px rgba(0,0,0,.18)}
+.hero:after{content:"";position:absolute;width:190px;height:190px;border:1px solid rgba(215,174,88,.08);border-radius:50%;left:-76px;top:-110px;pointer-events:none}
+.hero h1{font-size:clamp(19px,3vw,23px);letter-spacing:-.25px}.hero p{max-width:760px;font-size:12px}
+.avatar{border-radius:22px;border-color:#8b6b36;box-shadow:0 0 0 4px rgba(215,174,88,.045),0 10px 25px #0008}
+.balance{position:relative;overflow:hidden;border-radius:20px;background:linear-gradient(145deg,#15140f,#0e0e0c);border-color:#443722;box-shadow:0 10px 28px rgba(0,0,0,.16)}
+.balance .label{font-size:12px;letter-spacing:.15px}.balance .num{font-size:clamp(27px,5vw,36px);letter-spacing:.2px;font-variant-numeric:tabular-nums}
+#liveWordBalanceCard{background:linear-gradient(120deg,rgba(90,65,22,.2),transparent 72%),#10100e;border-color:#4a3a20}
+.recon{border-radius:20px;background:linear-gradient(150deg,#14130f,#0d0d0c);border-color:#493a23;box-shadow:0 12px 30px rgba(0,0,0,.14)}
+.reconTitle{display:flex;align-items:center;gap:9px;font-size:17px}.reconTitle:before{content:"";width:4px;height:18px;border-radius:8px;background:var(--daga-gold);box-shadow:0 0 12px #d7ae5855}
+.reconGrid div{border-radius:13px;background:#0a0a09;border-color:#332d22}.reconGrid b{font-variant-numeric:tabular-nums}
+.title{display:flex;align-items:center;gap:9px;font-size:18px}.title:before{content:"";width:4px;height:19px;border-radius:8px;background:var(--daga-gold)}
+.hint{line-height:1.85}
+.tablewrap{border-color:#3b3325;border-radius:18px;box-shadow:0 14px 35px rgba(0,0,0,.18);scrollbar-color:#68512c #111}
+th{background:#19170f;color:#e0bd72}td:first-child{background:#12120f}
+.entry{background:linear-gradient(145deg,#151410,#10100e);border-color:#302b22;border-radius:13px;transition:border-color .16s,transform .16s}
+.entry:active{transform:scale(.99)}.entry .amount{color:#f0dfb9;font-variant-numeric:tabular-nums}
+.colTotal{color:#b1a58e}.colTotal b{color:#e5c77f}
+button{transition:filter .15s,transform .15s;border-radius:14px}button:active{transform:translateY(1px)}button.primary{background:linear-gradient(135deg,#edc875,#c99a43);box-shadow:0 7px 22px rgba(215,174,88,.14)}
+.actions{gap:10px;margin-top:18px}.actions button{min-height:52px}
+.bottom{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:3px;justify-content:stretch;padding:7px 8px calc(7px + env(safe-area-inset-bottom));background:rgba(13,13,12,.96);backdrop-filter:blur(20px);border-top:1px solid rgba(215,174,88,.2);box-shadow:0 -12px 35px rgba(0,0,0,.35)}
+.bottom button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-width:0;min-height:52px;padding:5px 2px;border:1px solid transparent;border-radius:12px;color:#a9a397;font-size:clamp(9px,2.2vw,11px);line-height:1.25;white-space:normal}
+.bottom button:before{font-size:17px;line-height:1.15;opacity:.9}
+.bottom button:nth-child(1):before{content:"⌂"}.bottom button:nth-child(2):before{content:"♙"}.bottom button:nth-child(3):before{content:"◉"}.bottom button:nth-child(4):before{content:"🎙"}.bottom button:nth-child(5):before{content:"▤"}.bottom button:nth-child(6):before{content:"⚙"}
+.bottom button.active{color:var(--daga-gold-soft);background:rgba(215,174,88,.09);border-color:rgba(215,174,88,.18)}
+.bottom button.liveBtn{background:linear-gradient(180deg,rgba(75,55,20,.42),rgba(20,16,9,.5));color:#e8c779}
+.modal{background:rgba(0,0,0,.78);backdrop-filter:blur(8px)}
+.sheet{border-color:#59472b;box-shadow:0 24px 80px #000b;background:linear-gradient(180deg,#151512,#0d0d0c)}
+@media(min-width:760px){main{padding-top:26px}.hero{padding:20px}.balance{padding:20px}.bottom{left:50%;right:auto;bottom:14px;transform:translateX(-50%);width:min(720px,calc(100% - 32px));border:1px solid rgba(215,174,88,.22);border-radius:19px;padding:8px;box-shadow:0 15px 45px #000b}.bottom button{font-size:12px}}
+@media(max-width:520px){main{padding:13px 10px calc(100px + env(safe-area-inset-bottom))}.hero{gap:11px;padding:12px;border-radius:19px}.avatar{width:68px;height:68px;border-radius:17px}.hero h1{font-size:17px}.hero p{font-size:11px;line-height:1.65}.balance{padding:14px;border-radius:18px;margin-top:10px}.recon{padding:12px;border-radius:18px}.reconGrid{gap:6px}.reconGrid div{padding:9px 7px}.reconGrid span{font-size:10px}.reconGrid b{font-size:15px}.title{margin-top:20px}.actions{gap:8px}.actions button{font-size:13px;padding:12px 7px}.bottom{gap:1px;padding-left:5px;padding-right:5px}.bottom button{font-size:9px}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*:before,*:after{transition:none!important;animation:none!important}}
+
+</style>
 </head>
 <body>
 <header class="top"><div class="row"><div><div class="brand"><b>ضجه</b> | DAGA</div><div class="company" id="accountRoleLabel">الشركة — مالك الشركة</div></div><div class="date" id="liveDate">توقيت مصر<br>—</div></div></header>
@@ -48,7 +88,7 @@ button{cursor:pointer}button:disabled{opacity:.55;cursor:not-allowed}.removeRow{
 <button onclick="closeDay()">✓ تسوية اليوم</button>
 </div>
 </main>
-<nav class="bottom"><button class="active" onclick="showHome()">الرئيسية</button><button onclick="showTeam()">الفريق</button><button class="liveBtn" onclick="showLiveComingSoon()">LIVE DAGA</button><button onclick="voiceDaga()">🎙️ كلم ضجه</button><button onclick="showReports()">التقارير</button><button onclick="showSettings()">الإعدادات</button></nav>
+<nav class="bottom" aria-label="التنقل الرئيسي"><button class="active" onclick="showHome()">الرئيسية</button><button onclick="showTeam()">الفريق</button><button class="liveBtn" onclick="showLiveComingSoon()">LIVE DAGA</button><button onclick="voiceDaga()">🎙️ كلم ضجه</button><button onclick="showReports()">التقارير</button><button onclick="showSettings()">الإعدادات</button></nav>
 <div class="modal" id="modal"><div class="sheet"><button class="close" onclick="closeModal()">×</button><div id="sheet"></div></div></div>
 <script>
 const defaultCols=[
