@@ -497,6 +497,7 @@ function answerClarification(choice){
  if(out)out.innerHTML=`<div class="reconMini"><div>الإجابة <b>تسوية/نقل من الرصيد</b></div><div>الاسم <b>${esc(q.person.name)}</b></div><div>الموجود في الرصيد <b>${fmt(currentBalance)} جنيه</b></div><div>هيتنقل من الرصيد للخارج <b>${fmt(transfer)} جنيه</b></div><div>هيتسجل كمبلغ جديد في الخارج <b>${fmt(remaining)} جنيه</b></div><div>تأثير بند فلوس <b>صفر؛ دي تسوية داخلية بين بندين</b></div></div><p class="small">راجع التوزيع قبل التنفيذ. مش هيتغير أي رقم قبل التأكيد.</p><button class="primary" onclick="executeOrder()">تأكيد وتنفيذ</button><button onclick="pendingOrder=null;document.getElementById('orderPreview').innerHTML='تم إلغاء العملية.'">إلغاء</button>`;
 }
 function executeOrder(){
+ dagaLastOrderSaved=false;
  if(!pendingOrder)return; const p=pendingOrder;
  const findEntry=(ci,name)=>cols[ci].entries.findIndex(e=>e[0]===name);
  if(p.mode==='namedEntrySet'){
@@ -508,7 +509,7 @@ function executeOrder(){
   if(p.agentDelta){const a=applyServiceAgentDelta(p.agentName,p.agentDelta);if(!a.ok){alert(a.message);return}}
   row[1]=String(p.newAmount);if(p.moneyDelta!==0)money.entry[1]=String(num(money.entry[1])+p.moneyDelta);
   addLedger('تعديل بند خدمة داخل الكروت',p.entryName+': '+fmt(p.oldAmount)+' ← '+fmt(p.newAmount)+'؛ تأثير الفلوس '+fmt(p.moneyDelta)+(p.agentName?'؛ رصيد '+p.agentName+' '+fmt(p.agentDelta):''),{column:'الكروت',entryName:p.entryName,oldValue:p.oldAmount,newValue:p.newAmount,moneyDelta:p.moneyDelta,agentName:p.agentName||null,agentDelta:p.agentDelta||0});
-  pendingOrder=null;persist();render();const box=document.getElementById('orderPreview');if(box)box.innerHTML='<p class="status">تم تحديث رصيد الخدمة بعد التأكيد.</p>';return;
+  pendingOrder=null;dagaLastOrderSaved=persist();render();const box=document.getElementById('orderPreview');if(box)box.innerHTML='<p class="status">تم تحديث رصيد الخدمة بعد التأكيد.</p>';return;
  }
 
  const setEntry=(ci,idx,val)=>{if(idx>=0)cols[ci].entries[idx][1]=String(val)};
@@ -573,9 +574,10 @@ function executeOrder(){
    if(p.excess>0)addToNamed(p.balanceIndex,p.name,p.excess);
    addLedger('تحصيل من شخص',`${p.name} دفع ${fmt(p.amount)} جنيه؛ دخل المبلغ كاملًا للكروت، سُوّي ${fmt(p.debtPaid)} من الخارج${p.excess?` وسُجل المتبقي ${fmt(p.excess)} في الرصيد`:''}.`);
  }
- pendingOrder=null; persist(); render();
+ pendingOrder=null; dagaLastOrderSaved=persist(); render();
  const box=document.getElementById('orderPreview'); if(box)box.innerHTML='<p class="status">تم تسجيل الحركة بعد التأكيد، وتم تحديث بند الفلوس الموجود في عمود الكروت مباشرةً. راجع الإجماليات.</p>';
 }
+let dagaLastOrderSaved=false;
 let dagaLiveSnapshotTimer=null;
 let dagaLiveWindow=null;
 let dagaLiveOrderPending=false;
@@ -633,7 +635,7 @@ window.addEventListener('message',function(event){
  if(dagaLiveOrderPending&&liveOrderConfirmation(text)){
   const before=ledger[0]?.id;
   try{executeOrder()}catch(error){console.error('LIVE DAGA order execution failed',error);}
-  const succeeded=ledger[0]?.id!==before&&!pendingOrder;
+  const succeeded=ledger[0]?.id!==before&&!pendingOrder&&dagaLastOrderSaved===true;
   if(succeeded){
    dagaLiveOrderPending=false;
    const reply='تم تسجيل العملية فعلًا في الداشبورد: '+dagaLiveOrderSummary;
