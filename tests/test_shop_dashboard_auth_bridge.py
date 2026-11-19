@@ -52,7 +52,21 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertNotIn("teamPhone", dashboard)
         self.assertIn("fetch('/api/company/invitations'", dashboard)
         self.assertIn("window.DAGA_SESSION_TOKEN=token", dashboard)
+        self.assertIn("async function copyTeamInvitationLink(link)", dashboard)
+        self.assertIn("navigator.clipboard.writeText(link)", dashboard)
+        self.assertIn("document.execCommand('copy')", dashboard)
+        self.assertIn("window.prompt('انسخ رابط الدعوة من هنا:',link)", dashboard)
         self.assertIn('path === "/api/company/invitations" && request.method === "POST"', invitations)
+
+    def test_invitation_registration_has_clear_requirements_and_team_login_route(self):
+        page = (ROOT / "invite" / "index.html").read_text(encoding="utf-8")
+        self.assertIn("لازم كلمة المرور تحتوي على حرف إنجليزي كبير وحرف صغير ورقم", page)
+        self.assertIn("valid_registration_fields_required", page)
+        self.assertIn("account_registration_conflict_or_failed", page)
+        self.assertIn("/api/company/team/auth/login", page)
+        self.assertNotIn('call("/api/company/auth/login", {email:$("identifier")', page)
+        auth = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
+        self.assertIn('console.error("DAGA company invitation registration batch failed:"', auth)
 
     def test_live_daga_requires_live_entitlement_without_smart_plan_dependency(self):
         worker = (ROOT / "worker.js").read_text(encoding="utf-8")
