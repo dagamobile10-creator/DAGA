@@ -577,33 +577,95 @@ function executeOrder(){
  const box=document.getElementById('orderPreview'); if(box)box.innerHTML='<p class="status">تم تسجيل الحركة بعد التأكيد، وتم تحديث بند الفلوس الموجود في عمود الكروت مباشرةً. راجع الإجماليات.</p>';
 }
 let dagaLiveSnapshotTimer=null;
+let dagaLiveWindow=null;
+let dagaLiveOrderPending=false;
+let dagaLiveOrderSummary='';
 function showLiveComingSoon(){
-  const user=window.DAGA_AUTH_USER||{};
-  if(user.smartAssistantEnabled!==true||user.liveDagaEnabled!==true)return;
-  const token=String(window.DAGA_SESSION_TOKEN||'');
-  if(!token)return;
-  try{
-    sessionStorage.setItem('daga_account_session_v1',token);
-    sessionStorage.setItem('daga_company_id_v1',String(user.storeId||''));
-  }catch(_){return;}
-  window.location.assign('/live/?api=staging');
+ const user=window.DAGA_AUTH_USER||{};
+ if(user.smartAssistantEnabled!==true||user.liveDagaEnabled!==true)return;
+ if(!window.DAGA_SESSION_TOKEN)return;
+ const popup=window.open('/live/?api=staging','DAGA_LIVE','popup=yes,width=460,height=820');
+ if(!popup){alert('اسمح بفتح نافذة LIVE DAGA من المتصفح، ثم اضغط الزر مرة أخرى.');return;}
+ dagaLiveWindow=popup;
 }
-function closeDagaLiveFullscreen(){
- const screen=document.getElementById('dagaLiveFullscreen');
- if(screen)screen.style.display='none';
- if(dagaLiveSnapshotTimer){clearInterval(dagaLiveSnapshotTimer);dagaLiveSnapshotTimer=null;}
+function sendLiveOrderReply(source,id,reply,handled=true){
+ try{source.postMessage({type:'DAGA_LIVE_ORDER_REPLY',id,reply,handled},'https://daga-app-staging.dagamobile10.workers.dev');}catch(_){}
 }
-function sendDagaLiveSnapshot(){
- const frame=document.getElementById('dagaLiveFrame');
- if(!frame||!frame.contentWindow||!document.getElementById('dagaLiveFullscreen')||document.getElementById('dagaLiveFullscreen').style.display==='none')return;
+function sendLiveDashboardSnapshot(){
+ if(!dagaLiveWindow||dagaLiveWindow.closed)return;
  const snapshot={updatedAt:new Date().toISOString(),source:'DAGA Dashboard V30',readOnly:true,columns:(Array.isArray(cols)?cols:[]).map(c=>({name:String(c.name||''),entries:(Array.isArray(c.entries)?c.entries:[]).map(e=>({name:String(e[0]??''),amount:Number(String(e[1]??0).replace(/[^0-9.-]/g,''))||0}))}))};
- try{frame.contentWindow.postMessage({type:'DAGA_DASHBOARD_SNAPSHOT',snapshot},'https://daga-app-staging.dagamobile10.workers.dev');}catch(e){console.warn('LIVE DAGA snapshot send failed',e)}
+ try{dagaLiveWindow.postMessage({type:'DAGA_DASHBOARD_SNAPSHOT',snapshot},'https://daga-app-staging.dagamobile10.workers.dev');}catch(_){}
+}
+function liveOrderConfirmation(text){
+ const n=normAccountingName(text);
+ return /^(ايوه|اه|تمام|ماشي|نفذ|نفذها|موافق|اكد|اعتمد|خلاص|اتفضل|اوكي|ok|yes)(\s+(نفذ|نفذها|اعتمد|خلاص|تمام|يلا))*$/.test(n);
+}
+function liveOrderCancellation(text){
+ const n=normAccountingName(text);
+ return /^(لا|لاا|الغ|الغاء|مش موافق|بلاش|وقف|cancel|no)$/.test(n);
+}
+function describeLiveOrder(p){
+ const money=findMoneyEntry(),current=money?num(money.entry[1]):0;
+ if(p.mode==='outsideAdd')return 'هسجل '+fmt(p.amount)+' جنيه باسم '+p.name+' في عمود الخارج. الفلوس الأساسية هتقل '+fmt(p.amount)+' جنيه، من '+fmt(current)+' إلى '+fmt(current-p.amount)+' جنيه.';
+ if(p.mode==='cashAdd')return 'هسجل '+fmt(p.amount)+' جنيه في '+(cols[p.targetIndex]?.name||'عمود الكاش')+'. الفلوس الأساسية هتزيد '+fmt(p.amount)+' جنيه.';
+ if(p.mode==='accessorySale'||p.mode==='accessoryAdd')return 'هسجل '+fmt(p.amount)+' جنيه في عمود الإكسسوار باسم '+(p.product||'مبيعات أكسسوار')+'. الفلوس الأساسية هتزيد '+fmt(p.amount)+' جنيه.';
+ if(p.mode==='dailyWithdrawal')return 'هسجل سحب '+fmt(p.amount)+' جنيه من '+p.name+' في عمود الخارج، والفلوس الأساسية هتقل '+fmt(p.amount)+' جنيه.';
+ if(p.mode==='namedEntrySet')return 'هعدل بند '+p.entryName+' من '+fmt(p.oldAmount)+' إلى '+fmt(p.newAmount)+' جنيه. تأثير الفلوس الأساسية '+fmt(p.moneyDelta)+' جنيه.';
+ if(p.mode==='balanceAdd')return 'هضيف '+fmt(p.amount)+' جنيه باسم '+p.name+' في عمود الرصيد، من غير تغيير الفلوس الأساسية.';
+ if(p.mode==='balanceToOutsideTransfer')return 'هسوي '+fmt(p.transfer)+' جنيه من رصيد '+p.name+' وأسجل المتبقي في الخارج. تأثير الفلوس الأساسية صفر.';
+ if(p.mode==='balancePayout'||p.mode==='outgoing')return 'هسجل صرف '+fmt(p.amount)+' جنيه باسم '+p.name+' حسب رصيده الحالي. راجع تفاصيل العملية.';
+ if(p.mode==='receipt')return 'هسجل تحصيل '+fmt(p.amount)+' جنيه من '+p.name+' وأسوي المستحق عليه حسب الحساب الحالي.';
+ return document.getElementById('orderPreview')?.innerText?.replace(/تأكيد وتنفيذ|إلغاء/g,'').trim()||'راجعت الأمر. راجع تفاصيل العملية على الداشبورد.';
 }
 window.addEventListener('message',function(event){
- if(event.origin!=='https://daga-app-staging.dagamobile10.workers.dev')return;
- if(event.source!==document.getElementById('dagaLiveFrame')?.contentWindow)return;
- if(event.data&&event.data.type==='DAGA_LIVE_REQUEST_SNAPSHOT')sendDagaLiveSnapshot();
+ const origin='https://daga-app-staging.dagamobile10.workers.dev';
+ if(event.origin!==origin||!dagaLiveWindow||event.source!==dagaLiveWindow)return;
+ if(event.data==='DAGA_LIVE_READY'){
+  const user=window.DAGA_AUTH_USER||{};
+  try{event.source.postMessage({type:'DAGA_AUTH',token:String(window.DAGA_SESSION_TOKEN||''),companyId:String(user.storeId||'')},origin);}catch(_){}
+  sendLiveDashboardSnapshot();
+  if(!dagaLiveSnapshotTimer)dagaLiveSnapshotTimer=setInterval(()=>{if(!dagaLiveWindow||dagaLiveWindow.closed){clearInterval(dagaLiveSnapshotTimer);dagaLiveSnapshotTimer=null;dagaLiveWindow=null;return;}sendLiveDashboardSnapshot();},1500);
+  return;
+ }
+ if(!event.data||event.data.type!=='DAGA_LIVE_ORDER_REQUEST')return;
+ const id=event.data.id,text=String(event.data.text||'').trim();
+ if(typeof id!=='string'||!text)return;
+ if(dagaLiveOrderPending&&liveOrderConfirmation(text)){
+  const before=ledger[0]?.id;
+  try{executeOrder()}catch(error){console.error('LIVE DAGA order execution failed',error);}
+  const succeeded=ledger[0]?.id!==before&&!pendingOrder;
+  if(succeeded){
+   dagaLiveOrderPending=false;
+   const reply='تم تسجيل العملية فعلًا في الداشبورد: '+dagaLiveOrderSummary;
+   dagaLiveOrderSummary='';closeModal();sendLiveOrderReply(event.source,id,reply,true);sendLiveDashboardSnapshot();
+  }else{
+   dagaLiveOrderPending=false;dagaLiveOrderSummary='';
+   sendLiveOrderReply(event.source,id,'ما تمش التنفيذ. البيانات ممكن تكون اتغيرت أو فيه مشكلة في الحفظ. راجع الداشبورد؛ مفيش تأكيد بنجاح العملية.',true);
+  }
+  return;
+ }
+ if(dagaLiveOrderPending&&liveOrderCancellation(text)){
+  pendingOrder=null;dagaLiveOrderPending=false;dagaLiveOrderSummary='';closeModal();
+  sendLiveOrderReply(event.source,id,'تم إلغاء العملية. مفيش أي تغيير اتسجل.',true);return;
+ }
+ if(dagaLiveOrderPending){
+  sendLiveOrderReply(event.source,id,'لسه مستني تأكيد أو إلغاء العملية المعروضة. قول «أيوه نفّذ» أو «إلغاء».',true);return;
+ }
+ const parsed=parseOrder(text);
+ if(!parsed){sendLiveOrderReply(event.source,id,'',false);return;}
+ voiceDaga();
+ const command=document.getElementById('cmd');
+ if(!command){sendLiveOrderReply(event.source,id,'مش قادر أفتح شاشة مراجعة الأمر. مفيش أي تغيير اتسجل.',true);return;}
+ command.value=text;review();
+ if(parsed.ambiguous||!pendingOrder){
+  const preview=document.getElementById('orderPreview')?.innerText||parsed.ambiguous||'محتاج توضيح الأمر قبل التسجيل.';
+  sendLiveOrderReply(event.source,id,preview.replace(/تأكيد وتنفيذ|إلغاء/g,'').trim(),true);return;
+ }
+ dagaLiveOrderPending=true;
+ dagaLiveOrderSummary=describeLiveOrder(pendingOrder);
+ sendLiveOrderReply(event.source,id,dagaLiveOrderSummary+' هل أؤكد التنفيذ؟ قول «أيوه نفّذ» أو «إلغاء».',true);
 });
+
 function normAccountingName(v){
  return String(v||'').toLowerCase().replace(/[إأآ]/g,'ا').replace(/[ىي]/g,'ي').replace(/[ةه]/g,'ه').replace(/[ؤ]/g,'و').replace(/[ئ]/g,'ي').replace(/[^\u0600-\u06FFa-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
 }
