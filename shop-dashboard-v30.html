@@ -95,6 +95,7 @@ function changeMoney(delta){
 }
 function isDailyMoneyColumn(ci){const name=String(cols[ci]?.name||'');return /^كاش/.test(name)||normAccountingName(name)==='الاكسسوار'}
 function isDailyWithdrawalName(name){const n=normAccountingName(name);return ['كاش','الكاش','كاش اليوم','سحب كاش','الكاش اليوم','اكسسوار','الاكسسوار','اكسسوارات','اكسسوارات اليوم'].includes(n)}
+// One-time compatibility bridge: only unposted legacy daily rows are transferred; posted rows are never counted twice.
 function migrateLegacyDailyAccounting(){
  const daily=cols.map((c,ci)=>({c,ci})).filter(x=>isDailyMoneyColumn(x.ci));
  const pending=daily.flatMap(x=>x.c.entries.filter(e=>!e[2]||e[2].moneyPosted!==true).map(e=>({entry:e,amount:num(e[1])}))).filter(x=>x.amount!==0);
