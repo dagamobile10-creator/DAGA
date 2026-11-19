@@ -54,8 +54,8 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn("window.DAGA_SESSION_TOKEN=token", dashboard)
         self.assertIn("async function copyTeamInvitationLink(link)", dashboard)
         self.assertIn("navigator.clipboard.writeText(link)", dashboard)
-        self.assertIn("document.execCommand('copy')", dashboard)
-        self.assertIn("window.prompt('انسخ رابط الدعوة من هنا:',link)", dashboard)
+        self.assertIn('id="teamInviteLink" readonly value="', dashboard)
+        self.assertIn("window.prompt('المتصفح منع النسخ التلقائي. انسخ رابط الدعوة من المربع التالي:',link)", dashboard)
         self.assertIn('path === "/api/company/invitations" && request.method === "POST"', invitations)
 
     def test_invitation_registration_has_clear_requirements_and_team_login_route(self):
