@@ -654,15 +654,17 @@ function confirmCloseDay(date){
   colsBefore:JSON.parse(JSON.stringify(cols)),ledgerBefore:JSON.parse(JSON.stringify(ledger))};
  try{
   money.entry[1]=String(p.moneyBefore+p.netToMoney);
-  p.cashCols.forEach(({c})=>c.entries.forEach(e=>{e[1]='0';e[2]={...(e[2]||{}),moneyPosted:true}}));
-  p.accessoryCols.forEach(({c})=>c.entries.forEach(e=>{e[1]='0';e[2]={...(e[2]||{}),moneyPosted:true}}));
+  // Daily cash/accessory amounts have already been posted (or are reconciled above).
+  // Start the next day with empty item lists; the full pre-close rows remain in the close snapshot.
+  p.cashCols.forEach(({c})=>{c.entries=[]});
+  p.accessoryCols.forEach(({c})=>{c.entries=[]});
   [...p.cashRows,...p.accessoryRows].forEach(x=>{const row=cols[x.ci]?.entries[x.ei];if(row&&num(row[1])===x.amount){row[1]='0';row[2]={...(row[2]||{}),moneyPosted:true}}});
   closedDays.push({...snapshot,totalsAfter:Object.fromEntries(cols.map(c=>[c.name,sumCol(c.name)])),cleared:true});
-  ledger.unshift({id:Date.now()+Math.random(),at:now.toISOString(),action:'تسوية اليوم — V30',details:`إقفال ${normalizedDate}: صافي الكاش ${fmt(p.cashNet)}، صافي الأكسسوار ${fmt(p.accessoryNet)}، ترحيل صافي ${fmt(p.netToMoney)} جنيه للفلوس الأساسية مرة واحدة. تم تصفير أعمدة الكاش والأكسسوار ومبالغ الخارج المطابقة، مع حفظ صورة كاملة قبل التسويه.`,column:'قفل اليوم',moneyDelta:p.netToMoney});
+  ledger.unshift({id:Date.now()+Math.random(),at:now.toISOString(),action:'تسوية اليوم — V30',details:`إقفال ${normalizedDate}: صافي الكاش ${fmt(p.cashNet)}، صافي الأكسسوار ${fmt(p.accessoryNet)}، ترحيل صافي ${fmt(p.netToMoney)} جنيه للفلوس الأساسية مرة واحدة. تم إفراغ بنود أعمدة الكاش والأكسسوار بالكامل ومبالغ الخارج المطابقة، مع حفظ صورة كاملة قبل التسويه.`,column:'قفل اليوم',moneyDelta:p.netToMoney});
   ledger=ledger.slice(0,2000);
   if(!persist()){cols=backup.cols;ledger=backup.ledger;closedDays=backup.closedDays;render();return}
   closeModal();render();
-  open(`<h2>تم حفظ تسوية اليوم</h2><p class="status">تم حفظ التسويه، وترحيل الصافي مرة واحدة، وتصفير أرصدة التشغيل اليومية.</p><div class="reconMini"><div>صافي الكاش <b>${fmt(p.cashNet)} ج.م</b></div><div>صافي الأكسسوار <b>${fmt(p.accessoryNet)} ج.م</b></div><div>إجمالي الترحيل <b>${p.netToMoney>0?'+':''}${fmt(p.netToMoney)} ج.م</b></div><div>الفلوس بعد التسويه <b>${fmt(p.moneyBefore+p.netToMoney)} ج.م</b></div><div>المقارنة العامة قبل التسويه <b>${fmt(p.reconciliation.otherTotal)} مقابل ${fmt(p.reconciliation.capital)} ج.م</b></div></div><p class="small">تفاصيل الحركات والأرصدة قبل التسويه محفوظة في سجل إقفال اليوم. ما تمسحتش أسماء البنود.</p><button class="primary" onclick="closeModal();render()">تمام</button>`);
+  open(`<h2>تم حفظ تسوية اليوم</h2><p class="status">تم حفظ التسويه، وترحيل الصافي مرة واحدة، وإفراغ بنود الكاش والأكسسوار لبدء يوم جديد.</p><div class="reconMini"><div>صافي الكاش <b>${fmt(p.cashNet)} ج.م</b></div><div>صافي الأكسسوار <b>${fmt(p.accessoryNet)} ج.م</b></div><div>إجمالي الترحيل <b>${p.netToMoney>0?'+':''}${fmt(p.netToMoney)} ج.م</b></div><div>الفلوس بعد التسويه <b>${fmt(p.moneyBefore+p.netToMoney)} ج.م</b></div><div>المقارنة العامة قبل التسويه <b>${fmt(p.reconciliation.otherTotal)} مقابل ${fmt(p.reconciliation.capital)} ج.م</b></div></div><p class="small">كل البنود القديمة في أعمدة الكاش والأكسسوار اتشالت من شاشة اليوم الجديد، ونسختها الأصلية محفوظة في سجل إقفال اليوم للمراجعة. الفلوس الأساسية لم تُضف إليها المبالغ مرة ثانية.</p><button class="primary" onclick="closeModal();render()">تمام</button>`);
  }catch(err){cols=backup.cols;ledger=backup.ledger;closedDays=backup.closedDays;persist();render();console.error(err);alert('حصل خطأ أثناء قفل اليوم، ورجّعنا البيانات للحالة السابقة. لم نعتبر التسويه ناجحة.');}
 }
 async function showTeam(){
