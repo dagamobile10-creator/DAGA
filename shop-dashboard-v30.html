@@ -93,6 +93,20 @@ function changeMoney(delta){
  found.entry[1]=String(after);
  return {ok:true,before,after,label:found.entry[0]};
 }
+function isDailyMoneyColumn(ci){const name=String(cols[ci]?.name||'');return /^كاش/.test(name)||normAccountingName(name)==='الاكسسوار'}
+function isDailyWithdrawalName(name){const n=normAccountingName(name);return ['كاش','الكاش','كاش اليوم','سحب كاش','الكاش اليوم','اكسسوار','الاكسسوار','اكسسوارات','اكسسوارات اليوم'].includes(n)}
+function migrateLegacyDailyAccounting(){
+ const daily=cols.map((c,ci)=>({c,ci})).filter(x=>isDailyMoneyColumn(x.ci));
+ const pending=daily.flatMap(x=>x.c.entries.filter(e=>!e[2]||e[2].moneyPosted!==true).map(e=>({entry:e,amount:num(e[1])}))).filter(x=>x.amount!==0);
+ const withdrawals=cols.map((c,ci)=>({c,ci})).filter(x=>/^خارج/.test(x.c.name)).flatMap(x=>x.c.entries.filter(e=>isDailyWithdrawalName(e[0])&&(!e[2]||e[2].moneyPosted!==true)).map(e=>({entry:e,amount:num(e[1])}))).filter(x=>x.amount!==0);
+ const delta=pending.reduce((a,x)=>a+x.amount,0)-withdrawals.reduce((a,x)=>a+x.amount,0);
+ const money=findMoneyEntry();
+ if(!money)return;
+ if(delta!==0){const result=changeMoney(delta);if(!result.ok){daily.forEach(x=>x.c.entries.forEach(e=>{if(!e[2])e[2]={moneyPosted:false}}));persist();return;}}
+ daily.forEach(x=>x.c.entries.forEach(e=>{if(!e[2]||e[2].moneyPosted!==true)e[2]={...(e[2]||{}),moneyPosted:true}}));
+ withdrawals.forEach(x=>x.entry[2]={...(x.entry[2]||{}),moneyPosted:true});
+ if(delta!==0||pending.length||withdrawals.length){addLedger('ترحيل أرصدة يومية قديمة',`تم ترحيل الأرصدة اليومية المفتوحة عند تحديث النظام: كاش وإكسسوار ${fmt(pending.reduce((a,x)=>a+x.amount,0))} جنيه، وسحوبات مرتبطة ${fmt(withdrawals.reduce((a,x)=>a+x.amount,0))} جنيه؛ الصافي ${delta>0?'+':''}${fmt(delta)} جنيه إلى الفلوس الأساسية.`,{column:'ترحيل يومي',moneyDelta:delta});}else persist();
+}
 function addLedger(action,details,meta={}){ledger.unshift({id:Date.now()+Math.random(),at:new Date().toISOString(),action,details,...meta});ledger=ledger.slice(0,2000);persist()}
 function localStamp(iso=new Date().toISOString()){const d=new Date(iso);return new Intl.DateTimeFormat('ar-EG',{timeZone:'Africa/Cairo',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true}).format(d)}
 let longPressTimer=null,longPressFired=false;
@@ -142,13 +156,13 @@ function updateRecon(){
 function addEntry(i){open(`<h2>إضافة بند جديد</h2><p class="small">هيُضاف البند إلى عمود <b>${esc(cols[i].name)}</b>.</p><label>الاسم / البيان</label><input id="n" placeholder="اسم البند"><label>المبلغ بالجنيه</label><input id="a" inputmode="decimal" placeholder="مثال: 6000"><button class="primary" onclick="saveNewEntry(${i})">حفظ البند</button>`)}
 let pendingCreate=null;
 function saveNewEntry(i){const n=document.getElementById('n').value.trim(),a=document.getElementById('a').value.trim();if(!n||a===''||num(a)<0)return alert('اكتب الاسم ومبلغًا صحيحًا');const amount=num(a),money=findMoneyEntry();let impact=moneyImpactForManualEdit(i,n,amount);if(i===0&&/^(الفلوس|فلوس|الفلوس الأساسية|الفلوس الاساسية|الفلوس الموجودة|فلوس المحل|فلوس الخزنة|فلوس الدرج|النقدية|النقد|فلوس الكروت)$/i.test(n)){if(money){return alert('بند الفلوس الأساسية موجود بالفعل. عدّل قيمته بدل إضافة بند مكرر.')}impact={delta:0,description:'ده بند الفلوس الأساسية نفسه؛ إضافته تنشئ نقطة الربط التي تعتمد عليها الحركات الأخرى.'}}else if(i===0&&money&&money.entry[0]===n){impact.delta=0;impact.description='ده بند الفلوس الأساسية نفسه، مش هنغيّر قيمته مرتين.'}if(impact.delta!==0&&!money)return alert('مش لاقي بند «فلوس» داخل عمود الكروت، فمش هقدر أضيف بند مرتبط بأمان. لم يتغير أي رقم.');if(money&&num(money.entry[1])+impact.delta<0)return alert('إضافة البند هتخلي الفلوس الأساسية بالسالب. راجع المبلغ.');pendingCreate={i,n,amount,impact,moneyBefore:money?num(money.entry[1]):null,requestedAt:new Date().toISOString()};open(`<h2>مراجعة إضافة بند</h2><div class="reconMini"><div>وقت المراجعة <b>${esc(localStamp(pendingCreate.requestedAt))}</b></div><div>العمود <b>${esc(cols[i].name)}</b></div><div>اسم البند <b>${esc(n)}</b></div><div>المبلغ <b>${fmt(amount)} ج.م</b></div><div>تأثير الفلوس الأساسية <b>${impact.delta>0?'+':''}${fmt(impact.delta)} ج.م</b></div>${money?`<div>الفلوس قبل <b>${fmt(num(money.entry[1]))} ج.م</b></div><div>الفلوس بعد <b>${fmt(num(money.entry[1])+impact.delta)} ج.م</b></div>`:''}</div><p class="small">${esc(impact.description)} لن يتم الحفظ قبل التأكيد.</p><div class="grid"><button class="primary" onclick="confirmCreateEntry()">تأكيد الإضافة</button><button onclick="pendingCreate=null;addEntry(${i})">رجوع</button></div>`)}
-function confirmCreateEntry(){const p=pendingCreate;if(!p)return;const money=findMoneyEntry();if(p.impact.delta!==0&&(!money||num(money.entry[1])!==p.moneyBefore)){pendingCreate=null;alert('الفلوس الأساسية اتغيرت من وقت المراجعة. راجع الإضافة من جديد.');render();return}if(p.impact.delta!==0)money.entry[1]=String(num(money.entry[1])+p.impact.delta);cols[p.i].entries.push([p.n,String(p.amount)]);addLedger('إضافة بند بعد مراجعة',`${p.n} — ${fmt(p.amount)} جنيه في ${cols[p.i].name}; تأثير الفلوس ${p.impact.delta>0?'+':''}${fmt(p.impact.delta)} جنيه.`,{column:cols[p.i].name,entryName:p.n,oldValue:null,newValue:p.amount,moneyDelta:p.impact.delta});pendingCreate=null;persist();closeModal();render();open(`<h2>تمت الإضافة</h2><p class="small">تم حفظ البند بعد التأكيد.</p><p class="status">${esc(localStamp())}</p><button class="primary" onclick="closeModal()">تمام</button>`)}
+function confirmCreateEntry(){const p=pendingCreate;if(!p)return;const money=findMoneyEntry();if(p.impact.delta!==0&&(!money||num(money.entry[1])!==p.moneyBefore)){pendingCreate=null;alert('الفلوس الأساسية اتغيرت من وقت المراجعة. راجع الإضافة من جديد.');render();return}if(p.impact.delta!==0)money.entry[1]=String(num(money.entry[1])+p.impact.delta);const created=[p.n,String(p.amount)];if(isDailyMoneyColumn(p.i)||(/^خارج/.test(cols[p.i].name)&&isDailyWithdrawalName(p.n)))created[2]={moneyPosted:true};cols[p.i].entries.push(created);addLedger('إضافة بند بعد مراجعة',`${p.n} — ${fmt(p.amount)} جنيه في ${cols[p.i].name}; تأثير الفلوس ${p.impact.delta>0?'+':''}${fmt(p.impact.delta)} جنيه.`,{column:cols[p.i].name,entryName:p.n,oldValue:null,newValue:p.amount,moneyDelta:p.impact.delta});pendingCreate=null;persist();closeModal();render();open(`<h2>تمت الإضافة</h2><p class="small">تم حفظ البند بعد التأكيد.</p><p class="status">${esc(localStamp())}</p><button class="primary" onclick="closeModal()">تمام</button>`)}
 function removeEntry(i){if(!cols[i].entries.length)return alert('مفيش بنود في العمود');open(`<h2>اختار البند للحذف</h2><p class="small">من عمود ${esc(cols[i].name)}. الحذف سيتسجل في سجل الحركات.</p>${cols[i].entries.map((e,j)=>`<button class="removeRow" onclick="confirmDelete(${i},${j})"><span>${esc(e[0])}</span><b>${fmt(num(e[1]))} ج.م</b></button>`).join('')}`)}
-function confirmDelete(i,j){const e=cols[i].entries[j],money=findMoneyEntry();let impact=moneyImpactForManualEdit(i,e[0],-num(e[1]));if(i===0&&!(money&&money.entry[0]===e[0]))impact={delta:0,description:'حذف بند من قائمة الكروت لا ينشئ حركة فلوس تلقائيًا؛ أي تسوية فعلية تُراجع وتسجل كعملية مستقلة.'};if(i===0&&money&&money.entry[0]===e[0]){open(`<h2>حذف بند الفلوس الأساسية؟</h2><p class="small">ده البند اللي باقي الحسابات مرتبطة بيه. حذفه هيوقف المزامنة المالية، لذلك مش هيتحذف من الشاشة دي. غيّر اسمه أو راجع إعدادات البند بدلًا من ذلك.</p><button class="primary" onclick="closeModal()">فهمت</button>`);return}if(impact.delta!==0&&!money){alert('مش لاقي بند الفلوس الأساسية؛ مش هحذف بندًا مرتبطًا ماليًا من غير ما أقدر أراجع أثره.');return}if(money&&num(money.entry[1])+impact.delta<0){alert('حذف البند هيخلي الفلوس الأساسية بالسالب. راجع الحساب.');return}open(`<h2>مراجعة حذف بند</h2><div class="reconMini"><div>وقت المراجعة <b>${esc(localStamp())}</b></div><div>البند <b>${esc(e[0])} — ${esc(cols[i].name)}</b></div><div>القيمة المراد حذفها <b>${fmt(num(e[1]))} ج.م</b></div><div>تأثير الفلوس الأساسية <b>${impact.delta>0?'+':''}${fmt(impact.delta)} ج.م</b></div>${money?`<div>الفلوس قبل <b>${fmt(num(money.entry[1]))} ج.م</b></div><div>الفلوس بعد <b>${fmt(num(money.entry[1])+impact.delta)} ج.م</b></div>`:''}</div><p class="small">سيختفي البند من العرض الحالي، مع الاحتفاظ بسجل الحذف في التاريخ. حذف بند من الكروت وحده لا يغيّر الفلوس تلقائيًا.</p><div class="grid"><button class="primary" onclick="doDelete(${i},${j},${impact.delta},${money?num(money.entry[1]):'null'})">تأكيد الحذف</button><button onclick="removeEntry(${i})">رجوع</button></div>`)}
+function confirmDelete(i,j){const e=cols[i].entries[j],money=findMoneyEntry();let impact=moneyImpactForManualEdit(i,e[0],-num(e[1]),e);if(i===0&&!(money&&money.entry[0]===e[0]))impact={delta:0,description:'حذف بند من قائمة الكروت لا ينشئ حركة فلوس تلقائيًا؛ أي تسوية فعلية تُراجع وتسجل كعملية مستقلة.'};if(i===0&&money&&money.entry[0]===e[0]){open(`<h2>حذف بند الفلوس الأساسية؟</h2><p class="small">ده البند اللي باقي الحسابات مرتبطة بيه. حذفه هيوقف المزامنة المالية، لذلك مش هيتحذف من الشاشة دي. غيّر اسمه أو راجع إعدادات البند بدلًا من ذلك.</p><button class="primary" onclick="closeModal()">فهمت</button>`);return}if(impact.delta!==0&&!money){alert('مش لاقي بند الفلوس الأساسية؛ مش هحذف بندًا مرتبطًا ماليًا من غير ما أقدر أراجع أثره.');return}if(money&&num(money.entry[1])+impact.delta<0){alert('حذف البند هيخلي الفلوس الأساسية بالسالب. راجع الحساب.');return}open(`<h2>مراجعة حذف بند</h2><div class="reconMini"><div>وقت المراجعة <b>${esc(localStamp())}</b></div><div>البند <b>${esc(e[0])} — ${esc(cols[i].name)}</b></div><div>القيمة المراد حذفها <b>${fmt(num(e[1]))} ج.م</b></div><div>تأثير الفلوس الأساسية <b>${impact.delta>0?'+':''}${fmt(impact.delta)} ج.م</b></div>${money?`<div>الفلوس قبل <b>${fmt(num(money.entry[1]))} ج.م</b></div><div>الفلوس بعد <b>${fmt(num(money.entry[1])+impact.delta)} ج.م</b></div>`:''}</div><p class="small">سيختفي البند من العرض الحالي، مع الاحتفاظ بسجل الحذف في التاريخ. حذف بند من الكروت وحده لا يغيّر الفلوس تلقائيًا.</p><div class="grid"><button class="primary" onclick="doDelete(${i},${j},${impact.delta},${money?num(money.entry[1]):'null'})">تأكيد الحذف</button><button onclick="removeEntry(${i})">رجوع</button></div>`)}
 function doDelete(i,j,impactDelta=0,moneyBefore=null){const e=cols[i].entries[j];if(!e)return;const money=findMoneyEntry();if(impactDelta!==0&&(!money||num(money.entry[1])!==moneyBefore)){alert('الفلوس الأساسية اتغيرت من وقت المراجعة. راجع الحذف من جديد.');render();return}if(impactDelta!==0)money.entry[1]=String(num(money.entry[1])+impactDelta);const removed=cols[i].entries.splice(j,1)[0];addLedger('حذف بند بعد مراجعة',`${removed[0]} — ${fmt(num(removed[1]))} جنيه من ${cols[i].name}; تأثير الفلوس ${impactDelta>0?'+':''}${fmt(impactDelta)} جنيه.`,{column:cols[i].name,entryName:removed[0],oldValue:num(removed[1]),newValue:null,moneyDelta:impactDelta});closeModal();persist();render()}
 function editEntry(i,j){const e=cols[i].entries[j];open(`<h2>تعديل البند</h2><p class="small">العمود: <b>${esc(cols[i].name)}</b></p><label>الاسم / البيان</label><input id="n" value="${esc(e[0])}"><label>المبلغ / القيمة</label><input id="a" value="${esc(e[1])}" inputmode="decimal"><p class="small">وقت طلب التعديل: ${esc(localStamp())}. قبل الحفظ هتظهر مراجعة بالفرق وتأثيره المتوقع على الفلوس الأساسية.</p><div class="grid"><button class="primary" onclick="saveEntry(${i},${j})">مراجعة التعديل</button><button onclick="deleteEntry(${i},${j})">حذف البند</button></div>`)}
 let pendingManualEdit=null;
-function moneyImpactForManualEdit(ci,entryName,delta){
+function moneyImpactForManualEdit(ci,entryName,delta,existingEntry=null){
  const col=cols[ci]?.name||'';
  if(delta===0)return {delta:0,description:'لا يوجد فرق مالي؛ الاسم فقط سيتغير.'};
  if(col==='الكروت'){
@@ -156,9 +170,8 @@ function moneyImpactForManualEdit(ci,entryName,delta){
    if(f && f.entry[0]===entryName)return {delta:0,description:'ده بند الفلوس الأساسية نفسه؛ لن نعدّل الفلوس مرة ثانية.'};
    return {delta:-delta,description:'تغيير رصيد بند داخل الكروت يقابله تغيير عكسي في الفلوس الأساسية.'};
  }
- if(/^خارج/.test(col))return {delta:-delta,description:'زيادة المستحق/الخارج تقلل الفلوس الأساسية، وتقليله يزيدها.'};
- if(/^كاش/.test(col))return {delta:0,description:'الكاش رصيد تشغيل يومي؛ تعديله لا يغيّر الفلوس الأساسية فورًا. صافي الكاش يترحّل مرة واحدة عند «تسوية اليوم».'};
- if(normAccountingName(col)==='الاكسسوار')return {delta:0,description:'الأكسسوار رصيد تشغيل يومي؛ تعديله لا يغيّر الفلوس الأساسية فورًا. صافي الأكسسوار يترحّل مرة واحدة عند «تسوية اليوم».'};
+ if(/^خارج/.test(col)){if(existingEntry&&isDailyWithdrawalName(entryName)&&existingEntry[2]?.moneyPosted!==true)return {delta:0,description:'ده سحب يومي قديم لم يُرحّل بعد؛ هيُحسب في التسوية مرة واحدة.'};return {delta:-delta,description:'زيادة المستحق/الخارج تقلل الفلوس الأساسية، وتقليله يزيدها.'};}
+ if(/^كاش/.test(col)||normAccountingName(col)==='الاكسسوار'){if(existingEntry&&existingEntry[2]?.moneyPosted!==true)return {delta:0,description:'ده رصيد يومي قديم لم يُرحّل بعد؛ هيُحسب في التسوية مرة واحدة.'};return {delta,description:'الكاش والإكسسوار ينعكسوا على الفلوس الأساسية فور التسجيل؛ والتسوية تصفّر عمود التشغيل فقط.'};}
  if(col==='الرصيد')return {delta:delta,description:'تغيير الرصيد ينعكس على الفلوس الأساسية بنفس مقدار الفرق حسب القاعدة المتفق عليها.'};
  return {delta:0,description:'لم تُحدد قاعدة ربط تلقائية لهذا العمود؛ سيتم حفظ تعديل البند فقط.'};
 }
@@ -167,7 +180,7 @@ function saveEntry(i,j){
  if(!n||a===''||num(a)<0)return alert('اكتب الاسم ومبلغًا صحيحًا');
  const old=[...cols[i].entries[j]],newAmount=num(a),delta=newAmount-num(old[1]);
  const isMoneyRow=i===0&&findMoneyEntry()?.entry===cols[i].entries[j];if(isMoneyRow&&n!==old[0]&&!/^(الفلوس|فلوس|الفلوس الأساسية|الفلوس الاساسية|الفلوس الموجودة|فلوس المحل|فلوس الخزنة|فلوس الدرج|النقدية|النقد|فلوس الكروت)$/i.test(n))return alert('ده بند الفلوس الأساسية المرتبط بكل الحسابات. ما تغيّرش اسمه من هنا؛ تقدر تعدّل المبلغ فقط.');
- const impact=moneyImpactForManualEdit(i,old[0],delta),money=findMoneyEntry();
+ const impact=moneyImpactForManualEdit(i,old[0],delta,old),money=findMoneyEntry();
  if(impact.delta!==0&&!money){return alert('مش لاقي بند «فلوس» داخل عمود الكروت، فمش هقدر أنفّذ تعديل مرتبط بأمان. لم يتغير أي رقم.')}
  if(money&&num(money.entry[1])+impact.delta<0)return alert('التعديل هيخلي الفلوس الأساسية بالسالب. راجع القيمة قبل المتابعة.');
  pendingManualEdit={i,j,old,n,newAmount,delta,impact,moneyBefore:money?num(money.entry[1]):null,moneyLabel:money?.entry[0]||null,requestedAt:new Date().toISOString()};
@@ -180,7 +193,7 @@ function confirmManualEdit(){
  const money=findMoneyEntry();
  if(p.impact.delta!==0&&(!money||num(money.entry[1])!==p.moneyBefore)){pendingManualEdit=null;alert('الفلوس الأساسية اتغيرت من وقت المراجعة. راجع العملية من جديد.');render();return}
  if(p.impact.delta!==0){money.entry[1]=String(num(money.entry[1])+p.impact.delta)}
- cols[p.i].entries[p.j]=[p.n,String(p.newAmount)];
+ cols[p.i].entries[p.j]=[p.n,String(p.newAmount),...(p.old[2]!==undefined?[p.old[2]]:[])];
  addLedger('تعديل يدوي مع مراجعة',`${p.old[0]} (${fmt(num(p.old[1]))}) ← ${p.n} (${fmt(p.newAmount)}) في ${cols[p.i].name}; فرق البند ${p.delta>0?'+':''}${fmt(p.delta)} جنيه; تأثير الفلوس ${p.impact.delta>0?'+':''}${fmt(p.impact.delta)} جنيه.`,{column:cols[p.i].name,entryName:p.n,previousName:p.old[0],oldValue:num(p.old[1]),newValue:p.newAmount,moneyDelta:p.impact.delta});
  pendingManualEdit=null;persist();closeModal();render();open(`<h2>تم تنفيذ التعديل</h2><p class="status">تم الحفظ بعد تأكيدك.</p><div class="reconMini"><div>التاريخ والوقت <b>${esc(localStamp())}</b></div><div>البند <b>${esc(cols[p.i].name)} — ${esc(p.n)}</b></div><div>القيمة الجديدة <b>${fmt(p.newAmount)} ج.م</b></div><div>تأثير الفلوس الأساسية <b>${p.impact.delta>0?'+':''}${fmt(p.impact.delta)} ج.م</b></div></div><button class="primary" onclick="closeModal()">تمام</button>`);
 }
@@ -352,16 +365,16 @@ function review(){
  if(p.type==='dailyWithdrawal'){
    const target=outsideCols.find(x=>x.c.entries.some(e=>norm(e[0])===norm(p.name)))||outsideCols[0];
    pendingOrder={...p,mode:'dailyWithdrawal',targetIndex:target?.i};
-   out.innerHTML=`<div class="reconMini"><div><span>تاريخ ووقت المراجعة</span><b>${esc(localStamp())}</b></div><div><span>الحركة</span><b>تسجيل سحب ${fmt(p.amount)} جنيه من ${esc(p.name)}</b></div><div><span>العمود</span><b>${esc(target?.c.name||'غير متاح')}</b></div><p class="small">هتتسجل في الخارج باسم ${esc(p.name)} من غير خصمها من الفلوس الأساسية دلوقتي؛ وقت التسويه هتتخصم من صافي ${esc(p.name)} مرة واحدة.</p><button class="primary" onclick="executeOrder()">تأكيد وتنفيذ</button><button onclick="pendingOrder=null;document.getElementById('orderPreview').innerHTML='تم إلغاء العملية.'">إلغاء</button></div>`;return;
+   out.innerHTML=`<div class="reconMini"><div><span>تاريخ ووقت المراجعة</span><b>${esc(localStamp())}</b></div><div><span>الحركة</span><b>تسجيل سحب ${fmt(p.amount)} جنيه من ${esc(p.name)}</b></div><div><span>العمود</span><b>${esc(target?.c.name||'غير متاح')}</b></div><p class="small">هتتسجل في الخارج باسم ${esc(p.name)}، وهيتخصم المبلغ من الفلوس الأساسية فورًا. تسوية اليوم هتصفّر العمود فقط من غير خصم تاني.</p><button class="primary" onclick="executeOrder()">تأكيد وتنفيذ</button><button onclick="pendingOrder=null;document.getElementById('orderPreview').innerHTML='تم إلغاء العملية.'">إلغاء</button></div>`;return;
  }
  if(p.type==='cashAdd'){
    const target=cashCols.find(x=>x.c.entries.length===0)||cashCols[0];
    pendingOrder={...p,mode:'cashAdd',cardsIndex,targetIndex:target?.i};
-   out.innerHTML=`<div class="reconMini"><div><span>تاريخ ووقت المراجعة</span><b>${esc(localStamp())}</b></div><div><span>الأمر المفهوم</span><b>إضافة ${fmt(p.amount)} جنيه كاش.</b></div><p class="small">المقترح: تسجيل المبلغ في ${esc(target?.c.name||'أحد أعمدة الكاش')} فقط. ترحيل صافي الكاش للفلوس الأساسية هيتم وقت «تسوية اليوم» بعد خصم أي مبالغ مسجلة في الخارج باسم كاش.</p><button class="primary" onclick="executeOrder()">تأكيد وتنفيذ</button><button onclick="pendingOrder=null;document.getElementById('orderPreview').innerHTML='تم إلغاء العملية.'">إلغاء</button></div>`;return;
+   out.innerHTML=`<div class="reconMini"><div><span>تاريخ ووقت المراجعة</span><b>${esc(localStamp())}</b></div><div><span>الأمر المفهوم</span><b>إضافة ${fmt(p.amount)} جنيه كاش.</b></div><p class="small">المقترح: تسجيل المبلغ في ${esc(target?.c.name||'أحد أعمدة الكاش')} وإضافته للفلوس الأساسية فورًا. تسوية اليوم هتصفّر عمود الكاش فقط من غير إضافة المبلغ مرة تانية.</p><button class="primary" onclick="executeOrder()">تأكيد وتنفيذ</button><button onclick="pendingOrder=null;document.getElementById('orderPreview').innerHTML='تم إلغاء العملية.'">إلغاء</button></div>`;return;
  }
  if(p.type==='accessorySale'||p.type==='accessoryAdd'){
    pendingOrder={...p,mode:p.type,cardsIndex,accessoryIndex};
-   out.innerHTML=`<div class="reconMini"><div><span>تاريخ ووقت المراجعة</span><b>${esc(localStamp())}</b></div><div><span>الأمر المفهوم</span><b>${p.type==='accessorySale'?'بيع':'إضافة'} ${esc(p.product)} بقيمة ${fmt(p.amount)} جنيه.</b></div><p class="small">المقترح: تسجيل الحركة في عمود الإكسسوار فقط؛ صافي الأكسسوار يترحّل إلى الفلوس الأساسية وقت «تسوية اليوم» بعد خصم أي مبالغ مسجلة في الخارج باسم إكسسوار.</p><button class="primary" onclick="executeOrder()">تأكيد وتنفيذ</button><button onclick="pendingOrder=null;document.getElementById('orderPreview').innerHTML='تم إلغاء العملية.'">إلغاء</button></div>`;return;
+   out.innerHTML=`<div class="reconMini"><div><span>تاريخ ووقت المراجعة</span><b>${esc(localStamp())}</b></div><div><span>الأمر المفهوم</span><b>${p.type==='accessorySale'?'بيع':'إضافة'} ${esc(p.product)} بقيمة ${fmt(p.amount)} جنيه.</b></div><p class="small">المقترح: تسجيل الحركة في عمود الإكسسوار وإضافتها للفلوس الأساسية فورًا. تسوية اليوم هتصفّر عمود الإكسسوار فقط من غير إضافة المبلغ مرة تانية.</p><button class="primary" onclick="executeOrder()">تأكيد وتنفيذ</button><button onclick="pendingOrder=null;document.getElementById('orderPreview').innerHTML='تم إلغاء العملية.'">إلغاء</button></div>`;return;
  }
  if(p.type==='outsideAdd'){
    const target=outsideCols.find(x=>x.c.entries.length===0)||outsideCols[0];
@@ -442,26 +455,30 @@ function executeOrder(){
    addLedger('تسوية بين الرصيد والخارج',`${p.name}: تم تسوية ${fmt(p.transfer)} جنيه من الرصيد مقابل المبلغ المطلوب${p.remaining?` وتسجيل المتبقي ${fmt(p.remaining)} جنيه فقط في الخارج`:''}؛ لم تتغير الفلوس الأساسية لأن دي تسوية داخلية.`,{column:'الرصيد والخارج',entryName:p.name,oldValue:p.person.balance,newValue:Math.max(0,p.person.balance-p.transfer),moneyDelta:0});
  }else if(p.mode==='cashAdd'){
    if(p.targetIndex==null){alert('مش لاقي عمود كاش مناسب.');return}
-   cols[p.targetIndex].entries.push(['كاش '+fmt(p.amount),String(p.amount)]);
-   addLedger('تسجيل كاش يومي',`تم تسجيل ${fmt(p.amount)} جنيه في ${cols[p.targetIndex].name}. لم تتغير الفلوس الأساسية؛ الترحيل يتم عند «تسوية اليوم».`,{column:cols[p.targetIndex].name,amount:p.amount});
+   const money=changeMoney(p.amount);if(!money.ok){alert(money.message);return}
+   cols[p.targetIndex].entries.push(['كاش '+fmt(p.amount),String(p.amount),{moneyPosted:true}]);
+   addLedger('تسجيل كاش يومي',`تم تسجيل ${fmt(p.amount)} جنيه في ${cols[p.targetIndex].name} وزادت الفلوس الأساسية فورًا من ${fmt(money.before)} إلى ${fmt(money.after)} جنيه. التسوية تصفّر عمود الكاش فقط.`,{column:cols[p.targetIndex].name,amount:p.amount,moneyDelta:p.amount});
  }else if(p.mode==='accessorySale'){
    if(p.accessoryIndex<0){alert('مش لاقي عمود الإكسسوار.');return}
-   cols[p.accessoryIndex].entries.push([p.product,String(p.amount)]);
-   addLedger('بيع أكسسوار يومي',`بيع ${p.product} بمبلغ ${fmt(p.amount)} جنيه. لم تتغير الفلوس الأساسية؛ صافي الأكسسوار يترحّل عند «تسوية اليوم».`,{column:'الإكسسوار',entryName:p.product,amount:p.amount});
+   const money=changeMoney(p.amount);if(!money.ok){alert(money.message);return}
+   cols[p.accessoryIndex].entries.push([p.product,String(p.amount),{moneyPosted:true}]);
+   addLedger('بيع أكسسوار يومي',`بيع ${p.product} بمبلغ ${fmt(p.amount)} جنيه؛ زادت الفلوس الأساسية فورًا من ${fmt(money.before)} إلى ${fmt(money.after)} جنيه. التسوية تصفّر عمود الإكسسوار فقط.`,{column:'الإكسسوار',entryName:p.product,amount:p.amount,moneyDelta:p.amount});
  }else if(p.mode==='accessoryAdd'){
    if(p.accessoryIndex<0){alert('مش لاقي عمود الإكسسوار.');return}
-   cols[p.accessoryIndex].entries.push([p.product,String(p.amount)]);
-   addLedger('تسجيل بند أكسسوار يومي',`تم تسجيل ${p.product} بقيمة ${fmt(p.amount)} جنيه. لم تتغير الفلوس الأساسية؛ الترحيل عند «تسوية اليوم».`,{column:'الإكسسوار',entryName:p.product,amount:p.amount});
+   const money=changeMoney(p.amount);if(!money.ok){alert(money.message);return}
+   cols[p.accessoryIndex].entries.push([p.product,String(p.amount),{moneyPosted:true}]);
+   addLedger('تسجيل بند أكسسوار يومي',`تم تسجيل ${p.product} بقيمة ${fmt(p.amount)} جنيه؛ زادت الفلوس الأساسية فورًا من ${fmt(money.before)} إلى ${fmt(money.after)} جنيه. التسوية تصفّر عمود الإكسسوار فقط.`,{column:'الإكسسوار',entryName:p.product,amount:p.amount,moneyDelta:p.amount});
  }else if(p.mode==='dailyWithdrawal'){
    const target=cols[p.targetIndex];
    if(!target||!/^خارج/.test(target.name)){alert('مش لاقي عمود خارج مناسب.');return}
-   addToNamed(p.targetIndex,p.name,p.amount);
-   addLedger('سحب يومي من الكاش/الأكسسوار',`تم تسجيل سحب ${fmt(p.amount)} جنيه باسم ${p.name} في ${target.name}. لم تتغير الفلوس الأساسية الآن؛ سيُخصم من صافي البند وقت التسويه.`,{column:target.name,entryName:p.name,amount:p.amount});
+   const money=changeMoney(-p.amount);if(!money.ok){alert(money.message);return}
+   addToNamed(p.targetIndex,p.name,p.amount);const withdrawalRow=target.entries.find(e=>e[0]===p.name);if(withdrawalRow)withdrawalRow[2]={moneyPosted:true};
+   addLedger('سحب يومي من الكاش/الأكسسوار',`تم تسجيل سحب ${fmt(p.amount)} جنيه باسم ${p.name} في ${target.name} وخصمه من الفلوس الأساسية فورًا. التسوية تصفّر السحب فقط من غير خصم تاني.`,{column:target.name,entryName:p.name,amount:p.amount,moneyDelta:-p.amount});
  }else if(p.mode==='outsideAdd'){
    if(p.targetIndex==null){alert('مش لاقي عمود خارج مناسب.');return}
-   cols[p.targetIndex].entries.push([p.name,String(p.amount)]);
    const money=changeMoney(-p.amount); if(!money.ok){alert(money.message);return;}
-   addLedger('تسجيل خارج',`${p.name} — ${fmt(p.amount)} جنيه في الخارج؛ نقصت الفلوس الموجودة في عمود الكروت بنفس المبلغ.`);
+   const outsideEntry=[p.name,String(p.amount)];if(isDailyWithdrawalName(p.name))outsideEntry[2]={moneyPosted:true};cols[p.targetIndex].entries.push(outsideEntry);
+   addLedger('تسجيل خارج',`${p.name} — ${fmt(p.amount)} جنيه في الخارج؛ نقصت الفلوس الموجودة في عمود الكروت بنفس المبلغ.`,{column:cols[p.targetIndex].name,entryName:p.name,amount:p.amount,moneyDelta:-p.amount});
  }else if(p.mode==='balanceAdd'){
    const money=changeMoney(p.amount); if(!money.ok){alert(money.message);return}
    addToNamed(p.balanceIndex,p.name,p.amount);
@@ -534,10 +551,11 @@ function getDailyClosePlan(){
  const isCashName=n=>['كاش','الكاش','كاش اليوم','سحب كاش','الكاش اليوم'].includes(normAccountingName(n));
  const isAccessoryName=n=>['اكسسوار','الاكسسوار','اكسسوارات','اكسسوارات اليوم'].includes(normAccountingName(n));
  const sumRows=arr=>arr.reduce((sum,x)=>sum+x.c.entries.reduce((a,e)=>a+num(e[1]),0),0);
- const cashGross=sumRows(cashCols),accessoryGross=sumRows(accessoryCols),cashRows=[],accessoryRows=[];
+ const pendingAmount=e=>e[2]?.moneyPosted===true?0:num(e[1]);
+ const cashGross=cashCols.reduce((sum,x)=>sum+x.c.entries.reduce((a,e)=>a+pendingAmount(e),0),0),accessoryGross=accessoryCols.reduce((sum,x)=>sum+x.c.entries.reduce((a,e)=>a+pendingAmount(e),0),0),cashRows=[],accessoryRows=[];
  outsideCols.forEach(({c,i})=>c.entries.forEach((e,j)=>{
-  if(isCashName(e[0]))cashRows.push({ci:i,ei:j,name:e[0],amount:num(e[1])});
-  if(isAccessoryName(e[0]))accessoryRows.push({ci:i,ei:j,name:e[0],amount:num(e[1])});
+  if(isCashName(e[0])&&e[2]?.moneyPosted!==true)cashRows.push({ci:i,ei:j,name:e[0],amount:num(e[1])});
+  if(isAccessoryName(e[0])&&e[2]?.moneyPosted!==true)accessoryRows.push({ci:i,ei:j,name:e[0],amount:num(e[1])});
  }));
  const cashWithdrawals=cashRows.reduce((a,x)=>a+x.amount,0),accessoryWithdrawals=accessoryRows.reduce((a,x)=>a+x.amount,0);
  const cashNet=cashGross-cashWithdrawals,accessoryNet=accessoryGross-accessoryWithdrawals,netToMoney=cashNet+accessoryNet;
@@ -552,7 +570,7 @@ function closeDay(){
  const accessoryDetail=p.accessoryRows.map(x=>`<div>خارج ${esc(x.name)} — ${esc(cols[x.ci].name)} <b>${fmt(x.amount)} ج.م</b></div>`).join('');
  const r=p.reconciliation,diffText=r.diff===0?'متزن':(r.diff>0?'زيادة محتملة':'عجز محتمل');
  open(`<h2>مراجعة «تسوية اليوم»</h2>
- <p class="small">التاريخ والوقت: ${esc(localStamp())}. هنعرض المقارنة العامة، وبعدها نحسب صافي الكاش والأكسسوار، ونرحّله مرة واحدة فقط بعد موافقتك.</p>
+ <p class="small">التاريخ والوقت: ${esc(localStamp())}. الحركات الجديدة اتضافت للفلوس فور تسجيلها. هنرحّل هنا فقط أي أرصدة يومية قديمة غير مرحّلة، وبعدها نصفر أعمدة التشغيل.</p>
  <div class="reconMini"><div>عمود الرصيد — الإجمالي <b>${fmt(r.capital)} ج.م</b></div><div>كل الأعمدة الأخرى قبل التسويه <b>${fmt(r.otherTotal)} ج.م</b></div><div>الفرق العام (باقي الأعمدة − الرصيد) <b>${r.diff>0?'+':''}${fmt(r.diff)} ج.م — ${diffText}</b></div></div>
  <h3>تسوية الكاش</h3><div class="reconMini"><div>إجمالي عمود/أعمدة الكاش <b>${fmt(p.cashGross)} ج.م</b></div><div>المسجل في الخارج باسم كاش <b>−${fmt(p.cashWithdrawals)} ج.م</b></div><div>صافي الكاش للترحيل <b>${p.cashNet>0?'+':''}${fmt(p.cashNet)} ج.م</b></div></div>
  ${cashDetail?`<details><summary class="small">تفاصيل الخارج باسم كاش</summary><div class="reconMini">${cashDetail}</div></details>`:'<p class="small">مفيش مبالغ مطابقة لاسم «كاش» في أعمدة الخارج.</p>'}
@@ -560,7 +578,7 @@ function closeDay(){
  ${accessoryDetail?`<details><summary class="small">تفاصيل الخارج باسم إكسسوار</summary><div class="reconMini">${accessoryDetail}</div></details>`:'<p class="small">مفيش مبالغ مطابقة لاسم «إكسسوار» في أعمدة الخارج.</p>'}
  <div class="reconMini"><div>إجمالي صافي الكاش والأكسسوار اللي هيتضاف/يتخصم من الفلوس <b>${p.netToMoney>0?'+':''}${fmt(p.netToMoney)} ج.م</b></div><div>الفلوس الأساسية قبل التسويه <b>${fmt(p.moneyBefore)} ج.م</b></div><div>الفلوس الأساسية بعد التسويه <b>${fmt(p.moneyBefore+p.netToMoney)} ج.م</b></div></div>
  ${p.netToMoney<0?`<p class="status">صافي الكاش والأكسسوار سالب بمقدار ${fmt(Math.abs(p.netToMoney))} جنيه. هيتخصم من الفلوس الأساسية؛ لازم الرصيد يكفي، وراجع السبب قبل التأكيد.</p>`:''}
- <p class="small">بعد التأكيد: هنحفظ صورة كاملة من الحسابات والحركات، ونرحّل صافي الكاش والأكسسوار مرة واحدة، ونصفّر أرصدة أعمدة الكاش والأكسسوار والمبالغ المرتبطة المسجلة في الخارج. أسماء البنود وتفاصيلها التاريخية تفضل محفوظة. مش هيتغير أي رقم قبل التأكيد.</p>
+ <p class="small">بعد التأكيد: هنحفظ صورة كاملة من الحسابات والحركات، ونرحّل فقط أي مبالغ قديمة غير مرحّلة إن وُجدت، ثم نصفر أعمدة الكاش والإكسسوار والسحوبات اليومية المرتبطة. المبالغ المسجلة حاليًا في الفلوس مش هتتضاف مرة تانية. أسماء البنود وتفاصيلها التاريخية تفضل محفوظة.</p>
  <button class="primary" onclick="confirmCloseDay('${date}')">تأكيد التسويه وقفل اليوم</button><button onclick="closeModal()">رجوع بدون تغيير</button>`);
 }
 function confirmCloseDay(date){
@@ -581,9 +599,9 @@ function confirmCloseDay(date){
   colsBefore:JSON.parse(JSON.stringify(cols)),ledgerBefore:JSON.parse(JSON.stringify(ledger))};
  try{
   money.entry[1]=String(p.moneyBefore+p.netToMoney);
-  p.cashCols.forEach(({c})=>c.entries.forEach(e=>e[1]='0'));
-  p.accessoryCols.forEach(({c})=>c.entries.forEach(e=>e[1]='0'));
-  [...p.cashRows,...p.accessoryRows].forEach(x=>{const row=cols[x.ci]?.entries[x.ei];if(row&&num(row[1])===x.amount)row[1]='0';});
+  p.cashCols.forEach(({c})=>c.entries.forEach(e=>{e[1]='0';e[2]={...(e[2]||{}),moneyPosted:true}}));
+  p.accessoryCols.forEach(({c})=>c.entries.forEach(e=>{e[1]='0';e[2]={...(e[2]||{}),moneyPosted:true}}));
+  [...p.cashRows,...p.accessoryRows].forEach(x=>{const row=cols[x.ci]?.entries[x.ei];if(row&&num(row[1])===x.amount){row[1]='0';row[2]={...(row[2]||{}),moneyPosted:true}}});
   closedDays.push({...snapshot,totalsAfter:Object.fromEntries(cols.map(c=>[c.name,sumCol(c.name)])),cleared:true});
   ledger.unshift({id:Date.now()+Math.random(),at:now.toISOString(),action:'تسوية اليوم — V30',details:`إقفال ${normalizedDate}: صافي الكاش ${fmt(p.cashNet)}، صافي الأكسسوار ${fmt(p.accessoryNet)}، ترحيل صافي ${fmt(p.netToMoney)} جنيه للفلوس الأساسية مرة واحدة. تم تصفير أعمدة الكاش والأكسسوار ومبالغ الخارج المطابقة، مع حفظ صورة كاملة قبل التسويه.`,column:'قفل اليوم',moneyDelta:p.netToMoney});
   ledger=ledger.slice(0,2000);
@@ -710,7 +728,7 @@ async function bootAuthenticatedDashboard(token,selectedCompanyId){
   document.querySelectorAll('button[onclick="voiceDaga()"]').forEach(b=>{b.hidden=!smartAllowed;b.disabled=!smartAllowed;b.title=smartAllowed?'':'زر كلم ضجة متاح بعد تفعيل اشتراك DAGA للشركة.';b.setAttribute('aria-disabled',String(!smartAllowed));});
   document.querySelectorAll('button.liveBtn').forEach(b=>{b.hidden=!liveAllowed;b.disabled=!liveAllowed;b.title='LIVE DAGA متاحة؛ يلزم وجود رصيد حروف للتحدث.';b.setAttribute('aria-disabled',String(!liveAllowed));});
   document.querySelectorAll('button[onclick="showReports()"]').forEach(b=>{b.hidden=false;b.disabled=false;b.title=window.DAGA_AUTH_USER.historyEnabled?'':'تفاصيل الأيام السابقة متاحة بعد تفعيل اشتراك DAGA للشركة.';});
-  loadStoreData(company.id);
+  loadStoreData(company.id);migrateLegacyDailyAccounting();
   const header=document.querySelector('header.top .row');
   if(header&&!document.getElementById('accountLogout')){const b=document.createElement('button');b.id='accountLogout';b.type='button';b.textContent='تسجيل الخروج';b.style.cssText='margin:0 10px;padding:8px 11px;border:1px solid #4a402c;border-radius:9px;background:#15120c;color:#d7ad57;font:inherit;font-size:12px;cursor:pointer';b.addEventListener('click',async()=>{b.disabled=true;try{await fetch('/api/company/auth/logout',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:'{}',cache:'no-store',credentials:'omit'});}finally{window.location.replace('/shop-access/');}});header.insertBefore(b,header.lastElementChild);}
   render();
