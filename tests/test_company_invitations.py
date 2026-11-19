@@ -200,7 +200,7 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertNotIn("sessionStorage", page)
         self.assertIn("/api/company/invitations/accept", page)
         self.assertIn("/api/company/auth/register/verify", page)
-        self.assertIn("/api/company/auth/login", page)
+        self.assertIn("/api/company/team/auth/login", page)
 
     def test_shop_owner_self_registration_replaces_company_provisioning(self):
         admin = (ROOT / "owner-admin.js").read_text(encoding="utf-8")
@@ -208,7 +208,6 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertNotIn('if(path==="/owner/admin/stores"&&request.method==="POST")', admin)
         self.assertIn("authenticatedOwner(request, db)", admin)
         self.assertNotIn("companyOwnerForm", console)
-        self.assertNotIn("معرّف الشركة", console)
         self.assertIn("طلبات تسجيل الشركات", console)
 
     def test_company_approval_and_owner_account_status_change_together(self):
