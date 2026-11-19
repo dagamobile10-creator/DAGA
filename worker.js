@@ -46,7 +46,7 @@ export default {
           "Referrer-Policy": "no-referrer",
           "X-Content-Type-Options": "nosniff",
           "Permissions-Policy": "camera=(self), microphone=(self)",
-          "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline' https://esm.sh; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob:; connect-src 'self' https: wss:; font-src 'self' data: https:; base-uri 'self'; frame-ancestors 'self'; form-action 'self'"
+          "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline' https://esm.sh; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob:; connect-src 'self' https: wss:; font-src 'self' data: https:; base-uri 'self'; frame-ancestors 'self' https://daga-app-staging.dagamobile10.workers.dev; form-action 'self'"
         }
       });
     }
@@ -72,7 +72,7 @@ export default {
           "Cache-Control": "no-store",
           "Referrer-Policy": "no-referrer",
           "X-Content-Type-Options": "nosniff",
-          "Content-Security-Policy": "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'self'; frame-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+          "Content-Security-Policy": "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'self'; frame-src 'self' https://daga-app-staging.dagamobile10.workers.dev; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
         }
       });
     }
