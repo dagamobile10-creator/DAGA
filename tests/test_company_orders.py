@@ -210,9 +210,11 @@ class VoiceIdentityGateTests(unittest.TestCase):
     def setUpClass(cls):
         cls.worker = (ROOT / "worker.js").read_text(encoding="utf-8")
 
-    def test_voice_auth_gate_is_opt_in_and_preserves_legacy_client_by_default(self):
-        self.assertIn('env.DAGA_VOICE_REQUIRE_AUTH || ""', self.worker)
+    def test_voice_auth_gate_is_mandatory_for_subscription_controlled_routes(self):
+        self.assertIn('const voiceIdentityRequired = true;', self.worker)
         self.assertIn('voiceIdentityRequired && ["/chat", "/tts", "/liveavatar/token"].includes(url.pathname)', self.worker)
+        self.assertIn('authenticatedAccount(request, env.DAGA_APP_DB)', self.worker)
+        self.assertIn('resolveCompanyVoiceContext(env, voiceAccount', self.worker)
         self.assertIn('if (!voiceAccount || voiceAccount.status !== "approved" || voiceAccount.role === "program_owner")', self.worker)
         self.assertIn('error: "authenticated_account_required"', self.worker)
 
@@ -260,14 +262,15 @@ class LiveClientSessionForwardingTests(unittest.TestCase):
         self.assertIn("DAGA_API_BASE+'/tts'", self.client)
         self.assertNotIn(".avatar.speaking img{animation:", self.client)
         self.assertNotIn("@keyframes avatarTalk", self.client)
-    def test_legacy_client_remains_compatible_without_session(self):
+    def test_client_can_omit_session_header_but_worker_rejects_unauthenticated_voice(self):
         helper_start = self.client.index("function dagaAuthHeaders")
         helper_end = self.client.index("\n", helper_start)
         helper = self.client[helper_start:helper_end]
         self.assertIn("const headers={...extra}", helper)
         self.assertIn("if(token&&token.length<=4096)", helper)
         self.assertIn("return headers", helper)
-        self.assertIn('const voiceIdentityRequired = String(env.DAGA_VOICE_REQUIRE_AUTH || "").toLowerCase() === "true"', self.worker)
+        self.assertIn('const voiceIdentityRequired = true;', self.worker)
+        self.assertIn('authenticated_account_required', self.worker)
 
 
 
@@ -307,11 +310,11 @@ class LiveDagaLoginFlowTests(unittest.TestCase):
         self.assertIn("sessionToken:token,expiresAt:expires", login)
 
 
-    def test_optional_voice_gate_and_memory_gate_use_server_verified_identity(self):
+    def test_mandatory_voice_gate_and_separate_memory_gate_use_server_verified_identity(self):
         self.assertIn('voiceIdentityRequired && ["/chat", "/tts", "/liveavatar/token"].includes(url.pathname)', self.worker)
         self.assertIn('const account = await authenticatedAccount(request, env.DAGA_APP_DB)', self.worker)
         self.assertIn('DAGA_MEMORY_REQUIRE_AUTH', self.worker)
-        self.assertIn('DAGA_VOICE_REQUIRE_AUTH', self.worker)
+        self.assertIn('const voiceIdentityRequired = true;', self.worker)
 
 
 
