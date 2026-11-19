@@ -577,12 +577,13 @@ function executeOrderCore(){
    if(!serviceAgent&&money)money.entry[1]=String(num(money.entry[1])+p.amount);
    addLedger('إضافة رصيد في عمود الرصيد',agentName+' — '+fmt(p.amount)+' جنيه؛ تأثير الفلوس الأساسية '+fmt(p.moneyDelta||0)+' جنيه.',{column:'الرصيد',entryName:agentName,amount:p.amount,moneyDelta:p.moneyDelta||0,agentName:serviceAgent?agentName:null,agentDelta:serviceAgent?p.amount:0});
  }else if(p.mode==='balancePayout'){
-  const serviceAgent=canonicalServiceAgent(p.name),moneyCheck=findMoneyEntry();
-  if(!serviceAgent){if(!moneyCheck){alert('مش لاقي بند الفلوس الأساسية. لم يتغير حساب الشخص.');pendingOrder=null;return}if(num(moneyCheck.entry[1])<p.amount){alert('الفلوس الأساسية أقل من المبلغ المطلوب. لم يتغير أي حساب.');pendingOrder=null;return}}
+  const serviceAgent=canonicalServiceAgent(p.name),moneyCheck=findMoneyEntry(),moneyToDeduct=serviceAgent?p.paid:p.amount;
+  if(!moneyCheck){alert('مش لاقي بند الفلوس الأساسية. لم يتغير حساب الشخص.');pendingOrder=null;return}
+  if(num(moneyCheck.entry[1])<moneyToDeduct){alert('الفلوس الأساسية أقل من المبلغ المطلوب تسويته من الرصيد. لم يتغير أي حساب.');pendingOrder=null;return}
   const remaining=updateRows(p.person.balanceRows,p.paid);if(remaining>0){alert('الرصيد تغيّر أثناء المراجعة. راجع الأمر من جديد.');pendingOrder=null;return}
-  if(p.excess>0){const target=cols[p.outsideTargetIndex];if(!target||!/^خارج/.test(target.name)){alert('مش لاقي عمود خارج لتسجيل الزيادة. راجع الحساب.');pendingOrder=null;return}addToNamed(p.outsideTargetIndex,p.name,p.excess)}
-  let moneyDelta=0;if(!serviceAgent){const money=changeMoney(-p.amount);if(!money.ok){alert(money.message);return}moneyDelta=-p.amount}
-  addLedger('صرف/تسوية رصيد مندوب',p.name+' استلم '+fmt(p.amount)+' جنيه؛ اتسوى '+fmt(p.paid)+' من الرصيد. '+(serviceAgent?'الفلوس الأساسية لم تتغير؛ ده رصيد مندوب خدمة.':'تم خصم المبلغ المدفوع من الفلوس مرة واحدة.'),{column:'الرصيد والخارج',entryName:p.name,paid:p.amount,settled:p.paid,excess:p.excess,moneyDelta});
+  if(p.excess>0){const target=cols[p.outsideTargetIndex];if(!target||!/^خارج/.test(target.name)){alert('مش لاقي عمود خارج لتسجيل الزيادة. راجع الحساب.');return}addToNamed(p.outsideTargetIndex,p.name,p.excess)}
+  const money=changeMoney(-moneyToDeduct);if(!money.ok){alert(money.message);return}const moneyDelta=-moneyToDeduct;
+  addLedger('صرف/تسوية رصيد مندوب',p.name+' استلم '+fmt(p.amount)+' جنيه؛ اتسوى '+fmt(p.paid)+' من الرصيد. '+(serviceAgent?'تم خصم المبلغ المشطوب من رصيد المندوب من الفلوس الأساسية.':'تم خصم المبلغ المدفوع من الفلوس مرة واحدة.'),{column:'الرصيد والخارج',entryName:p.name,paid:p.amount,settled:p.paid,excess:p.excess,moneyDelta});
 
  }else if(p.mode==='outgoing'){
    const target=p.rows.find(r=>/^خارج/.test(cols[r.ci].name))?.ci ?? cols.findIndex(c=>c.name==='خارج 1');
@@ -655,7 +656,7 @@ function describeLiveOrder(p){
  if(p.mode==='accessorySale'||p.mode==='accessoryAdd')return 'هسجل '+fmt(p.amount)+' جنيه في عمود الإكسسوار باسم '+(p.product||'مبيعات أكسسوار')+'. الفلوس الأساسية هتزيد '+fmt(p.amount)+' جنيه.';
  if(p.mode==='dailyWithdrawal')return 'هسجل سحب '+fmt(p.amount)+' جنيه من '+p.name+' في عمود الخارج، والفلوس الأساسية هتقل '+fmt(p.amount)+' جنيه.';
  if(p.mode==='namedEntrySet')return 'هعدل بند '+p.entryName+' من '+fmt(p.oldAmount)+' إلى '+fmt(p.newAmount)+' جنيه. تأثير الفلوس الأساسية '+fmt(p.moneyDelta)+' جنيه.';
- if(p.mode==='balanceAdd')return 'هضيف '+fmt(p.amount)+' جنيه باسم '+p.name+' في عمود الرصيد، والفلوس الأساسية هتزيد بنفس المبلغ إلا لو الرصيد تابع لفوري أو ممكن أو سوبر بي.';
+ if(p.mode==='balanceAdd')return 'هضيف '+fmt(p.amount)+' جنيه باسم '+p.name+' في عمود الرصيد؛ لو فوري أو ممكن أو سوبر بي فده يزيد رصيد المندوب فقط من غير تأثير على الفلوس الأساسية.';
  if(p.mode==='balanceToOutsideTransfer')return 'هسوي '+fmt(p.transfer)+' جنيه من رصيد '+p.name+' وأسجل المتبقي في الخارج. تأثير الفلوس الأساسية صفر.';
  if(p.mode==='balancePayout'||p.mode==='outgoing')return 'هسجل صرف '+fmt(p.amount)+' جنيه باسم '+p.name+' حسب رصيده الحالي. راجع تفاصيل العملية.';
  if(p.mode==='receipt')return 'هسجل تحصيل '+fmt(p.amount)+' جنيه من '+p.name+' وأسوي المستحق عليه حسب الحساب الحالي.';
