@@ -179,7 +179,7 @@ function moneyImpactForManualEdit(ci,entryName,delta,existingEntry=null){
  if(col==='الكروت'){
   const f=findMoneyEntry();if(f&&f.entry[0]===entryName)return {delta:0,agentDelta:0,agentName:null,description:'ده بند الفلوس الأساسية نفسه؛ لن نعدّل الفلوس مرة ثانية.'};
   const agent=serviceAgentForCardEntry(entryName);
-  if(agent){if(delta>0)return {delta:0,agentDelta:delta,agentName:agent,description:'إضافة شحن جديدة لخدمة '+agent+'؛ تزيد رصيد المندوب فقط بلا تأثير على الفلوس.'};return {delta:-delta,agentDelta:0,agentName:agent,description:'استهلاك من رصيد خدمة '+agent+'؛ المبلغ المستهلك يزيد الفلوس الأساسية فقط.'};}
+  if(agent){if(delta>0)return {delta:0,agentDelta:delta,agentName:agent,description:'إضافة شحن جديدة لخدمة '+agent+'؛ تزيد رصيد المندوب فقط بلا تأثير على الفلوس.'};return {delta:-delta,agentDelta:delta,agentName:agent,description:'استهلاك من رصيد خدمة '+agent+'؛ يقل رصيد المندوب بنفس المبلغ وتزيد الفلوس الأساسية بالمبلغ المستهلك.'};}
   return {delta:-delta,agentDelta:0,agentName:null,description:'تغيير رصيد بند نقدي داخل الكروت يقابله تغيير عكسي في الفلوس الأساسية.'};
  }
  if(col==='الرصيد')return {delta:0,agentDelta:0,agentName:null,description:'أرصدة المندوبين مستقلة تمامًا عن الفلوس؛ الإضافة أو الخصم أو الحذف لا يغيّر الفلوس.'};
@@ -379,6 +379,7 @@ function review(){
   if(impact.delta!==0&&!money){out.innerHTML='<p class="small">مش لاقي بند الفلوس داخل عمود الكروت.</p>';return}
   if(money&&num(money.entry[1])+impact.delta<0){out.innerHTML='<p class="small">التعديل هيخلي الفلوس الأساسية بالسالب.</p>';return}
   const agentState=impact.agentName?getServiceAgentBalance(impact.agentName):null;
+  if(impact.agentDelta&&agentState&&agentState.value+impact.agentDelta<0){out.innerHTML='<p class="small">رصيد المندوب '+esc(impact.agentName)+' غير كافٍ للخصم المطلوب. لم يتغير أي رقم.</p>';return}
   pendingOrder={...p,mode:'namedEntrySet',ci,delta,moneyDelta:impact.delta,agentDelta:impact.agentDelta||0,agentName:impact.agentName||null,agentBefore:agentState?.value??null,moneyBefore:money?num(money.entry[1]):null};
   out.innerHTML='<div class="reconMini"><div>البند <b>'+esc(p.entryName)+'</b></div><div>القيمة القديمة <b>'+fmt(p.oldAmount)+'</b></div><div>القيمة الجديدة <b>'+fmt(p.newAmount)+'</b></div><div>تأثير الفلوس <b>'+fmt(impact.delta)+'</b></div>'+(impact.agentName?'<div>رصيد '+esc(impact.agentName)+' <b>'+fmt(impact.agentDelta)+'</b></div>':'')+'</div><p class="small">'+esc(impact.description)+'</p><button class="primary" onclick="executeOrder()">تأكيد وتنفيذ</button><button onclick="pendingOrder=null;document.getElementById(\'orderPreview\').innerHTML=\'تم إلغاء العملية.\'">إلغاء</button>';return;
  }
@@ -585,7 +586,9 @@ function getServiceAgentBalance(agent){
  const column=cols.find(c=>c.name==='الرصيد');if(!column)return {column:null,index:-1,entry:null,value:0};
  const aliases=canonical==='فوري'?['فوري','فورى']:canonical==='سوبر بي'?['سوبر بي','سوبر باي','سوبر باى']:['ممكن'];
  const index=column.entries.findIndex(e=>aliases.includes(normAccountingName(e[0])));
- return {column,index,entry:index>=0?column.entries[index]:null,value:index>=0?num(column.entries[index][1]):0};
+ const entry=index>=0?column.entries[index]:null;
+ const value=index>=0?num(entry[1]):(cols.find(c=>c.name==='الكروت')?.entries||[]).reduce((sum,e)=>serviceAgentForCardEntry(e[0])===canonical?sum+num(e[1]):sum,0);
+ return {column,index,entry,value};
 }
 function applyServiceAgentDelta(agent,delta){
  const state=getServiceAgentBalance(agent);if(!delta)return {ok:true,before:state.value,after:state.value};
