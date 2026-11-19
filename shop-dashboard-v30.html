@@ -316,7 +316,7 @@ function parseOrder(t){
  const cleaned=norm(text.replace(/(?:^|\s)\d+(?:\.\d{1,2})?(?=\s|$)/g,' '));
  // Service balance movement: decrease = consumed stock; increase = new vendor funding.
  const cardsForDelta=cols.find(c=>c.name==='الكروت');
- const serviceRows=(cardsForDelta?.entries||[]).map((e,i)=>({name:String(e[0]||''),index:i,amount:num(e[1]),agent:serviceAgentForCardEntry(e[0]),normalized:norm(e[0])})).filter(e=>e.agent&&cleaned.includes(e.normalized));
+ const serviceRows=(cardsForDelta?.entries||[]).map((e,i)=>({name:String(e[0]||''),index:i,amount:num(e[1]),agent:serviceAgentForCardEntry(e[0]),normalized:norm(e[0])})).filter(e=>e.agent&&serviceCardEntryMentioned(cleaned,e.name));
  if(serviceRows.length){serviceRows.sort((a,b)=>b.normalized.length-a.normalized.length);const best=serviceRows[0];
   const subtractIntent=/(اخصم|خصم|انقص|نقص|اسحب|استهلك)/.test(cleaned),addServiceIntent=/(زود|زيد|ضيف|اضيف|ارفع|حط|سجل|اكتب|دخل)/.test(cleaned);
   if(subtractIntent||addServiceIntent){const delta=subtractIntent?-amount:amount,newAmount=best.amount+delta;
@@ -714,26 +714,42 @@ function canonicalServiceAgent(name){
  return null;
 }
 function serviceAgentForCardEntry(name){
- const n=normAccountingName(name);
- if(['رصيد اساسي','الرصيد الاساسي','كارت وهوا','كارت هوا','كارت هواء','كاش اوت'].includes(n))return 'فوري';
+ const n=normAccountingName(name).replace(/^ال(?=رصيد)/,'');
+ if(['رصيد اساسي','كارت وهوا','كارت هوا','كارت هواء','كاش اوت'].includes(n))return 'فوري';
  if(n==='ممكن')return 'ممكن';
- if(['سوبر باي','سوبر بي','سوبر باى'].includes(n))return 'سوبر بي';
+ if(['سوبر باي','سوبر بي'].includes(n))return 'سوبر بي';
  return null;
+}
+function serviceCardEntryMentioned(command,name){
+ const c=normAccountingName(command),n=normAccountingName(name);
+ if(!n||!c)return false;
+ const variants=new Set([n,n.replace(/^ال(?=رصيد)/,''),n.replace(/^رصيد(?= )/,'الرصيد')]);
+ if(serviceAgentForCardEntry(name)==='فوري'){
+  if(n.includes('رصيد')){variants.add('رصيد اساسي');variants.add('الرصيد الاساسي');}
+  if(n.includes('كارت')){variants.add('كارت وهوا');variants.add('كارت هوا');variants.add('كارت هواء');}
+  if(n.includes('كاش'))variants.add('كاش اوت');
+ }
+ for(const v of variants){if(v&&c.includes(v))return true;}
+ return false;
 }
 function getServiceAgentBalance(agent){
  const canonical=canonicalServiceAgent(agent);if(!canonical)return {column:null,index:-1,entry:null,value:0};
  const column=cols.find(c=>c.name==='الرصيد');if(!column)return {column:null,index:-1,entry:null,value:0};
  const aliases=canonical==='فوري'?['فوري','فورى']:canonical==='سوبر بي'?['سوبر بي','سوبر باي','سوبر باى']:['ممكن'];
- const index=column.entries.findIndex(e=>aliases.includes(normAccountingName(e[0])));
- const entry=index>=0?column.entries[index]:null;
- const value=index>=0?num(entry[1]):(cols.find(c=>c.name==='الكروت')?.entries||[]).reduce((sum,e)=>serviceAgentForCardEntry(e[0])===canonical?sum+num(e[1]):sum,0);
- return {column,index,entry,value};
+ const indexes=column.entries.map((e,i)=>({e,i})).filter(x=>aliases.includes(normAccountingName(x.e[0])));
+ const index=indexes.length?indexes[0].i:-1,entry=index>=0?column.entries[index]:null;
+ const value=indexes.length?indexes.reduce((sum,x)=>sum+num(x.e[1]),0):(cols.find(c=>c.name==='الكروت')?.entries||[]).reduce((sum,e)=>serviceAgentForCardEntry(e[0])===canonical?sum+num(e[1]):sum,0);
+ return {column,index,entry,value,indexes};
 }
 function applyServiceAgentDelta(agent,delta){
  const state=getServiceAgentBalance(agent);if(!delta)return {ok:true,before:state.value,after:state.value};
  if(!state.column)return {ok:false,message:'مش لاقي عمود الرصيد لتحديث المندوب '+agent+'.'};
  const after=state.value+delta;if(after<0)return {ok:false,message:'تعديل رصيد المندوب '+agent+' هيخلي رصيده بالسالب. راجع القيمة.'};
- if(state.index<0)state.column.entries.push([canonicalServiceAgent(agent),String(after)]);else state.entry[1]=String(after);
+ if(state.index<0)state.column.entries.push([canonicalServiceAgent(agent),String(after)]);
+ else{
+  state.entry[0]=canonicalServiceAgent(agent);state.entry[1]=String(after);
+  (state.indexes||[]).slice(1).sort((a,b)=>b.i-a.i).forEach(x=>state.column.entries.splice(x.i,1));
+ }
  return {ok:true,before:state.value,after};
 }
 function normalizeServiceAgentLabel(name){return canonicalServiceAgent(name)||String(name||'').trim();}
