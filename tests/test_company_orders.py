@@ -341,7 +341,7 @@ class AuthenticatedMemoryIsolationTests(unittest.TestCase):
         self.assertIn("dagaAuthHeaders()", self.client)
 
     def test_voice_and_memory_auth_remain_separately_gated(self):
-        self.assertIn('DAGA_VOICE_REQUIRE_AUTH', self.worker)
+        self.assertIn('const voiceIdentityRequired = true;', self.worker)
         self.assertIn('DAGA_MEMORY_REQUIRE_AUTH', self.worker)
         self.assertIn('voiceIdentityRequired && ["/chat", "/tts", "/liveavatar/token"].includes(url.pathname)', self.worker)
 
