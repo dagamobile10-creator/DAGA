@@ -227,10 +227,10 @@ function moneyImpactForManualEdit(ci,entryName,delta,existingEntry=null){
  if(col==='الكروت'){
   const f=findMoneyEntry();if(f&&f.entry[0]===entryName)return {delta:0,agentDelta:0,agentName:null,description:'ده بند الفلوس الأساسية نفسه؛ لن نعدّل الفلوس مرة ثانية.'};
   const agent=serviceAgentForCardEntry(entryName);
-  if(agent){if(delta>0)return {delta:0,agentDelta:delta,agentName:agent,description:'إضافة شحن جديدة لخدمة '+agent+'؛ تزيد رصيد المندوب فقط بلا تأثير على الفلوس.'};return {delta:-delta,agentDelta:delta,agentName:agent,description:'استهلاك من رصيد خدمة '+agent+'؛ يقل رصيد المندوب بنفس المبلغ وتزيد الفلوس الأساسية بالمبلغ المستهلك.'};}
+  if(agent){if(delta>0)return {delta:0,agentDelta:delta,agentName:agent,description:'شحن جديد لخدمة '+agent+'؛ يزيد رصيد الماكينة ورصيد المندوب بفرق الشحن فقط، من غير أي تأثير على الفلوس الأساسية.'};return {delta:-delta,agentDelta:0,agentName:null,description:'استهلاك من رصيد ماكينة '+agent+'؛ الفرق المستهلك يزيد الفلوس الأساسية، ولا يخصم من رصيد المندوب.'};}
   return {delta:-delta,agentDelta:0,agentName:null,description:'تغيير رصيد بند نقدي داخل الكروت يقابله تغيير عكسي في الفلوس الأساسية.'};
  }
- if(col==='الرصيد'){if(canonicalServiceAgent(entryName))return {delta:0,agentDelta:0,agentName:null,description:'رصيد مندوب خدمة '+canonicalServiceAgent(entryName)+' مستقل عن الفلوس الأساسية؛ الشحن والاستهلاك يُعالجان من خلال قواعد الخدمة.'};return {delta:delta,agentDelta:0,agentName:null,description:'البند العادي في عمود الرصيد مرتبط بالفلوس الأساسية مباشرة؛ زيادة الرصيد تزود الفلوس، وتقليله أو حذفه يقلل الفلوس بنفس الفرق.'};}
+ if(col==='الرصيد'){if(canonicalServiceAgent(entryName)){if(delta<0)return {delta:delta,agentDelta:0,agentName:null,description:'تسوية/شطب من رصيد مندوب خدمة '+canonicalServiceAgent(entryName)+'؛ الفلوس الأساسية تنقص بنفس المبلغ المشطوب.'};return {delta:0,agentDelta:0,agentName:null,description:'زيادة رصيد المندوب تُسجل في حسابه فقط؛ لا تؤثر على الفلوس الأساسية.'};}return {delta:delta,agentDelta:0,agentName:null,description:'البند العادي في عمود الرصيد مرتبط بالفلوس الأساسية مباشرة؛ زيادة الرصيد تزود الفلوس، وتقليله أو حذفه يقلل الفلوس بنفس الفرق.'};}
  if(/^خارج/.test(col)){
   const deltaToMoney=existingEntry&&isDailyWithdrawalName(entryName)&&existingEntry[2]?.moneyPosted!==true?-(num(existingEntry[1])+delta):-delta;
   return {delta:deltaToMoney,agentDelta:0,agentName:null,description:'كل إضافة أو تعديل أو حذف في الخارج يؤثر على الفلوس الأساسية فور التأكيد؛ والسحب اليومي غير المرحّل يُرحّل بقيمته الجديدة مرة واحدة.'};
@@ -745,7 +745,7 @@ function getServiceAgentBalance(agent){
  const aliases=canonical==='فوري'?['فوري','فورى']:canonical==='سوبر بي'?['سوبر بي','سوبر باي','سوبر باى']:['ممكن'];
  const indexes=column.entries.map((e,i)=>({e,i})).filter(x=>aliases.includes(normAccountingName(x.e[0])));
  const index=indexes.length?indexes[0].i:-1,entry=index>=0?column.entries[index]:null;
- const value=indexes.length?indexes.reduce((sum,x)=>sum+num(x.e[1]),0):(cols.find(c=>c.name==='الكروت')?.entries||[]).reduce((sum,e)=>serviceAgentForCardEntry(e[0])===canonical?sum+num(e[1]):sum,0);
+ const value=indexes.length?indexes.reduce((sum,x)=>sum+num(x.e[1]),0):0;
  return {column,index,entry,value,indexes};
 }
 function applyServiceAgentDelta(agent,delta){
