@@ -604,12 +604,16 @@ async function showTeam(){
  const qr=document.getElementById('companyIdentityQr');
  if(qr&&window.QRCode&&window.DAGA_AUTH_USER.companyPublicId)new QRCode(qr,{text:location.origin+'/company/?company='+encodeURIComponent(window.DAGA_AUTH_USER.companyPublicId),width:190,height:190,colorDark:'#17130b',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M});
 }function openTeamMemberForm(){open('<h2>إضافة عضو للفريق</h2><p class="small">إنشاء دعوة للمدير أو الموظف. التسجيل وتفعيل الحساب يتمان بالبريد الإلكتروني فقط.</p><label>اسم العضو (للتعريف فقط)</label><input id="teamName" placeholder="اسم الموظف أو المدير"><label>البريد الإلكتروني للعضو</label><input id="teamEmail" type="email" autocomplete="email" placeholder="name@example.com"><label>نوع الحساب</label><select id="teamRole"><option value="employee">موظف</option><option value="manager">مدير</option></select><button class="primary" onclick="createTeamInvitation()">إنشاء دعوة</button><button onclick="showTeam()">رجوع</button>')}
-async function copyTeamInvitationLink(link){
+async function copyTeamInvitationLink(){
  const field=document.getElementById('teamInviteLink');
+ const status=document.getElementById('teamInviteCopyStatus');
+ const link=String(field&&field.value||'').trim();
+ if(!link){if(status)status.textContent='رابط الدعوة غير موجود.';return;}
+ if(status)status.textContent='';
  try{
   if(navigator.clipboard&&window.isSecureContext){
    await navigator.clipboard.writeText(link);
-   alert('تم نسخ رابط الدعوة بنجاح.');
+   if(status)status.textContent='تم نسخ الرابط بنجاح.';
    return;
   }
  }catch(_){}
@@ -618,7 +622,7 @@ async function copyTeamInvitationLink(link){
   field.select();
   try{field.setSelectionRange(0,field.value.length)}catch(_){}
  }
- window.prompt('المتصفح منع النسخ التلقائي. انسخ رابط الدعوة من المربع التالي:',link);
+ if(status)status.textContent='تم تحديد الرابط. اضغط مطولًا على النص واختر «نسخ».';
 }
 async function createTeamInvitation(){
  const email=document.getElementById('teamEmail').value.trim().toLowerCase(),name=document.getElementById('teamName').value.trim(),role=document.getElementById('teamRole').value;
@@ -628,8 +632,9 @@ async function createTeamInvitation(){
   const response=await fetch('/api/company/invitations',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+window.DAGA_SESSION_TOKEN},body:JSON.stringify({storeId:window.DAGA_AUTH_USER.storeId,role,permissions:role==='manager'?{inviteEmployees:false,manageUsers:false,manageInventory:false,viewReports:false,useSmartAssistant:false,useLiveDaga:false}:{manageUsers:false,manageInventory:false,viewReports:false,useSmartAssistant:false,useLiveDaga:false}}),cache:'no-store'});
   const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.error||'تعذر إنشاء الدعوة');
   const link=data.invitation&&data.invitation.inviteUrl;if(!link)throw new Error('السيرفر لم يرجع رابط الدعوة');
-  open('<h2>تم إنشاء الدعوة</h2><p class="small">امسح QR أو ابعت الرابط للعضو. الرمز ده خاص بالدعوة دي ومربوط بشركة '+esc(window.DAGA_AUTH_USER.storeName)+'.</p><div class="reconMini"><div>الاسم <b>'+esc(name)+'</b></div><div>البريد <b dir="ltr">'+esc(email)+'</b></div><div>نوع الحساب <b>'+esc(role==='manager'?'مدير':'موظف')+'</b></div><div id="invitationQr" style="display:flex;justify-content:center;padding:12px"></div><input id="teamInviteLink" readonly value="'+esc(link)+'" dir="ltr" style="width:100%;margin-top:10px;padding:12px;background:#101010;color:#f5f2eb;border:1px solid #454545;border-radius:10px;direction:ltr;text-align:left;user-select:all;-webkit-user-select:all"><button class="primary" onclick="copyTeamInvitationLink('+JSON.stringify(link).replace(/</g,'\\u003c')+')">نسخ رابط الدعوة</button><button onclick="showTeam()">العودة للفريق</button>');
-  const qr=document.getElementById('invitationQr');if(qr&&window.QRCode)new QRCode(qr,{text:link,width:220,height:220,colorDark:'#17130b',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M});else alert('تعذر تحميل مولّد QR. الرابط ما زال صالحًا ويمكن نسخه.');
+  open('<h2>تم إنشاء الدعوة</h2><p class="small">امسح QR أو ابعت الرابط للعضو. الرمز ده خاص بالدعوة دي ومربوط بشركة '+esc(window.DAGA_AUTH_USER.storeName)+'.</p><div class="reconMini"><div>الاسم <b>'+esc(name)+'</b></div><div>البريد <b dir="ltr">'+esc(email)+'</b></div><div>نوع الحساب <b>'+esc(role==='manager'?'مدير':'موظف')+'</b></div><div id="invitationQr" style="display:flex;justify-content:center;padding:12px"></div><textarea id="teamInviteLink" readonly rows="3" dir="ltr" style="width:100%;box-sizing:border-box;margin-top:10px;padding:12px;background:#101010;color:#f5f2eb;border:1px solid #454545;border-radius:10px;direction:ltr;text-align:left;user-select:text;-webkit-user-select:text;overflow-wrap:anywhere">'+esc(link)+'</textarea><button id="copyTeamInviteButton" class="primary" type="button">نسخ رابط الدعوة</button><div id="teamInviteCopyStatus" class="small" aria-live="polite"></div><button onclick="showTeam()">العودة للفريق</button>');
+  const copyButton=document.getElementById('copyTeamInviteButton');if(copyButton)copyButton.addEventListener('click',copyTeamInvitationLink);
+  const qr=document.getElementById('invitationQr');if(qr&&window.QRCode)new QRCode(qr,{text:link,width:220,height:220,colorDark:'#17130b',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M});else{const status=document.getElementById('teamInviteCopyStatus');if(status)status.textContent='تعذر تحميل صورة QR. استخدم رابط الدعوة الظاهر بالأسفل.';}
  }catch(e){alert(e.message)}finally{if(button)button.disabled=false}
 }async function openTeamPermissions(){
  if(!isShopOwner()){alert("الصلاحيات دي خاصة بصاحب الشركه فقط");return;}
