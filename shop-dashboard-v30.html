@@ -70,6 +70,12 @@ button{transition:filter .15s,transform .15s;border-radius:14px}button:active{tr
 @media(max-width:520px){main{padding:13px 10px calc(100px + env(safe-area-inset-bottom))}.hero{gap:11px;padding:12px;border-radius:19px}.avatar{width:68px;height:68px;border-radius:17px}.hero h1{font-size:17px}.hero p{font-size:11px;line-height:1.65}.balance{padding:14px;border-radius:18px;margin-top:10px}.recon{padding:12px;border-radius:18px}.reconGrid{gap:6px}.reconGrid div{padding:9px 7px}.reconGrid span{font-size:10px}.reconGrid b{font-size:15px}.title{margin-top:20px}.actions{gap:8px}.actions button{font-size:13px;padding:12px 7px}.bottom{gap:1px;padding-left:5px;padding-right:5px}.bottom button{font-size:9px}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*:before,*:after{transition:none!important;animation:none!important}}
 
+/* LIVE DAGA embedded panel: no browser popup required */
+#dagaLivePanel{position:fixed;inset:0;z-index:10050;display:none;background:#070706}
+#dagaLivePanel.open{display:flex;flex-direction:column}
+#dagaLivePanel .livePanelHead{height:54px;flex:0 0 54px;display:flex;align-items:center;justify-content:space-between;padding:0 15px;background:#11110f;border-bottom:1px solid #453923;color:#e8c779;font-weight:700}
+#dagaLivePanel .livePanelHead button{background:#211b10;color:#f0d28f;border:1px solid #59472b;border-radius:12px;padding:8px 15px;font:inherit}
+#dagaLivePanel iframe{width:100%;height:calc(100% - 54px);border:0;background:#070706}
 </style>
 </head>
 <body>
@@ -90,6 +96,7 @@ button{transition:filter .15s,transform .15s;border-radius:14px}button:active{tr
 </main>
 <nav class="bottom" aria-label="التنقل الرئيسي"><button class="active" onclick="showHome()">الرئيسية</button><button onclick="showTeam()">الفريق</button><button class="liveBtn" onclick="showLiveComingSoon()">LIVE DAGA</button><button onclick="voiceDaga()">🎙️ كلم ضجه</button><button onclick="showReports()">التقارير</button><button onclick="showSettings()">الإعدادات</button></nav>
 <div class="modal" id="modal"><div class="sheet"><button class="close" onclick="closeModal()">×</button><div id="sheet"></div></div></div>
+<div id="dagaLivePanel" aria-hidden="true"><div class="livePanelHead"><span>LIVE DAGA</span><button type="button" onclick="closeLiveDagaPanel()">رجوع للداشبورد ×</button></div><iframe id="dagaLiveFrame" title="LIVE DAGA" allow="microphone; autoplay" referrerpolicy="no-referrer"></iframe></div>
 <script>
 const defaultCols=[
 {name:'الكروت',entries:[['رصيد أساسي','0'],['كارت وهوا','0'],['كاش أوت','0'],['سوبر باي','0'],['ممكن','0'],['إنستا ١','0'],['إنستا ٢','0'],['البنك الأهلي','0'],['فلوس','0'],['محفظة ١','0'],['محفظة ٢','0'],['محفظة ٣','0'],['محفظة ٤','0']]},
@@ -586,15 +593,26 @@ function showLiveComingSoon(){
  const user=window.DAGA_AUTH_USER||{};
  if(user.smartAssistantEnabled!==true||user.liveDagaEnabled!==true)return;
  if(!window.DAGA_SESSION_TOKEN)return;
- const popup=window.open('/live/?api=staging','DAGA_LIVE','popup=yes,width=460,height=820');
- if(!popup){alert('اسمح بفتح نافذة LIVE DAGA من المتصفح، ثم اضغط الزر مرة أخرى.');return;}
- dagaLiveWindow=popup;
+ const panel=document.getElementById('dagaLivePanel'),frame=document.getElementById('dagaLiveFrame');
+ if(!panel||!frame)return;
+ dagaLiveWindow=frame.contentWindow;
+ panel.classList.add('open');panel.setAttribute('aria-hidden','false');
+ document.body.style.overflow='hidden';
+ if(!frame.src||!frame.src.includes('/live/?api=staging'))frame.src='/live/?api=staging';
+ else{try{frame.contentWindow.postMessage('DAGA_LIVE_READY','https://daga-app-staging.dagamobile10.workers.dev')}catch(_){}}
+}
+function closeLiveDagaPanel(){
+ const panel=document.getElementById('dagaLivePanel'),frame=document.getElementById('dagaLiveFrame');
+ if(panel){panel.classList.remove('open');panel.setAttribute('aria-hidden','true');}
+ document.body.style.overflow='';
+ dagaLiveWindow=null;dagaLiveOrderPending=false;dagaLiveOrderSummary='';
+ if(frame){try{frame.contentWindow.postMessage({type:'DAGA_LIVE_CLOSE'},'https://daga-app-staging.dagamobile10.workers.dev')}catch(_){}}
 }
 function sendLiveOrderReply(source,id,reply,handled=true){
  try{source.postMessage({type:'DAGA_LIVE_ORDER_REPLY',id,reply,handled},'https://daga-app-staging.dagamobile10.workers.dev');}catch(_){}
 }
 function sendLiveDashboardSnapshot(){
- if(!dagaLiveWindow||dagaLiveWindow.closed)return;
+ if(!dagaLiveWindow)return;
  const snapshot={updatedAt:new Date().toISOString(),source:'DAGA Dashboard V30',readOnly:true,columns:(Array.isArray(cols)?cols:[]).map(c=>({name:String(c.name||''),entries:(Array.isArray(c.entries)?c.entries:[]).map(e=>({name:String(e[0]??''),amount:Number(String(e[1]??0).replace(/[^0-9.-]/g,''))||0}))}))};
  try{dagaLiveWindow.postMessage({type:'DAGA_DASHBOARD_SNAPSHOT',snapshot},'https://daga-app-staging.dagamobile10.workers.dev');}catch(_){}
 }
@@ -626,7 +644,7 @@ window.addEventListener('message',function(event){
   const user=window.DAGA_AUTH_USER||{};
   try{event.source.postMessage({type:'DAGA_AUTH',token:String(window.DAGA_SESSION_TOKEN||''),companyId:String(user.storeId||'')},origin);}catch(_){}
   sendLiveDashboardSnapshot();
-  if(!dagaLiveSnapshotTimer)dagaLiveSnapshotTimer=setInterval(()=>{if(!dagaLiveWindow||dagaLiveWindow.closed){clearInterval(dagaLiveSnapshotTimer);dagaLiveSnapshotTimer=null;dagaLiveWindow=null;return;}sendLiveDashboardSnapshot();},1500);
+  if(!dagaLiveSnapshotTimer)dagaLiveSnapshotTimer=setInterval(()=>{if(!dagaLiveWindow){clearInterval(dagaLiveSnapshotTimer);dagaLiveSnapshotTimer=null;return;}sendLiveDashboardSnapshot();},1500);
   return;
  }
  if(!event.data||event.data.type!=='DAGA_LIVE_ORDER_REQUEST')return;
