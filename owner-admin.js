@@ -30,6 +30,55 @@ export async function handleOwnerAdmin(request, env, url) {
 
   try {
     const path = url.pathname.replace(/\/+$/, "");
+    if (path === "/owner/admin/team" && request.method === "GET") {
+      const r=await db.prepare("SELECT a.id,a.email,a.display_name,a.role,m.status,m.permissions_json,m.created_at,m.updated_at FROM daga_owner_team_memberships m JOIN daga_accounts a ON a.id=m.account_id ORDER BY m.created_at DESC").all();
+      return json(env,{ok:true,members:(r.results||[]).map(x=>({...x,permissions:(()=>{try{return JSON.parse(x.permissions_json||"{}")}catch(_){return {}}})()}))});
+    }
+    if (path === "/owner/admin/team" && request.method === "POST") {
+      const b=await readJson(request);if(!b)return json(env,{error:"invalid_json"},400);
+      if(!env.DAGA_OTP_PEPPER||!env.RESEND_API_KEY||!env.DAGA_EMAIL_FROM)return json(env,{error:"owner_team_setup_not_configured"},503);
+      const email=String(b.email||"").trim().toLowerCase(),name=String(b.displayName||"").trim().slice(0,100),role=String(b.role||"");
+      const keys=["viewOverview","managePlans","managePayments","manageOffers","manageStores","adjustWords","manageCompanyLayouts","manageLiveRate","viewAudit"];
+      if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||!name||!["manager","employee"].includes(role))return json(env,{error:"valid_team_member_fields_required"},400);
+      if(await db.prepare("SELECT id FROM daga_accounts WHERE lower(email)=? LIMIT 1").bind(email).first())return json(env,{error:"team_email_already_exists"},409);
+      const permissions={};for(const k of keys)permissions[k]=b.permissions?.[k]===true;
+      const id=crypto.randomUUID(),now=new Date().toISOString(),challengeId=crypto.randomUUID(),code=String(crypto.getRandomValues(new Uint32Array(1))[0]%1000000).padStart(6,"0"),expires=new Date(Date.now()+10*60*1000).toISOString();
+      const codeHash=await sha256(challengeId+":"+code+":"+env.DAGA_OTP_PEPPER);
+      await db.batch([
+        db.prepare("INSERT INTO daga_accounts (id,email,display_name,role,status,created_at,updated_at) VALUES (?,?,?,?, 'approved',?,?)").bind(id,email,name,role,now,now),
+        db.prepare("INSERT INTO daga_owner_team_memberships (account_id,role,status,permissions_json,invited_by_account_id,created_at,updated_at) VALUES (?,?,'active',?,?,?,?)").bind(id,role,JSON.stringify(permissions),owner.id,now,now),
+        db.prepare("INSERT INTO daga_owner_team_setup_challenges (id,account_id,code_hash,expires_at) VALUES (?,?,?,?)").bind(challengeId,id,codeHash,expires)
+      ]);
+      try {
+        const response=await fetch("https://api.resend.com/emails",{method:"POST",headers:{Authorization:"Bearer "+env.RESEND_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({from:env.DAGA_EMAIL_FROM,to:[email],subject:"دعوة فريق إدارة DAGA",html:"<p>تمت إضافتك إلى فريق إدارة DAGA.</p><p>كود إعداد الحساب: <strong>"+code+"</strong></p><p>الكود صالح لمدة 10 دقائق. افتح لوحة مالك التطبيق وأكمل إعداد كلمة المرور.</p>"})});
+        if(!response.ok)throw new Error("email_delivery_failed");
+      } catch(_) {
+        await db.batch([db.prepare("DELETE FROM daga_owner_team_setup_challenges WHERE id=?").bind(challengeId),db.prepare("DELETE FROM daga_owner_team_memberships WHERE account_id=?").bind(id),db.prepare("DELETE FROM daga_accounts WHERE id=?").bind(id)]);
+        return json(env,{error:"team_invitation_email_failed"},502);
+      }
+      await audit(db,owner.id,"owner_team_member_invited","daga_owner_team_memberships",id,{role,permissions});
+      return json(env,{ok:true,memberId:id,emailMasked:maskEmail(email),message:"تم إرسال دعوة إعداد الحساب."},201);
+    }
+    const teamMemberMatch=path.match(/^\/owner\/admin\/team\/([0-9a-f-]{36})$/i);
+    if(teamMemberMatch&&request.method==="PATCH"){
+      const b=await readJson(request);if(!b)return json(env,{error:"invalid_json"},400);
+      const member=await db.prepare("SELECT m.account_id,m.role,m.status FROM daga_owner_team_memberships m WHERE m.account_id=?").bind(teamMemberMatch[1]).first();
+      if(!member)return json(env,{error:"team_member_not_found"},404);
+      if(member.status==="removed"&&(b.status==="active"||b.permissions))return json(env,{error:"removed_team_member_is_final"},409);
+      if(b.status!==undefined){
+        if(!["active","suspended","removed"].includes(b.status))return json(env,{error:"invalid_team_status"},400);
+        const now=new Date().toISOString();
+        await db.batch([db.prepare("UPDATE daga_owner_team_memberships SET status=?,updated_at=? WHERE account_id=?").bind(b.status,now,member.account_id),db.prepare("UPDATE daga_accounts SET status=?,updated_at=? WHERE id=?").bind(b.status==="active"?"approved":"suspended",now,member.account_id)]);
+        if(b.status!=="active")await db.prepare("UPDATE daga_auth_sessions SET revoked_at=? WHERE account_id=? AND revoked_at IS NULL").bind(now,member.account_id).run();
+      }
+      if(b.permissions&&typeof b.permissions==="object"&&!Array.isArray(b.permissions)){
+        const keys=["viewOverview","managePlans","managePayments","manageOffers","manageStores","adjustWords","manageCompanyLayouts","manageLiveRate","viewAudit"],p={};for(const k of keys)p[k]=b.permissions[k]===true;
+        await db.prepare("UPDATE daga_owner_team_memberships SET permissions_json=?,updated_at=? WHERE account_id=?").bind(JSON.stringify(p),new Date().toISOString(),member.account_id).run();
+      }
+      await audit(db,owner.id,"owner_team_member_updated","daga_owner_team_memberships",member.account_id,{status:b.status||null,permissionsUpdated:Boolean(b.permissions)});
+      return json(env,{ok:true});
+    }
+
     if (path === "/owner/admin/overview" && request.method === "GET") {
       const [stores, pendingAccounts, plans, pendingPayments, activeEntitlements, wordBalance] = await Promise.all([
         db.prepare("SELECT status,COUNT(*) AS count FROM daga_stores WHERE owner_list_removed_at IS NULL GROUP BY status").all(),
