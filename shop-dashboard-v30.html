@@ -961,7 +961,7 @@ function open(s){document.getElementById('sheet').innerHTML=s;document.getElemen
 let dashboardBooted=false;
 async function applyCompanyLayout(token){
  try{
-  const response=await fetch('/api/company/layout',{headers:{Authorization:'Bearer '+token},cache:'no-store',credentials:'omit'});
+  const response=await fetch('/api/company/layout?storeId='+encodeURIComponent(window.DAGA_AUTH_USER.storeId),{headers:{Authorization:'Bearer '+token},cache:'no-store',credentials:'omit'});
   if(!response.ok)return;
   const data=await response.json().catch(()=>({})),layout=data.layout||{};
   cols.forEach(col=>{
