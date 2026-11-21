@@ -102,7 +102,7 @@ $('stores').closest('.card').classList.toggle('hidden',!can('manageStores'));
 $('wordsForm').closest('.card').classList.toggle('hidden',!can('adjustWords'));
 $('auditLog').closest('.card').classList.toggle('hidden',!can('viewAudit'));
 $('columns').closest('.card').classList.toggle('hidden',!currentOwnerAccount?.isProgramOwner);
-$('accounts').closest('.card').classList.toggle('hidden',!can('viewOverview'));
+if($('accounts'))$('accounts').closest('.card')?.classList.toggle('hidden',!can('viewOverview'));
 $('liveRate').value=rate.pricePer1000Minor==null?'':(Number(rate.pricePer1000Minor)/100).toFixed(2);$('liveRateState').textContent=rate.pricePer1000Minor==null?'لا يمكن إنشاء باقات LIVE DAGA قبل ضبط السعر هنا.':'السعر الحالي: '+(Number(rate.pricePer1000Minor)/100).toFixed(2)+' جنيه لكل 1000 حرف. أسعار تعريفات الباقات النشطة وغير النشطة تتحدث عند تغيير السعر؛ الطلبات القديمة لا تتغير.';
 const pendingShopApprovals=(ov.stores||[]).find(x=>x.status==='pending')?.count||0;const stats=[['طلبات موافقة الشركات',pendingShopApprovals],['الشركات',sum(ov.stores)],['طلبات الدفع المعلقة',ov.pendingPaymentReviews],['الخطط النشطة',sum(ov.activePlans)],['رصيد الحروف المتبقي',ov.liveWordsOutstanding]];
 const statsEl=$('stats');if(statsEl)statsEl.innerHTML=stats.map(x=>'<div class="stat">'+escapeHtml(x[0])+'<b>'+escapeHtml(x[1])+'</b></div>').join('');else console.error('owner_console_missing_stats_target');
