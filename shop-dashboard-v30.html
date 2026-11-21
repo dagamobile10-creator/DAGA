@@ -775,9 +775,9 @@ function applyServiceAgentDelta(agent,delta,label){
  const state=getServiceAgentBalance(agent);if(!delta)return {ok:true,before:state.value,after:state.value};
  if(!state.column)return {ok:false,message:'مش لاقي عمود الرصيد لتحديث المندوب '+agent+'.'};
  const after=state.value+delta;if(after<0)return {ok:false,message:'تعديل رصيد المندوب '+agent+' هيخلي رصيده بالسالب. راجع القيمة.'};
- if(state.index<0)state.column.entries.push([String(label||canonicalServiceAgent(agent)),String(after),{role:'agent:'+canonicalServiceAgent(agent),id:'agent-'+canonicalServiceAgent(agent)}]);
+ if(state.index<0)state.column.entries.push([canonicalServiceAgent(agent),String(after),{role:'agent:'+canonicalServiceAgent(agent),id:'agent-'+canonicalServiceAgent(agent)}]);
  else{
-  if(label)state.entry[0]=String(label);state.entry[1]=String(after);
+  state.entry[0]=canonicalServiceAgent(agent);state.entry[1]=String(after);
   (state.indexes||[]).slice(1).sort((a,b)=>b.i-a.i).forEach(x=>state.column.entries.splice(x.i,1));
  }
  return {ok:true,before:state.value,after};
@@ -786,7 +786,7 @@ function normalizeServiceAgentLabel(name){return canonicalServiceAgent(name)||St
 function syncServiceAgentLabel(agent,label){
  if(!label)return;const canonical=canonicalServiceAgent(agent);if(!canonical)return;
  const state=getServiceAgentBalance(canonical);
- if(state.column&&state.index>=0){state.entry[0]=String(label);if(!state.entry[2]||typeof state.entry[2]!=='object')state.entry[2]={};state.entry[2].role='agent:'+canonical;}
+ if(state.column&&state.index>=0){state.entry[0]=canonical;if(!state.entry[2]||typeof state.entry[2]!=='object')state.entry[2]={};state.entry[2].role='agent:'+canonical;}
  const cards=columnByRole('cards');
  const cardEntry=cards?.entries.find(e=>entryRole(cards,e)==='card-agent:'+canonical);
  if(cardEntry)cardEntry[0]=String(label);
