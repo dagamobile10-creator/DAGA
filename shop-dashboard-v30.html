@@ -525,7 +525,7 @@ function answerClarification(choice){
  if(choice==='cancel'){pendingClarification=null;pendingOrder=null;if(out)out.innerHTML='<p class="status">تم إلغاء السؤال والحركة؛ لم يتغير أي رصيد.</p>';return}
  const outsideCols=cols.map((c,i)=>({c,i})).filter(x=>columnRole(x.c)==='expenses');
  const target=outsideCols.find(x=>x.c.entries.length===0)||outsideCols[0];
- const balanceCol=cols.find(c=>c.name==='الرصيد');const balanceIndex=cols.indexOf(balanceCol);
+ const balanceCol=columnByRole('balance');const balanceIndex=cols.indexOf(balanceCol);
  if(!target||!balanceCol){if(out)out.innerHTML='<p class="small">مش لاقي عمود الخارج أو الرصيد. ما اتغيرش أي رقم.</p>';pendingClarification=null;return}
  if(choice==='new'){
    pendingOrder={type:'outsideAdd',mode:'outsideAdd',name:q.person.name,amount:q.amount,targetIndex:target.i,cardsIndex:cols.findIndex(c=>columnRole(c)==='cards'),clarificationAnswered:true};
