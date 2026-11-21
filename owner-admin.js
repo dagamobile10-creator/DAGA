@@ -25,7 +25,8 @@ export async function handleOwnerAdmin(request, env, url) {
   ];
   if(!owner.isProgramOwner){
     const required=permissionByPath.find(([re])=>re.test(path))?.[1];
-    if(!required || (required==="manageStores"&&owner.permissions?.manageCompanyLayouts===true?false:owner.permissions?.[required]!==true)) return json(env,{error:"permission_denied",permission:required||"owner_only"},403);
+    const layoutCompanyListOnly=path==="/owner/admin/stores"&&request.method==="GET"&&owner.permissions?.manageCompanyLayouts===true;
+    if(!required || (!layoutCompanyListOnly&&owner.permissions?.[required]!==true)) return json(env,{error:"permission_denied",permission:required||"owner_only"},403);
   }
 
   try {
