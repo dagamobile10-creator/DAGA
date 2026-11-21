@@ -296,7 +296,7 @@ jobs:
               "owner login has no phone or SMS dependency": "phone_e164" not in login and "sendSms" not in login,
               "owner bootstrap verifies supplied email": "DAGA_OWNER_BOOTSTRAP_TOKEN" in bootstrap and "body.email" in bootstrap and "sendEmail" in bootstrap and "sendSms" not in bootstrap,
               "owner bootstrap refuses a second owner": "owner_already_provisioned" in bootstrap and "daga_program_owner WHERE singleton_id=1" in bootstrap,
-              "owner admin delegates authorization to authenticatedOwner": "authenticatedOwner(request, db)" in admin,
+              "owner admin delegates authentication and restricts team management to the program owner": "authenticatedOwnerOrTeam(request, db)" in admin and "teamAdminPath && !owner.isProgramOwner" in admin,
               "legacy memory route remains present": 'url.pathname === "/memory"' in worker,
           }
           for name, ok in checks.items():
