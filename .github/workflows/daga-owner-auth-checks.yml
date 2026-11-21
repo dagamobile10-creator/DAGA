@@ -2,7 +2,7 @@ name: DAGA V30 owner-auth checks
 
 on:
   push:
-    branches: [daga-v30-implementation, daga-email-only-auth, feat/owner-admin-team-and-company-layouts]
+    branches: [daga-v30-implementation, daga-email-only-auth]
   pull_request:
     branches: [main, daga-v30-implementation, daga-email-only-auth]
 
