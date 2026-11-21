@@ -349,7 +349,7 @@ function parseOrder(t){
  // Named item edits: e.g. "عدل كرت الهوا وخليهم 2000 جنيه".
  const editIntent=/(?:عدل|عدّل|غير|غيّر|خلي|خليهم|خليه|خليها|بدل|بدّل|بقى|اصبح|أصبح)/.test(cleaned);
  if(editIntent){
-   const cards=cols.find(c=>c.name==='الكروت');
+   const cards=columnByRole('cards');
    const entries=(cards?.entries||[]).map((e,i)=>({name:String(e[0]||''),normName:norm(e[0]),index:i,amount:num(e[1])}))
      .filter(e=>e.normName && cleaned.includes(e.normName) && !/^(الفلوس|فلوس|الفلوس الاساسيه|الرصيد الاساسي)$/.test(e.normName))
      .sort((a,b)=>b.normName.length-a.normName.length);
@@ -528,7 +528,7 @@ function answerClarification(choice){
  const balanceCol=cols.find(c=>c.name==='الرصيد');const balanceIndex=cols.indexOf(balanceCol);
  if(!target||!balanceCol){if(out)out.innerHTML='<p class="small">مش لاقي عمود الخارج أو الرصيد. ما اتغيرش أي رقم.</p>';pendingClarification=null;return}
  if(choice==='new'){
-   pendingOrder={type:'outsideAdd',mode:'outsideAdd',name:q.person.name,amount:q.amount,targetIndex:target.i,cardsIndex:cols.findIndex(c=>c.name==='الكروت'),clarificationAnswered:true};
+   pendingOrder={type:'outsideAdd',mode:'outsideAdd',name:q.person.name,amount:q.amount,targetIndex:target.i,cardsIndex:cols.findIndex(c=>columnRole(c)==='cards'),clarificationAnswered:true};
    pendingClarification=null;
    if(out)out.innerHTML=`<div class="reconMini"><div>الإجابة <b>مبلغ جديد مستقل</b></div><div>الاسم <b>${esc(q.person.name)}</b></div><div>المبلغ <b>${fmt(q.amount)} جنيه</b></div><div>التأثير المتوقع <b>خصم ${fmt(q.amount)} جنيه من بند فلوس في الكروت</b></div></div><p class="small">راجع العملية ثم أكدها. لسه مفيش أي تغيير اتسجل.</p><button class="primary" onclick="executeOrder()">تأكيد وتنفيذ</button><button onclick="pendingOrder=null;document.getElementById('orderPreview').innerHTML='تم إلغاء العملية.'">إلغاء</button>`;return;
  }
@@ -793,7 +793,7 @@ function getDailyClosePlan(){
  const money=findMoneyEntry(),moneyBefore=money?num(money.entry[1]):null;
  const cashCols=cols.map((c,i)=>({c,i})).filter(x=>columnRole(x.c)==='cash');
  const accessoryCols=cols.map((c,i)=>({c,i})).filter(x=>columnRole(x.c)==='accessory');
- const outsideCols=cols.map((c,i)=>({c,i})).filter(x=>/^خارج/.test(x.c.name));
+ const outsideCols=cols.map((c,i)=>({c,i})).filter(x=>columnRole(x.c)==='expenses');
  const isCashName=n=>['كاش','الكاش','كاش اليوم','سحب كاش','الكاش اليوم'].includes(normAccountingName(n));
  const isAccessoryName=n=>['اكسسوار','الاكسسوار','اكسسوارات','اكسسوارات اليوم'].includes(normAccountingName(n));
  const sumRows=arr=>arr.reduce((sum,x)=>sum+x.c.entries.reduce((a,e)=>a+num(e[1]),0),0);
