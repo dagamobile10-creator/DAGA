@@ -20,7 +20,7 @@ export async function handleOwnerAdmin(request, env, url) {
     [/^\\/owner\\/admin\\/offers/,"manageOffers"],
     [/^\\/owner\\/admin\\/stores/,"manageStores"],
     [/^\\/owner\\/admin\\/words/,"adjustWords"],
-    [/^\\/owner\\/admin\\/columns/,"manageCompanyLayouts"],
+    [/^\\/owner\\/admin\\/(columns|store-layouts)/,"manageCompanyLayouts"],
     [/^\\/owner\\/admin\\/live-daga-rate/,"manageLiveRate"]
   ];
   if(!owner.isProgramOwner){
@@ -422,6 +422,34 @@ export async function handleOwnerAdmin(request, env, url) {
       }
       await audit(db,owner.id,"live_words_credited","daga_live_word_ledger",id,{accountId,words,requestId});
       return json(env, {ok:true,entryId:id},201);
+    }
+
+    const storeLayoutMatch=path.match(/^\\/owner\\/admin\\/store-layouts\\/([a-f0-9-]{36})$/i);
+    if(storeLayoutMatch&&request.method==="GET"){
+      const store=await db.prepare("SELECT id,display_name FROM daga_stores WHERE id=? AND status!='archived'").bind(storeLayoutMatch[1]).first();
+      if(!store)return json(env,{error:"store_not_found"},404);
+      const row=await db.prepare("SELECT layout_json,updated_at FROM daga_store_layout_settings WHERE store_id=?").bind(store.id).first();
+      let layout={};try{layout=JSON.parse(row?.layout_json||"{}");}catch(_){}
+      return json(env,{ok:true,store,layout,updatedAt:row?.updated_at||null});
+    }
+    if(storeLayoutMatch&&request.method==="PUT"){
+      const b=await readJson(request);if(!b||!b.layout||typeof b.layout!=="object"||Array.isArray(b.layout))return json(env,{error:"valid_layout_required"},400);
+      const store=await db.prepare("SELECT id FROM daga_stores WHERE id=? AND status!='archived'").bind(storeLayoutMatch[1]).first();
+      if(!store)return json(env,{error:"store_not_found"},404);
+      const columns=b.layout.columns&&typeof b.layout.columns==="object"&&!Array.isArray(b.layout.columns)?b.layout.columns:{};
+      const entries=b.layout.entries&&typeof b.layout.entries==="object"&&!Array.isArray(b.layout.entries)?b.layout.entries:{};
+      const clean={columns:{},entries:{}};
+      for(const [k,v] of Object.entries(columns)){if(/^[a-z][a-z0-9_-]{0,63}$/.test(k)&&typeof v==="string"&&v.trim())clean.columns[k]=v.trim().slice(0,80);}
+      for(const [columnKey,map] of Object.entries(entries)){
+        if(!/^[a-z][a-z0-9_-]{0,63}$/.test(columnKey)||!map||typeof map!=="object"||Array.isArray(map))continue;
+        clean.entries[columnKey]={};
+        for(const [entryKey,label] of Object.entries(map)){if(typeof label==="string"&&label.trim())clean.entries[columnKey][entryKey.slice(0,100)]=label.trim().slice(0,80);}
+      }
+      const serialized=JSON.stringify(clean);if(serialized.length>20000)return json(env,{error:"layout_too_large"},413);
+      const now=new Date().toISOString();
+      await db.prepare("INSERT INTO daga_store_layout_settings (store_id,layout_json,updated_by,updated_at) VALUES (?,?,?,?) ON CONFLICT(store_id) DO UPDATE SET layout_json=excluded.layout_json,updated_by=excluded.updated_by,updated_at=excluded.updated_at").bind(store.id,serialized,owner.id,now).run();
+      await audit(db,owner.id,"company_dashboard_layout_updated","daga_store_layout_settings",store.id,{columnCount:Object.keys(clean.columns).length,entryColumnCount:Object.keys(clean.entries).length});
+      return json(env,{ok:true,layout:clean,updatedAt:now});
     }
 
     if(path==="/owner/admin/columns"&&request.method==="GET"){
