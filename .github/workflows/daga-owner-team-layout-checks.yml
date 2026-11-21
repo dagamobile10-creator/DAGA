@@ -52,7 +52,7 @@ jobs:
             "team management routes are program-owner-only": "teamAdminPath && !owner.isProgramOwner" in admin,
             "layout-only permission only allows GET company list": 'layoutCompanyListOnly=path==="/owner/admin/stores"&&request.method==="GET"' in admin,
             "company layouts are stored per store": "daga_store_layout_settings" in admin and "ON CONFLICT(store_id)" in admin,
-            "company dashboard can read its own saved layout": '"/api/company/layout"' in company and "companyLayoutGet(env,db,account)" in company,
+            "company dashboard can read its own saved layout": '"/api/company/layout"' in company and "companyLayoutGet(env,db,account,url)" in company and "store_id=? AND account_id=? AND status='active'" in company,
             "dashboard applies labels without replacing accounting keys": "entry[2]={...(entry[2]||{}),displayName:display.trim()}" in dashboard and "col.displayName=layout.columns[col.id]" in dashboard,
             "owner console exposes team and company layout controls": 'id="ownerTeamForm"' in console and 'id="companyLayoutSection"' in console,
             "database schema includes isolated team and per-store layout tables": "daga_owner_team_memberships" in migration and "daga_store_layout_settings" in migration,
