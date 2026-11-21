@@ -977,7 +977,7 @@ async function applyCompanyLayout(token){
   });
  }catch(_){}
 }
-function bootAuthenticatedDashboard(token,selectedCompanyId){
+async function bootAuthenticatedDashboard(token,selectedCompanyId){
  if(dashboardBooted)return;dashboardBooted=true;
  try{
   const response=await fetch('/api/company/auth/me',{method:'GET',headers:{Authorization:'Bearer '+token},cache:'no-store',credentials:'omit'});
