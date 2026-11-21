@@ -45,11 +45,7 @@ jobs:
                   and "Math.ceil(Number(p.word_quota)*rate/1000)" in open("owner-admin.js", encoding="utf-8").read(),
               "pricing setting migration is applied by staging setup":
                   "migrations/0016_live_daga_character_rate.sql" in open(".github/workflows/daga-staging-setup.yml", encoding="utf-8").read()
-                  and "CREATE TABLE IF NOT EXISTS daga_app_settings" in open("migrations/0016_live_daga_character_rate.sql",
-              "migrations/0017_daga_authenticated_memory.sql",
-              "migrations/0018_owner_store_list_archive.sql",
-              "migrations/0019_owner_archive_plans_payments.sql",
-              "migrations/0020_owner_admin_team_and_store_layouts.sql", encoding="utf-8").read(),
+                  and "CREATE TABLE IF NOT EXISTS daga_app_settings" in open("migrations/0016_live_daga_character_rate.sql", encoding="utf-8").read(),
               "owner console includes character-rate control":
                   "id=\"liveRateForm\"" in open("owner-console.html", encoding="utf-8").read()
                   and "/owner/admin/live-daga-rate" in open("owner-console.html", encoding="utf-8").read(),
@@ -368,6 +364,10 @@ jobs:
               "migrations/0014_shop_onboarding_contact_and_status.sql",
               "migrations/0015_preserve_existing_shop_approval_states.sql",
               "migrations/0016_live_daga_character_rate.sql",
+              "migrations/0017_daga_authenticated_memory.sql",
+              "migrations/0018_owner_store_list_archive.sql",
+              "migrations/0019_owner_archive_plans_payments.sql",
+              "migrations/0020_owner_admin_team_and_store_layouts.sql",
           ):
               with open(path, encoding="utf-8") as f:
                   db.executescript(f.read())
