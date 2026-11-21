@@ -338,7 +338,7 @@ function parseOrder(t){
  const cleaned=norm(text.replace(/(?:^|\s)\d+(?:\.\d{1,2})?(?=\s|$)/g,' '));
  // Service balance movement: decrease = consumed stock; increase = new vendor funding.
  const cardsForDelta=columnByRole('cards');
- const serviceRows=(cardsForDelta?.entries||[]).map((e,i)=>({name:String(e[0]||''),index:i,amount:num(e[1]),agent:serviceAgentForCardEntry(e[0]),normalized:norm(e[0])})).filter(e=>e.agent&&serviceCardEntryMentioned(cleaned,e.name));
+ const serviceRows=(cardsForDelta?.entries||[]).map((e,i)=>({name:String(e[0]||''),index:i,amount:num(e[1]),agent:(entryRole(cardsForDelta,e).startsWith('card-agent:')?entryRole(cardsForDelta,e).slice(11):serviceAgentForCardEntry(e[0])),normalized:norm(e[0])})).filter(e=>e.agent&&serviceCardEntryMentioned(cleaned,e.name));
  if(serviceRows.length){serviceRows.sort((a,b)=>b.normalized.length-a.normalized.length);const best=serviceRows[0];
   const subtractIntent=/(اخصم|خصم|انقص|نقص|اسحب|استهلك)/.test(cleaned),addServiceIntent=/(زود|زيد|ضيف|اضيف|ارفع|حط|سجل|اكتب|دخل)/.test(cleaned);
   if(subtractIntent||addServiceIntent){const delta=subtractIntent?-amount:amount,newAmount=best.amount+delta;
@@ -555,7 +555,7 @@ function executeOrderCore(){
 
  const setEntry=(ci,idx,val)=>{if(idx>=0)cols[ci].entries[idx][1]=String(val)};
  const addSigned=(ci,label,delta)=>{const entries=cols[ci].entries;let i=entries.findIndex(e=>e[0]===label);if(i<0)entries.push([label,String(delta)]);else setEntry(ci,i,num(entries[i][1])+delta)};
- const addToNamed=(ci,name,delta)=>{const label=columnRole(cols[ci])==='balance'?normalizeServiceAgentLabel(name):name,agent=cols[ci]?.name==='الرصيد'?canonicalServiceAgent(label):null;let i=agent?cols[ci].entries.findIndex(e=>canonicalServiceAgent(e[0])===agent):findEntry(ci,label);if(i<0)cols[ci].entries.push([label,String(delta)]);else setEntry(ci,i,num(cols[ci].entries[i][1])+delta)};
+ const addToNamed=(ci,name,delta)=>{const isBalance=columnRole(cols[ci])==='balance',label=isBalance?String(name||'').trim():name,agent=isBalance?canonicalServiceAgent(label):null;let i=agent?cols[ci].entries.findIndex(e=>entryRole(cols[ci],e)==='agent:'+agent||canonicalServiceAgent(e[0])===agent):findEntry(ci,label);if(i<0)cols[ci].entries.push([label,String(delta),agent?{role:'agent:'+agent,id:'agent-'+agent}:{}]);else setEntry(ci,i,num(cols[ci].entries[i][1])+delta)};
  const updateRows=(rows,delta)=>{let remaining=delta;for(const r of rows||[]){if(remaining<=0)break;const idx=findEntry(r.ci,r.name);if(idx<0)continue;const cur=num(cols[r.ci].entries[idx][1]),take=Math.min(cur,remaining);setEntry(r.ci,idx,Math.max(0,cur-take));remaining-=take;}return remaining;};
  if(p.mode==='balanceToOutsideTransfer'){
    const bal=cols[p.balanceIndex], target=cols[p.targetIndex];
