@@ -285,6 +285,8 @@ function confirmManualEdit(){
  if(p.impact.delta!==0)money.entry[1]=String(num(money.entry[1])+p.impact.delta);
  const updatedMeta={...(p.old[2]||{})};if(!updatedMeta.role)updatedMeta.role=entryRole(cols[p.i],p.old);if(columnRole(cols[p.i])==='expenses'||isDailyMoneyColumn(p.i))updatedMeta.moneyPosted=true;
  cols[p.i].entries[p.j]=[p.n,String(p.newAmount),updatedMeta];
+ const priorRole=entryRole(cols[p.i],p.old);
+ if(priorRole.startsWith('card-agent:')&&p.n!==p.old[0])syncServiceAgentLabel(priorRole.slice(11),p.n);
  addLedger('تعديل يدوي مع مراجعة',p.old[0]+' ('+fmt(num(p.old[1]))+') ← '+p.n+' ('+fmt(p.newAmount)+') في '+cols[p.i].name+'؛ فرق البند '+fmt(p.delta)+'؛ تأثير الفلوس '+fmt(p.impact.delta)+(p.impact.agentName?'؛ رصيد '+p.impact.agentName+' '+fmt(p.impact.agentDelta):''),{column:cols[p.i].name,entryName:p.n,previousName:p.old[0],oldValue:num(p.old[1]),newValue:p.newAmount,moneyDelta:p.impact.delta,agentName:p.impact.agentName||null,agentDelta:p.impact.agentDelta||0});
  pendingManualEdit=null;if(!persist()){cols=transactionBackup.cols;ledger=transactionBackup.ledger;closedDays=transactionBackup.closedDays;render();return;}closeModal();render();open('<h2>تم تنفيذ التعديل</h2><p class="status">تم الحفظ بعد تأكيدك.</p><button class="primary" onclick="closeModal()">تمام</button>');
 }
@@ -781,6 +783,12 @@ function applyServiceAgentDelta(agent,delta,label){
  return {ok:true,before:state.value,after};
 }
 function normalizeServiceAgentLabel(name){return canonicalServiceAgent(name)||String(name||'').trim();}
+function syncServiceAgentLabel(agent,label){
+ const state=getServiceAgentBalance(agent);if(!state.column||state.index<0||!label)return;
+ state.entry[0]=String(label);
+ if(!state.entry[2]||typeof state.entry[2]!=='object')state.entry[2]={};
+ state.entry[2].role='agent:'+canonicalServiceAgent(agent);
+}
 function getDailyClosePlan(){
  const money=findMoneyEntry(),moneyBefore=money?num(money.entry[1]):null;
  const cashCols=cols.map((c,i)=>({c,i})).filter(x=>/^كاش/.test(x.c.name));
