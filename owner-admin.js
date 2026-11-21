@@ -12,7 +12,9 @@ export async function handleOwnerAdmin(request, env, url) {
   const teamAdminPath = path === "/owner/admin/team" || /^\\/owner\\/admin\\/team\\/[0-9a-f-]{36}$/.test(path);
   if (teamAdminPath && !owner.isProgramOwner) return json(env,{error:"program_owner_only"},403);
   const permissionByPath = [
-    [/^\\/owner\\/admin\\/(overview|audit-log|accounts)/,"viewOverview"],
+    [/^\\/owner\\/admin\\/overview/,"viewOverview"],
+    [/^\\/owner\\/admin\\/accounts/,"viewOverview"],
+    [/^\\/owner\\/admin\\/audit-log/,"viewAudit"],
     [/^\\/owner\\/admin\\/plans/,"managePlans"],
     [/^\\/owner\\/admin\\/(payment-methods|payments)/,"managePayments"],
     [/^\\/owner\\/admin\\/offers/,"manageOffers"],
@@ -457,6 +459,8 @@ export async function handleOwnerAdmin(request, env, url) {
 }
 
 async function readJson(request){try{return await request.json()}catch(_){return null}}
+async function sha256(value){const digest=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(value));return [...new Uint8Array(digest)].map(x=>x.toString(16).padStart(2,"0")).join("");}
+function maskEmail(value){const [u,d]=String(value||"").split("@");return u&&d?u.slice(0,2)+"•••@"+d:"••••";}
 function normalizeStoreFeatures(value) {
   void value;
   return JSON.stringify({ tier: "single", smartAssistantEnabled: true, historyEnabled: true });
