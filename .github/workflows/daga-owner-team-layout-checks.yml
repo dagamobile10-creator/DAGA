@@ -51,6 +51,7 @@ jobs:
             "team OTP setup is attempt-limited and single-use": "attempts<5" in auth and "consumed_at IS NULL" in auth and "Number(consumed?.meta?.changes||0)!==1" in auth,
             "team management routes are program-owner-only": "teamAdminPath && !owner.isProgramOwner" in admin,
             "layout-only permission only allows GET company list": 'layoutCompanyListOnly=path==="/owner/admin/stores"&&request.method==="GET"' in admin,
+            "global column-definition controls remain owner-only": '[/^\\/owner\\/admin\\/store-layouts/,"manageCompanyLayouts"]' in admin and '[/^\\/owner\\/admin\\/(columns|store-layouts)/,"manageCompanyLayouts"]' not in admin,
             "company layouts are stored per store": "daga_store_layout_settings" in admin and "ON CONFLICT(store_id)" in admin,
             "company dashboard can read its own saved layout": '"/api/company/layout"' in company and "companyLayoutGet(env,db,account,url)" in company and "store_id=? AND account_id=? AND status='active'" in company,
             "dashboard applies labels without replacing accounting keys": "entry[2]={...(entry[2]||{}),displayName:display.trim()}" in dashboard and "col.displayName=layout.columns[col.id]" in dashboard,
