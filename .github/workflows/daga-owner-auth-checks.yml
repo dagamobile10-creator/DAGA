@@ -298,6 +298,10 @@ jobs:
               "owner bootstrap verifies supplied email": "DAGA_OWNER_BOOTSTRAP_TOKEN" in bootstrap and "body.email" in bootstrap and "sendEmail" in bootstrap and "sendSms" not in bootstrap,
               "owner bootstrap refuses a second owner": "owner_already_provisioned" in bootstrap and "daga_program_owner WHERE singleton_id=1" in bootstrap,
               "owner admin delegates authentication and restricts team management to the program owner": "authenticatedOwnerOrTeam(request, db)" in admin and "teamAdminPath && !owner.isProgramOwner" in admin,
+              "team login requires an active owner-team membership": "JOIN daga_owner_team_memberships m ON m.account_id=a.id" in login and "m.status='active'" in login,
+              "team membership and permissions can only be managed by the program owner": "teamAdminPath && !owner.isProgramOwner" in admin and 'path === "/owner/admin/team" && request.method === "POST"' in admin,
+              "layout-only access is limited to reading the company list": 'layoutCompanyListOnly=path==="/owner/admin/stores"&&request.method==="GET"' in admin,
+              "company-specific layout is persisted under the selected store ID": "daga_store_layout_settings" in admin and "ON CONFLICT(store_id)" in admin and "WHERE store_id=?" in admin,
               "legacy memory route remains present": 'url.pathname === "/memory"' in worker,
           }
           for name, ok in checks.items():
