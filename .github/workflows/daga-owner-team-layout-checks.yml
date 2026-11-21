@@ -1,0 +1,78 @@
+name: DAGA owner team and company layout checks
+
+on:
+  push:
+    branches: [feat/owner-admin-team-and-company-layouts]
+
+jobs:
+  validate-owner-team-layout:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check Worker and API module syntax
+        run: |
+          node --input-type=module --check < worker.js
+          node --input-type=module --check < owner-auth.js
+          node --input-type=module --check < owner-admin.js
+          node --input-type=module --check < company-invitations.js
+      - name: Check owner console and company dashboard inline scripts
+        run: |
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          for source in ("owner-console.html", "shop-dashboard-v30.html"):
+              html = Path(source).read_text(encoding="utf-8")
+              scripts = re.findall(r"<script(?:\\s[^>]*)?>(.*?)</script>", html, flags=re.I|re.S)
+              assert scripts, "No inline script found in " + source
+              for index, script in enumerate(scripts):
+                  target = Path("/tmp") / (Path(source).stem + "-" + str(index) + ".js")
+                  target.write_text(script, encoding="utf-8")
+                  print(target)
+          PY
+          for f in /tmp/owner-console-*.js /tmp/shop-dashboard-v30-*.js; do
+            [ -f "$f" ] && node --check "$f"
+          done
+      - name: Validate owner team and company layout security boundaries
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          auth=Path("owner-auth.js").read_text(encoding="utf-8")
+          admin=Path("owner-admin.js").read_text(encoding="utf-8")
+          console=Path("owner-console.html").read_text(encoding="utf-8")
+          company=Path("company-invitations.js").read_text(encoding="utf-8")
+          dashboard=Path("shop-dashboard-v30.html").read_text(encoding="utf-8")
+          migration=Path("migrations/0020_owner_admin_team_and_store_layouts.sql").read_text(encoding="utf-8")
+          checks={
+            "team login requires active membership": "JOIN daga_owner_team_memberships m ON m.account_id=a.id" in auth and "m.status='active'" in auth,
+            "team login uses separate account credentials": "JOIN daga_account_credentials c ON c.account_id=a.id" in auth,
+            "team OTP setup is attempt-limited and single-use": "attempts<5" in auth and "consumed_at IS NULL" in auth and "Number(consumed?.meta?.changes||0)!==1" in auth,
+            "team management routes are program-owner-only": "teamAdminPath && !owner.isProgramOwner" in admin,
+            "layout-only permission only allows GET company list": 'layoutCompanyListOnly=path==="/owner/admin/stores"&&request.method==="GET"' in admin,
+            "company layouts are stored per store": "daga_store_layout_settings" in admin and "ON CONFLICT(store_id)" in admin,
+            "company dashboard can read its own saved layout": '"/api/company/layout"' in company and "companyLayoutGet(env,db,account)" in company,
+            "dashboard applies labels without replacing accounting keys": "entry[2]={...(entry[2]||{}),displayName:display.trim()}" in dashboard and "col.displayName=layout.columns[col.id]" in dashboard,
+            "owner console exposes team and company layout controls": 'id="ownerTeamForm"' in console and 'id="companyLayoutSection"' in console,
+            "database schema includes isolated team and per-store layout tables": "daga_owner_team_memberships" in migration and "daga_store_layout_settings" in migration,
+          }
+          for name,ok in checks.items():
+            print(("PASS" if ok else "FAIL")+": "+name)
+          assert all(checks.values()), "Owner team/layout security checks failed"
+          PY
+      - name: Apply all D1 migrations to fresh SQLite database
+        run: |
+          python3 - <<'PY'
+          import sqlite3
+          from pathlib import Path
+          db=sqlite3.connect(":memory:")
+          db.execute("PRAGMA foreign_keys=ON")
+          migrations=sorted(Path("migrations").glob("*.sql"))
+          for path in migrations:
+            db.executescript(path.read_text(encoding="utf-8"))
+          names={r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+          required={"daga_owner_team_memberships","daga_owner_team_setup_challenges","daga_store_layout_settings"}
+          assert required <= names, "Missing new owner team/layout tables"
+          print("Applied",len(migrations),"migrations successfully.")
+          PY
