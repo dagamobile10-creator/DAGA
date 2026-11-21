@@ -172,7 +172,7 @@ function migrateLegacyDailyAccounting(){
  if(!money)return;
  if(delta!==0){const result=changeMoney(delta);if(!result.ok){daily.forEach(x=>x.c.entries.forEach(e=>{if(!e[2])e[2]={moneyPosted:false}}));persist();return;}}
  daily.forEach(x=>x.c.entries.forEach(e=>{if(!e[2]||e[2].moneyPosted!==true)e[2]={...(e[2]||{}),moneyPosted:true}}));
- cols.forEach(c=>{if(/^خارج/.test(c.name))c.entries.forEach(e=>{if(!isDailyWithdrawalName(e[0]))e[2]={...(e[2]||{}),moneyPosted:true}})});
+ cols.forEach(c=>{if(columnRole(c)==='expenses')c.entries.forEach(e=>{if(!isDailyWithdrawalName(e[0]))e[2]={...(e[2]||{}),moneyPosted:true}})});
  withdrawals.forEach(x=>x.entry[2]={...(x.entry[2]||{}),moneyPosted:true});
  if(delta!==0||pending.length||withdrawals.length){addLedger('ترحيل أرصدة يومية قديمة',`تم ترحيل الأرصدة اليومية المفتوحة عند تحديث النظام: كاش وإكسسوار ${fmt(pending.reduce((a,x)=>a+x.amount,0))} جنيه، وسحوبات مرتبطة ${fmt(withdrawals.reduce((a,x)=>a+x.amount,0))} جنيه؛ الصافي ${delta>0?'+':''}${fmt(delta)} جنيه إلى الفلوس الأساسية.`,{column:'ترحيل يومي',moneyDelta:delta});}else persist();
 }
@@ -337,7 +337,7 @@ function parseOrder(t){
  if(!Number.isFinite(amount)||amount<=0)return null;
  const cleaned=norm(text.replace(/(?:^|\s)\d+(?:\.\d{1,2})?(?=\s|$)/g,' '));
  // Service balance movement: decrease = consumed stock; increase = new vendor funding.
- const cardsForDelta=cols.find(c=>c.name==='الكروت');
+ const cardsForDelta=columnByRole('cards');
  const serviceRows=(cardsForDelta?.entries||[]).map((e,i)=>({name:String(e[0]||''),index:i,amount:num(e[1]),agent:serviceAgentForCardEntry(e[0]),normalized:norm(e[0])})).filter(e=>e.agent&&serviceCardEntryMentioned(cleaned,e.name));
  if(serviceRows.length){serviceRows.sort((a,b)=>b.normalized.length-a.normalized.length);const best=serviceRows[0];
   const subtractIntent=/(اخصم|خصم|انقص|نقص|اسحب|استهلك)/.test(cleaned),addServiceIntent=/(زود|زيد|ضيف|اضيف|ارفع|حط|سجل|اكتب|دخل)/.test(cleaned);
@@ -373,8 +373,8 @@ function parseOrder(t){
    return {type:'accessorySale',amount,product:product||'مبيعات أكسسوار',raw};
  }
  // Outside and balance are ledgers, while "cards" records the signed cash movement.
- const outsideCols=cols.filter(c=>/^خارج/.test(c.name));
- const balanceCol=cols.find(c=>c.name==='الرصيد');
+ const outsideCols=cols.filter(c=>columnRole(c)==='expenses');
+ const balanceCol=columnByRole('balance');
  const allPeople=new Map();
  outsideCols.forEach(c=>c.entries.forEach(e=>{
    const key=norm(e[0]); if(!key||/تحصيلات|حركات/.test(key))return;
@@ -436,12 +436,12 @@ function review(){
  const inquiryIntent=/(شوف|شوفلي|شوف لي|عليه كام|عليها كام|حسابه|حسابها|كشف حساب|رصيده كام|عليه قد ايه|عليه اد ايه|كام عليه)/.test(q);
  if(inquiryIntent){
    const names=[];
-   cols.forEach((c,ci)=>{if(/^خارج/.test(c.name)||c.name==='الرصيد')c.entries.forEach(e=>{if(e[0]&&!names.some(x=>qnorm(x.name)===qnorm(e[0])))names.push({name:e[0]})})});
+   cols.forEach((c,ci)=>{if(columnRole(c)==='expenses'||columnRole(c)==='balance')c.entries.forEach(e=>{if(e[0]&&!names.some(x=>qnorm(x.name)===qnorm(e[0])))names.push({name:e[0]})})});
    const matched=names.filter(x=>q.includes(qnorm(x.name))).sort((a,b)=>qnorm(b.name).length-qnorm(a.name).length);
    if(!matched.length){out.innerHTML='<p class="small">فهمت إنك بتسأل عن حساب شخص، لكن مش لاقي اسمًا مطابقًا في أعمدة الخارج أو الرصيد. اكتب الاسم زي ما هو ظاهر في الحساب.</p>';return}
    const personName=matched[0].name, key=qnorm(personName);
    const outside=[],balance=[];
-   cols.forEach((c,ci)=>c.entries.forEach(e=>{if(qnorm(e[0])===key){if(/^خارج/.test(c.name))outside.push({column:c.name,amount:num(e[1])});if(c.name==='الرصيد')balance.push({column:c.name,amount:num(e[1])})}}));
+   cols.forEach((c,ci)=>c.entries.forEach(e=>{if(qnorm(e[0])===key){if(columnRole(c)==='expenses')outside.push({column:c.name,amount:num(e[1])});if(columnRole(c)==='balance')balance.push({column:c.name,amount:num(e[1])})}}));
    const outSum=outside.reduce((a,x)=>a+x.amount,0),balSum=balance.reduce((a,x)=>a+x.amount,0);
    pendingOrder=null;pendingClarification=null;
    out.innerHTML=`<div class="reconMini"><div><span>استعلام حساب — من غير تسجيل حركة</span><b>${esc(personName)}</b></div><div>إجمالي الخارج / المستحق عليه <b>${fmt(outSum)} جنيه</b></div><div>إجمالي الرصيد المسجل باسمه <b>${fmt(balSum)} جنيه</b></div>${outside.map(x=>`<div>${esc(x.column)} <b>${fmt(x.amount)} جنيه</b></div>`).join('')}${balance.map(x=>`<div>الرصيد <b>${fmt(x.amount)} جنيه</b></div>`).join('')}</div><p class="small">دي قراءة للحساب فقط؛ لم يتم تعديل أي رصيد. قول لي دلوقتي عايز تسجل قبض، أو تسوية، أو تعديل، وهكمل من الأرقام الحالية.</p>`;
@@ -462,10 +462,10 @@ function review(){
   out.innerHTML='<div class="reconMini"><div>البند <b>'+esc(p.entryName)+'</b></div><div>القيمة القديمة <b>'+fmt(p.oldAmount)+'</b></div><div>القيمة الجديدة <b>'+fmt(p.newAmount)+'</b></div><div>تأثير الفلوس <b>'+fmt(impact.delta)+'</b></div>'+(impact.agentName?'<div>رصيد '+esc(impact.agentName)+' <b>'+fmt(impact.agentDelta)+'</b></div>':'')+'</div><p class="small">'+esc(impact.description)+'</p><button class="primary" onclick="executeOrder()">تأكيد وتنفيذ</button><button onclick="pendingOrder=null;document.getElementById(\'orderPreview\').innerHTML=\'تم إلغاء العملية.\'">إلغاء</button>';return;
  }
 
- const cardsIndex=cols.findIndex(c=>c.name==='الكروت'), balanceIndex=cols.findIndex(c=>c.name==='الرصيد');
+ const cardsIndex=cols.findIndex(c=>columnRole(c)==='cards'), balanceIndex=cols.findIndex(c=>columnRole(c)==='balance');
  const cashCols=cols.map((c,i)=>({c,i})).filter(x=>columnRole(x.c)==='cash');
  const outsideCols=cols.map((c,i)=>({c,i})).filter(x=>columnRole(x.c)==='expenses');
- const accessoryIndex=cols.findIndex(c=>c.name==='الإكسسوار');
+ const accessoryIndex=cols.findIndex(c=>columnRole(c)==='accessory');
  if(cardsIndex<0||balanceIndex<0){out.innerHTML='<p class="small">تعذر تحديد الأعمدة الأساسية. لم يتم تنفيذ أي تغيير.</p>';return}
  if(p.type==='dailyWithdrawal'){
    const target=outsideCols.find(x=>x.c.entries.some(e=>norm(e[0])===norm(p.name)))||outsideCols[0];
@@ -523,7 +523,7 @@ function answerClarification(choice){
  const q=pendingClarification;if(!q)return;
  const out=document.getElementById('orderPreview');
  if(choice==='cancel'){pendingClarification=null;pendingOrder=null;if(out)out.innerHTML='<p class="status">تم إلغاء السؤال والحركة؛ لم يتغير أي رصيد.</p>';return}
- const outsideCols=cols.map((c,i)=>({c,i})).filter(x=>/^خارج/.test(x.c.name));
+ const outsideCols=cols.map((c,i)=>({c,i})).filter(x=>columnRole(x.c)==='expenses');
  const target=outsideCols.find(x=>x.c.entries.length===0)||outsideCols[0];
  const balanceCol=cols.find(c=>c.name==='الرصيد');const balanceIndex=cols.indexOf(balanceCol);
  if(!target||!balanceCol){if(out)out.innerHTML='<p class="small">مش لاقي عمود الخارج أو الرصيد. ما اتغيرش أي رقم.</p>';pendingClarification=null;return}
@@ -555,7 +555,7 @@ function executeOrderCore(){
 
  const setEntry=(ci,idx,val)=>{if(idx>=0)cols[ci].entries[idx][1]=String(val)};
  const addSigned=(ci,label,delta)=>{const entries=cols[ci].entries;let i=entries.findIndex(e=>e[0]===label);if(i<0)entries.push([label,String(delta)]);else setEntry(ci,i,num(entries[i][1])+delta)};
- const addToNamed=(ci,name,delta)=>{const label=cols[ci]?.name==='الرصيد'?normalizeServiceAgentLabel(name):name,agent=cols[ci]?.name==='الرصيد'?canonicalServiceAgent(label):null;let i=agent?cols[ci].entries.findIndex(e=>canonicalServiceAgent(e[0])===agent):findEntry(ci,label);if(i<0)cols[ci].entries.push([label,String(delta)]);else setEntry(ci,i,num(cols[ci].entries[i][1])+delta)};
+ const addToNamed=(ci,name,delta)=>{const label=columnRole(cols[ci])==='balance'?normalizeServiceAgentLabel(name):name,agent=cols[ci]?.name==='الرصيد'?canonicalServiceAgent(label):null;let i=agent?cols[ci].entries.findIndex(e=>canonicalServiceAgent(e[0])===agent):findEntry(ci,label);if(i<0)cols[ci].entries.push([label,String(delta)]);else setEntry(ci,i,num(cols[ci].entries[i][1])+delta)};
  const updateRows=(rows,delta)=>{let remaining=delta;for(const r of rows||[]){if(remaining<=0)break;const idx=findEntry(r.ci,r.name);if(idx<0)continue;const cur=num(cols[r.ci].entries[idx][1]),take=Math.min(cur,remaining);setEntry(r.ci,idx,Math.max(0,cur-take));remaining-=take;}return remaining;};
  if(p.mode==='balanceToOutsideTransfer'){
    const bal=cols[p.balanceIndex], target=cols[p.targetIndex];
@@ -582,7 +582,7 @@ function executeOrderCore(){
    addLedger('تسجيل بند أكسسوار يومي',`تم تسجيل ${p.product} بقيمة ${fmt(p.amount)} جنيه؛ زادت الفلوس الأساسية فورًا من ${fmt(money.before)} إلى ${fmt(money.after)} جنيه. التسوية تصفّر عمود الإكسسوار فقط.`,{column:'الإكسسوار',entryName:p.product,amount:p.amount,moneyDelta:p.amount});
  }else if(p.mode==='dailyWithdrawal'){
    const target=cols[p.targetIndex];
-   if(!target||!/^خارج/.test(target.name)){alert('مش لاقي عمود خارج مناسب.');return}
+   if(!target||columnRole(target)!=='expenses'){alert('مش لاقي عمود خارج مناسب.');return}
    const money=changeMoney(-p.amount);if(!money.ok){alert(money.message);return}
    addToNamed(p.targetIndex,p.name,p.amount);const withdrawalRow=target.entries.find(e=>e[0]===p.name);if(withdrawalRow)withdrawalRow[2]={moneyPosted:true};
    addLedger('سحب يومي من الكاش/الأكسسوار',`تم تسجيل سحب ${fmt(p.amount)} جنيه باسم ${p.name} في ${target.name} وخصمه من الفلوس الأساسية فورًا. التسوية تصفّر السحب فقط من غير خصم تاني.`,{column:target.name,entryName:p.name,amount:p.amount,moneyDelta:-p.amount});
@@ -603,12 +603,12 @@ function executeOrderCore(){
   if(!moneyCheck){alert('مش لاقي بند الفلوس الأساسية. لم يتغير حساب الشخص.');pendingOrder=null;return}
   if(num(moneyCheck.entry[1])<moneyToDeduct){alert('الفلوس الأساسية أقل من المبلغ المطلوب تسويته من الرصيد. لم يتغير أي حساب.');pendingOrder=null;return}
   const remaining=updateRows(p.person.balanceRows,p.paid);if(remaining>0){alert('الرصيد تغيّر أثناء المراجعة. راجع الأمر من جديد.');pendingOrder=null;return}
-  if(p.excess>0){const target=cols[p.outsideTargetIndex];if(!target||!/^خارج/.test(target.name)){alert('مش لاقي عمود خارج لتسجيل الزيادة. راجع الحساب.');return}addToNamed(p.outsideTargetIndex,p.name,p.excess)}
+  if(p.excess>0){const target=cols[p.outsideTargetIndex];if(!target||columnRole(target)!=='expenses'){alert('مش لاقي عمود خارج لتسجيل الزيادة. راجع الحساب.');return}addToNamed(p.outsideTargetIndex,p.name,p.excess)}
   const money=changeMoney(-moneyToDeduct);if(!money.ok){alert(money.message);return}const moneyDelta=-moneyToDeduct;
   addLedger('صرف/تسوية رصيد مندوب',p.name+' استلم '+fmt(p.amount)+' جنيه؛ اتسوى '+fmt(p.paid)+' من الرصيد. '+(serviceAgent?'تم خصم المبلغ المشطوب من رصيد المندوب من الفلوس الأساسية.':'تم خصم المبلغ المدفوع من الفلوس مرة واحدة.'),{column:'الرصيد والخارج',entryName:p.name,paid:p.amount,settled:p.paid,excess:p.excess,moneyDelta});
 
  }else if(p.mode==='outgoing'){
-   const target=p.rows.find(r=>/^خارج/.test(cols[r.ci].name))?.ci ?? cols.findIndex(c=>c.name==='خارج 1');
+   const target=p.rows.find(r=>columnRole(cols[r.ci])==='expenses')?.ci ?? cols.findIndex(c=>columnRole(c)==='expenses');
    if(target<0){alert('مش لاقي عمود خارج مناسب.');return}
    addToNamed(target,p.name,p.amount);
    const money=changeMoney(-p.amount); if(!money.ok){alert(money.message);return;}
@@ -791,7 +791,7 @@ function syncServiceAgentLabel(agent,label){
 }
 function getDailyClosePlan(){
  const money=findMoneyEntry(),moneyBefore=money?num(money.entry[1]):null;
- const cashCols=cols.map((c,i)=>({c,i})).filter(x=>/^كاش/.test(x.c.name));
+ const cashCols=cols.map((c,i)=>({c,i})).filter(x=>columnRole(x.c)==='cash');
  const accessoryCols=cols.map((c,i)=>({c,i})).filter(x=>columnRole(x.c)==='accessory');
  const outsideCols=cols.map((c,i)=>({c,i})).filter(x=>/^خارج/.test(x.c.name));
  const isCashName=n=>['كاش','الكاش','كاش اليوم','سحب كاش','الكاش اليوم'].includes(normAccountingName(n));
