@@ -25,7 +25,7 @@ jobs:
           from pathlib import Path
           for source in ("owner-console.html", "shop-dashboard-v30.html"):
               html = Path(source).read_text(encoding="utf-8")
-              scripts = re.findall(r"<script(?:\\s[^>]*)?>(.*?)</script>", html, flags=re.I|re.S)
+              scripts = re.findall(r"<script(?:\s[^>]*)?>(.*?)</script>", html, flags=re.I|re.S)
               assert scripts, "No inline script found in " + source
               for index, script in enumerate(scripts):
                   target = Path("/tmp") / (Path(source).stem + "-" + str(index) + ".js")
