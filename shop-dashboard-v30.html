@@ -202,7 +202,7 @@ function renderLiveWordBalance(){
  if(status)status.textContent=remaining>0?'الرصيد المتاح للشركة — يتم الخصم حسب عدد حروف ردود LIVE DAGA.':'لا يوجد رصيد حروف متاح حاليًا. اطلب شحن الرصيد من مالك التطبيق.';
 }
 function editColumnName(i){const col=cols[i];if(!col)return;const next=prompt('اكتب الاسم الجديد للعمود:',col.name);if(next===null)return;const name=next.trim();if(!name)return alert('اسم العمود لا يمكن أن يكون فارغًا.');if(cols.some((c,j)=>j!==i&&c.name.trim()===name))return alert('اسم العمود مستخدم بالفعل؛ اختار اسمًا مختلفًا.');const old=col.name;col.name=name;addLedger('تغيير اسم عمود',old+' ← '+name,{columnId:col.id,columnRole:col.role,oldName:old,newName:name});persist();render()}
-function render(){updateLiveDate();refreshAccountRoleLabel();renderLiveWordBalance();const h=document.getElementById('headers'),c=document.getElementById('cells');h.innerHTML='';c.innerHTML='';cols.forEach((col,i)=>{const th=document.createElement('th');th.innerHTML='<div class="colhead"><span>'+esc(col.name)+'</span><button type="button" class="miniBtn" title="تغيير اسم العمود" onclick="editColumnName('+i+')">✎</button></div>';h.appendChild(th);const td=document.createElement('td');const list=document.createElement('div');list.className='entryList';col.entries.forEach((e,j)=>{const d=document.createElement('div');d.className='entry';d.innerHTML='<div><span class="name">'+esc(e[0])+'</span><span class="sub">ضغطة للتعديل · ضغطة مطوّلة للتفاصيل</span></div><span class="amount">'+fmt(num(e[1]))+'</span>';attachEntryGestures(d,i,j);list.appendChild(d)});const total=document.createElement('div');total.className='colTotal';total.innerHTML='<span>إجمالي العمود</span><b>'+fmt(col.entries.reduce((a,e)=>a+num(e[1]),0))+' ج.م</b>';const footer=document.createElement('div');footer.className='colFooter';const add=document.createElement('button');add.className='miniBtn';add.textContent='＋ بند جديد';add.onclick=ev=>{ev.stopPropagation();addEntry(i)};const del=document.createElement('button');del.className='miniBtn danger';del.textContent='− حذف بند';del.onclick=ev=>{ev.stopPropagation();removeEntry(i)};footer.append(add,del);td.append(list,total,footer);c.appendChild(td)});updateRecon()}
+function render(){updateLiveDate();refreshAccountRoleLabel();renderLiveWordBalance();const h=document.getElementById('headers'),c=document.getElementById('cells');h.innerHTML='';c.innerHTML='';cols.forEach((col,i)=>{const th=document.createElement('th');th.innerHTML='<div class="colhead"><span>'+esc(col.name)+'</span><button type="button" class="miniBtn" title="تغيير اسم العمود" onclick="editColumnName('+i+')">✎</button></div>';h.appendChild(th);const td=document.createElement('td');const list=document.createElement('div');list.className='entryList';col.entries.forEach((e,j)=>{const d=document.createElement('div');d.className='entry';d.innerHTML='<div><span class="name">'+esc(e[2]?.displayName||e[0])+'</span><span class="sub">ضغطة للتعديل · ضغطة مطوّلة للتفاصيل</span></div><span class="amount">'+fmt(num(e[1]))+'</span>';attachEntryGestures(d,i,j);list.appendChild(d)});const total=document.createElement('div');total.className='colTotal';total.innerHTML='<span>إجمالي العمود</span><b>'+fmt(col.entries.reduce((a,e)=>a+num(e[1]),0))+' ج.م</b>';const footer=document.createElement('div');footer.className='colFooter';const add=document.createElement('button');add.className='miniBtn';add.textContent='＋ بند جديد';add.onclick=ev=>{ev.stopPropagation();addEntry(i)};const del=document.createElement('button');del.className='miniBtn danger';del.textContent='− حذف بند';del.onclick=ev=>{ev.stopPropagation();removeEntry(i)};footer.append(add,del);td.append(list,total,footer);c.appendChild(td)});updateRecon()}
 function getDayReconciliation(){
  const capitalCol=columnByRole('balance');
  const capital=capitalCol?capitalCol.entries.reduce((a,e)=>a+num(e[1]),0):0;
@@ -959,7 +959,24 @@ function importBackupPrompt(){open('<h2>استيراد نسخة احتياطية
 function importBackup(){const f=document.getElementById('backupFile').files[0];if(!f)return alert('اختار ملف النسخة الاحتياطية');const reader=new FileReader();reader.onload=()=>{try{const x=JSON.parse(reader.result);if(!Array.isArray(x.cols)||x.cols.length!==10)throw Error('bad');if(!confirm('هيتم استبدال البيانات الحالية. متأكد؟'))return;cols=x.cols;ledger=Array.isArray(x.ledger)?x.ledger:[];closedDays=Array.isArray(x.closedDays)?x.closedDays:[];persist();closeModal();render();alert('تم استيراد النسخة على هذا الجهاز.')}catch(e){alert('ملف النسخة غير صالح')}};reader.readAsText(f)}
 function open(s){document.getElementById('sheet').innerHTML=s;document.getElementById('modal').style.display='block'}function closeModal(){document.getElementById('modal').style.display='none'}
 let dashboardBooted=false;
-async function bootAuthenticatedDashboard(token,selectedCompanyId){
+async async function applyCompanyLayout(token){
+ try{
+  const response=await fetch('/api/company/layout',{headers:{Authorization:'Bearer '+token},cache:'no-store',credentials:'omit'});
+  if(!response.ok)return;
+  const data=await response.json().catch(()=>({})),layout=data.layout||{};
+  cols.forEach(col=>{
+   const role=columnRole(col);
+   if(typeof layout.columns?.[role]==='string')col.displayName=layout.columns[role];
+   const names=layout.entries?.[role];
+   if(names&&typeof names==='object')col.entries.forEach(entry=>{
+    const original=String(entry[0]||''),stable=String(entry[2]?.role||'');
+    const display=names[stable]||names[original];
+    if(typeof display==='string'&&display.trim()){entry[2]={...(entry[2]||{}),displayName:display.trim()};}
+   });
+  });
+ }catch(_){}
+}
+function bootAuthenticatedDashboard(token,selectedCompanyId){
  if(dashboardBooted)return;dashboardBooted=true;
  try{
   const response=await fetch('/api/company/auth/me',{method:'GET',headers:{Authorization:'Bearer '+token},cache:'no-store',credentials:'omit'});
@@ -978,7 +995,7 @@ async function bootAuthenticatedDashboard(token,selectedCompanyId){
   document.querySelectorAll('button[onclick="voiceDaga()"]').forEach(b=>{b.hidden=!smartAllowed;b.disabled=!smartAllowed;b.title=smartAllowed?'':'زر كلم ضجة متاح بعد تفعيل اشتراك DAGA للشركة.';b.setAttribute('aria-disabled',String(!smartAllowed));});
   document.querySelectorAll('button.liveBtn').forEach(b=>{b.hidden=!liveAllowed;b.disabled=!liveAllowed;b.title='LIVE DAGA متاحة؛ يلزم وجود رصيد حروف للتحدث.';b.setAttribute('aria-disabled',String(!liveAllowed));});
   document.querySelectorAll('button[onclick="showReports()"]').forEach(b=>{b.hidden=false;b.disabled=false;b.title=window.DAGA_AUTH_USER.historyEnabled?'':'تفاصيل الأيام السابقة متاحة بعد تفعيل اشتراك DAGA للشركة.';});
-  loadStoreData(company.id);migrateLegacyDailyAccounting();
+  loadStoreData(company.id);await applyCompanyLayout(token);migrateLegacyDailyAccounting();
   const header=document.querySelector('header.top .row');
   if(header&&!document.getElementById('accountLogout')){const b=document.createElement('button');b.id='accountLogout';b.type='button';b.textContent='تسجيل الخروج';b.style.cssText='margin:0 10px;padding:8px 11px;border:1px solid #4a402c;border-radius:9px;background:#15120c;color:#d7ad57;font:inherit;font-size:12px;cursor:pointer';b.addEventListener('click',async()=>{b.disabled=true;try{await fetch('/api/company/auth/logout',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:'{}',cache:'no-store',credentials:'omit'});}finally{window.location.replace('/shop-access/');}});header.insertBefore(b,header.lastElementChild);}
   render();
