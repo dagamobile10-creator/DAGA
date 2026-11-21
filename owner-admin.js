@@ -20,7 +20,7 @@ export async function handleOwnerAdmin(request, env, url) {
     [/^\/owner\/admin\/offers/,"manageOffers"],
     [/^\/owner\/admin\/stores/,"manageStores"],
     [/^\/owner\/admin\/words/,"adjustWords"],
-    [/^\/owner\/admin\/(columns|store-layouts)/,"manageCompanyLayouts"],
+    [/^\/owner\/admin\/store-layouts/,"manageCompanyLayouts"],
     [/^\/owner\/admin\/live-daga-rate/,"manageLiveRate"]
   ];
   if(!owner.isProgramOwner){
