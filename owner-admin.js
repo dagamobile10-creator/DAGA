@@ -1,4 +1,4 @@
-import { authenticatedOwner } from "./owner-auth.js";
+import { authenticatedOwnerOrTeam } from "./owner-auth.js";
 import { sendCompanySetupCodeForStore } from "./company-invitations.js";
 
 export async function handleOwnerAdmin(request, env, url) {
@@ -6,8 +6,25 @@ export async function handleOwnerAdmin(request, env, url) {
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors(env) });
   const db = env.DAGA_APP_DB;
   if (!db) return json(env, { error: "application_database_not_configured" }, 503);
-  const owner = await authenticatedOwner(request, db);
+  const owner = await authenticatedOwnerOrTeam(request, db);
   if (!owner) return json(env, { error: "owner_session_required" }, 401);
+  const path = url.pathname.replace(/\\/+$/, "");
+  const teamAdminPath = path === "/owner/admin/team" || /^\\/owner\\/admin\\/team\\/[0-9a-f-]{36}$/.test(path);
+  if (teamAdminPath && !owner.isProgramOwner) return json(env,{error:"program_owner_only"},403);
+  const permissionByPath = [
+    [/^\\/owner\\/admin\\/(overview|audit-log|accounts)/,"viewOverview"],
+    [/^\\/owner\\/admin\\/plans/,"managePlans"],
+    [/^\\/owner\\/admin\\/(payment-methods|payments)/,"managePayments"],
+    [/^\\/owner\\/admin\\/offers/,"manageOffers"],
+    [/^\\/owner\\/admin\\/stores/,"manageStores"],
+    [/^\\/owner\\/admin\\/words/,"adjustWords"],
+    [/^\\/owner\\/admin\\/columns/,"manageCompanyLayouts"],
+    [/^\\/owner\\/admin\\/live-daga-rate/,"manageLiveRate"]
+  ];
+  if(!owner.isProgramOwner){
+    const required=permissionByPath.find(([re])=>re.test(path))?.[1];
+    if(!required || owner.permissions?.[required]!==true) return json(env,{error:"permission_denied",permission:required||"owner_only"},403);
+  }
 
   try {
     const path = url.pathname.replace(/\/+$/, "");
