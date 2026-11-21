@@ -959,7 +959,7 @@ function importBackupPrompt(){open('<h2>استيراد نسخة احتياطية
 function importBackup(){const f=document.getElementById('backupFile').files[0];if(!f)return alert('اختار ملف النسخة الاحتياطية');const reader=new FileReader();reader.onload=()=>{try{const x=JSON.parse(reader.result);if(!Array.isArray(x.cols)||x.cols.length!==10)throw Error('bad');if(!confirm('هيتم استبدال البيانات الحالية. متأكد؟'))return;cols=x.cols;ledger=Array.isArray(x.ledger)?x.ledger:[];closedDays=Array.isArray(x.closedDays)?x.closedDays:[];persist();closeModal();render();alert('تم استيراد النسخة على هذا الجهاز.')}catch(e){alert('ملف النسخة غير صالح')}};reader.readAsText(f)}
 function open(s){document.getElementById('sheet').innerHTML=s;document.getElementById('modal').style.display='block'}function closeModal(){document.getElementById('modal').style.display='none'}
 let dashboardBooted=false;
-async async function applyCompanyLayout(token){
+async function applyCompanyLayout(token){
  try{
   const response=await fetch('/api/company/layout',{headers:{Authorization:'Bearer '+token},cache:'no-store',credentials:'omit'});
   if(!response.ok)return;
