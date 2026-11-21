@@ -559,7 +559,7 @@ function executeOrderCore(){
  const updateRows=(rows,delta)=>{let remaining=delta;for(const r of rows||[]){if(remaining<=0)break;const idx=findEntry(r.ci,r.name);if(idx<0)continue;const cur=num(cols[r.ci].entries[idx][1]),take=Math.min(cur,remaining);setEntry(r.ci,idx,Math.max(0,cur-take));remaining-=take;}return remaining;};
  if(p.mode==='balanceToOutsideTransfer'){
    const bal=cols[p.balanceIndex], target=cols[p.targetIndex];
-   if(!bal||!target||!/^خارج/.test(target.name)){alert('الأعمدة اتغيرت من وقت المراجعة. راجع الأمر من جديد.');pendingOrder=null;return;}
+   if(!bal||!target||columnRole(target)!=='expenses'){alert('الأعمدة اتغيرت من وقت المراجعة. راجع الأمر من جديد.');pendingOrder=null;return;}
    const rows=p.rows||[];let left=p.transfer;
    for(const r of rows){if(left<=0)break;const idx=cols[r.ci]?.entries.findIndex(e=>e[0]===r.name)??-1;if(idx<0)continue;const cur=num(cols[r.ci].entries[idx][1]),take=Math.min(cur,left);cols[r.ci].entries[idx][1]=String(Math.max(0,cur-take));left-=take;}
    if(left>0){alert('رصيد الشخص اتغير من وقت المراجعة. لم أُكمل التسويه؛ راجع الحساب من جديد.');pendingOrder=null;render();return;}
