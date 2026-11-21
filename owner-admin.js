@@ -8,20 +8,20 @@ export async function handleOwnerAdmin(request, env, url) {
   if (!db) return json(env, { error: "application_database_not_configured" }, 503);
   const owner = await authenticatedOwnerOrTeam(request, db);
   if (!owner) return json(env, { error: "owner_session_required" }, 401);
-  const path = url.pathname.replace(/\\/+$/, "");
-  const teamAdminPath = path === "/owner/admin/team" || /^\\/owner\\/admin\\/team\\/[0-9a-f-]{36}$/.test(path);
+  const path = url.pathname.replace(/\/+$/, "");
+  const teamAdminPath = path === "/owner/admin/team" || /^\/owner\/admin\/team\/[0-9a-f-]{36}$/.test(path);
   if (teamAdminPath && !owner.isProgramOwner) return json(env,{error:"program_owner_only"},403);
   const permissionByPath = [
-    [/^\\/owner\\/admin\\/overview/,"viewOverview"],
-    [/^\\/owner\\/admin\\/accounts/,"viewOverview"],
-    [/^\\/owner\\/admin\\/audit-log/,"viewAudit"],
-    [/^\\/owner\\/admin\\/plans/,"managePlans"],
-    [/^\\/owner\\/admin\\/(payment-methods|payments)/,"managePayments"],
-    [/^\\/owner\\/admin\\/offers/,"manageOffers"],
-    [/^\\/owner\\/admin\\/stores/,"manageStores"],
-    [/^\\/owner\\/admin\\/words/,"adjustWords"],
-    [/^\\/owner\\/admin\\/(columns|store-layouts)/,"manageCompanyLayouts"],
-    [/^\\/owner\\/admin\\/live-daga-rate/,"manageLiveRate"]
+    [/^\/owner\/admin\/overview/,"viewOverview"],
+    [/^\/owner\/admin\/accounts/,"viewOverview"],
+    [/^\/owner\/admin\/audit-log/,"viewAudit"],
+    [/^\/owner\/admin\/plans/,"managePlans"],
+    [/^\/owner\/admin\/(payment-methods|payments)/,"managePayments"],
+    [/^\/owner\/admin\/offers/,"manageOffers"],
+    [/^\/owner\/admin\/stores/,"manageStores"],
+    [/^\/owner\/admin\/words/,"adjustWords"],
+    [/^\/owner\/admin\/(columns|store-layouts)/,"manageCompanyLayouts"],
+    [/^\/owner\/admin\/live-daga-rate/,"manageLiveRate"]
   ];
   if(!owner.isProgramOwner){
     const required=permissionByPath.find(([re])=>re.test(path))?.[1];
@@ -424,7 +424,7 @@ export async function handleOwnerAdmin(request, env, url) {
       return json(env, {ok:true,entryId:id},201);
     }
 
-    const storeLayoutMatch=path.match(/^\\/owner\\/admin\\/store-layouts\\/([a-f0-9-]{36})$/i);
+    const storeLayoutMatch=path.match(/^\/owner\/admin\/store-layouts\/([a-f0-9-]{36})$/i);
     if(storeLayoutMatch&&request.method==="GET"){
       const store=await db.prepare("SELECT id,display_name FROM daga_stores WHERE id=? AND status!='archived'").bind(storeLayoutMatch[1]).first();
       if(!store)return json(env,{error:"store_not_found"},404);
