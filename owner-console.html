@@ -87,7 +87,7 @@ can('manageOffers')?api('/owner/admin/offers'):Promise.resolve({offers:[]}),
 can('managePayments')?api('/owner/admin/payments'):Promise.resolve({payments:[]}),
 (can('manageStores')||can('manageCompanyLayouts'))?api('/owner/admin/stores'):Promise.resolve({stores:[]}),
 can('viewOverview')?api('/owner/admin/accounts'):Promise.resolve({accounts:[]}),
-can('manageCompanyLayouts')?api('/owner/admin/columns'):Promise.resolve({columns:[]}),
+currentOwnerAccount?.isProgramOwner?api('/owner/admin/columns'):Promise.resolve({columns:[]}),
 can('viewAudit')?api('/owner/admin/audit-log?limit=100'):Promise.resolve({events:[]}),
 can('manageLiveRate')?api('/owner/admin/live-daga-rate'):Promise.resolve({pricePer1000Minor:null})
 ]);
@@ -101,7 +101,7 @@ $('payments').closest('.card').classList.toggle('hidden',!can('managePayments'))
 $('stores').closest('.card').classList.toggle('hidden',!can('manageStores'));
 $('wordsForm').closest('.card').classList.toggle('hidden',!can('adjustWords'));
 $('auditLog').closest('.card').classList.toggle('hidden',!can('viewAudit'));
-$('columns').closest('.card').classList.toggle('hidden',!can('manageCompanyLayouts'));
+$('columns').closest('.card').classList.toggle('hidden',!currentOwnerAccount?.isProgramOwner);
 $('accounts').closest('.card').classList.toggle('hidden',!can('viewOverview'));
 $('liveRate').value=rate.pricePer1000Minor==null?'':(Number(rate.pricePer1000Minor)/100).toFixed(2);$('liveRateState').textContent=rate.pricePer1000Minor==null?'لا يمكن إنشاء باقات LIVE DAGA قبل ضبط السعر هنا.':'السعر الحالي: '+(Number(rate.pricePer1000Minor)/100).toFixed(2)+' جنيه لكل 1000 حرف. أسعار تعريفات الباقات النشطة وغير النشطة تتحدث عند تغيير السعر؛ الطلبات القديمة لا تتغير.';
 const pendingShopApprovals=(ov.stores||[]).find(x=>x.status==='pending')?.count||0;const stats=[['طلبات موافقة الشركات',pendingShopApprovals],['الشركات',sum(ov.stores)],['طلبات الدفع المعلقة',ov.pendingPaymentReviews],['الخطط النشطة',sum(ov.activePlans)],['رصيد الحروف المتبقي',ov.liveWordsOutstanding]];
