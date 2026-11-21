@@ -142,7 +142,7 @@ async function ownerTeamSetupVerify(request,env){
  const db=env.DAGA_APP_DB;if(!db||!env.DAGA_OTP_PEPPER)return json(env,{error:"owner_team_setup_not_configured"},503);
  const b=await safeJson(request);if(!b)return json(env,{error:"invalid_json"},400);
  const email=String(b.email||"").trim().toLowerCase(),code=String(b.code||"").trim(),password=String(b.password||"");
- if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)||!/^\\d{6}$/.test(code)||!validPassword(password))return json(env,{error:"valid_setup_fields_required"},400);
+ if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||!/^\d{6}$/.test(code)||!validPassword(password))return json(env,{error:"valid_setup_fields_required"},400);
  const member=await db.prepare("SELECT a.id,a.status,m.status AS membership_status FROM daga_accounts a JOIN daga_owner_team_memberships m ON m.account_id=a.id WHERE lower(a.email)=? LIMIT 1").bind(email).first();
  if(!member||member.status!=="approved"||member.membership_status!=="active")return json(env,{error:"team_invitation_not_active"},404);
  const challenge=await db.prepare("SELECT id,code_hash,attempts FROM daga_owner_team_setup_challenges WHERE account_id=? AND consumed_at IS NULL AND expires_at>? ORDER BY created_at DESC LIMIT 1").bind(member.id,new Date().toISOString()).first();
