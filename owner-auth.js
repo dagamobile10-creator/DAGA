@@ -6,10 +6,11 @@ const PBKDF2_ITERATIONS = 100000; // Cloudflare Workers Web Crypto supports at m
 export async function handleOwnerAuth(request, env, url) {
   const routes = new Set([
     "/owner/bootstrap/start", "/owner/bootstrap/verify",
-    "/owner/auth/login", "/owner/auth/me", "/owner/auth/logout", "/owner/recovery/start", "/owner/recovery/complete"
+    "/owner/auth/login", "/owner/auth/me", "/owner/auth/logout", "/owner/recovery/start", "/owner/recovery/complete", "/owner/team/setup/verify"
   ]);
   if (!routes.has(url.pathname)) return null;
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors(env) });
+  if (url.pathname === "/owner/team/setup/verify" && request.method === "POST") return ownerTeamSetupVerify(request, env);
   if (url.pathname.endsWith("/me") && request.method === "GET") return ownerMe(request, env);
   if (url.pathname.endsWith("/logout") && request.method === "POST") return ownerLogout(request, env);
   if (url.pathname === "/owner/recovery/start" && request.method === "POST") return recoveryStart(request, env);
@@ -85,11 +86,17 @@ const body=await safeJson(request);if(!body)return json(env,{error:"invalid_json
 const email=String(body.email||body.identifier||"").trim().toLowerCase(),password=String(body.password||"");
 if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||password.length>128)return json(env,{error:"invalid_credentials"},401);
 if(!await rateLimit(db,env,"login:"+email+":"+(request.headers.get("CF-Connecting-IP")||"unknown"),8,900))return json(env,{error:"rate_limited"},429);
-const account=await db.prepare("SELECT a.id,a.role,a.status,a.email,c.password_hash,c.password_salt,c.password_iterations FROM daga_accounts a JOIN daga_program_owner o ON o.account_id=a.id JOIN daga_owner_credentials c ON c.account_id=a.id WHERE o.singleton_id=1 AND lower(a.email)=? LIMIT 1").bind(email).first();
-if(!account||account.role!==OWNER_ROLE||account.status!=="approved")return json(env,{error:"invalid_credentials"},401);
+let account=await db.prepare("SELECT a.id,a.role,a.status,a.email,c.password_hash,c.password_salt,c.password_iterations FROM daga_accounts a JOIN daga_program_owner o ON o.account_id=a.id JOIN daga_owner_credentials c ON c.account_id=a.id WHERE o.singleton_id=1 AND lower(a.email)=? LIMIT 1").bind(email).first();
+let teamMember=null;
+if(!account){
+ account=await db.prepare("SELECT a.id,a.role,a.status,a.email,c.password_hash,c.password_salt,c.password_iterations,m.permissions_json FROM daga_accounts a JOIN daga_owner_team_memberships m ON m.account_id=a.id JOIN daga_account_credentials c ON c.account_id=a.id WHERE lower(a.email)=? AND m.status='active' AND a.status='approved' LIMIT 1").bind(email).first();
+ teamMember=account||null;
+}
+if(!account||account.status!=="approved"||(teamMember&&!['manager','employee'].includes(account.role)))return json(env,{error:"invalid_credentials"},401);
 const attempt=await derivePassword(password,account.password_salt,account.password_iterations);if(!constantTimeEqual(attempt,account.password_hash))return json(env,{error:"invalid_credentials"},401);
-const session=await createSession(db,account.id);await audit(db,account.id,"owner_login","success");
-return json(env,{ok:true,account:{id:account.id,role:account.role,emailMasked:maskEmail(account.email)},sessionToken:session.token,expiresAt:session.expiresAt});
+const session=await createSession(db,account.id);await audit(db,account.id,teamMember?"owner_team_login":"owner_login","success");
+let permissions={};try{permissions=teamMember?JSON.parse(teamMember.permissions_json||"{}"):{};}catch(_){}
+return json(env,{ok:true,account:{id:account.id,role:account.role,emailMasked:maskEmail(account.email),isProgramOwner:!teamMember,permissions},sessionToken:session.token,expiresAt:session.expiresAt});
 }
 function validPassword(password){return password.length>=14&&password.length<=128&&/[a-z]/.test(password)&&/[A-Z]/.test(password)&&/\d/.test(password);}
 
@@ -119,6 +126,32 @@ export async function authenticatedAccount(request, db) {
   if (!row) return null;
   await db.prepare("UPDATE daga_auth_sessions SET last_seen_at=? WHERE token_hash=? AND revoked_at IS NULL").bind(new Date().toISOString(), tokenHash).run();
   return row;
+}
+
+export async function authenticatedOwnerOrTeam(request, db) {
+  const token=bearer(request);if(!token)return null;const tokenHash=await sha256(token),now=new Date().toISOString();
+  const owner=await db.prepare("SELECT a.id,a.role,a.status,a.email,s.expires_at FROM daga_auth_sessions s JOIN daga_accounts a ON a.id=s.account_id JOIN daga_program_owner o ON o.account_id=a.id WHERE s.token_hash=? AND s.revoked_at IS NULL AND s.expires_at>? AND a.role='program_owner' AND a.status='approved' AND o.singleton_id=1 LIMIT 1").bind(tokenHash,now).first();
+  if(owner){await db.prepare("UPDATE daga_auth_sessions SET last_seen_at=? WHERE token_hash=?").bind(now,tokenHash).run();return {...owner,isProgramOwner:true,permissions:{}};}
+  const member=await db.prepare("SELECT a.id,a.role,a.status,a.email,s.expires_at,m.permissions_json FROM daga_auth_sessions s JOIN daga_accounts a ON a.id=s.account_id JOIN daga_owner_team_memberships m ON m.account_id=a.id WHERE s.token_hash=? AND s.revoked_at IS NULL AND s.expires_at>? AND a.status='approved' AND m.status='active' LIMIT 1").bind(tokenHash,now).first();
+  if(!member)return null;await db.prepare("UPDATE daga_auth_sessions SET last_seen_at=? WHERE token_hash=?").bind(now,tokenHash).run();
+  let permissions={};try{permissions=JSON.parse(member.permissions_json||"{}");}catch(_){}
+  return {...member,isProgramOwner:false,permissions};
+}
+
+async function ownerTeamSetupVerify(request,env){
+ const db=env.DAGA_APP_DB;if(!db||!env.DAGA_OTP_PEPPER)return json(env,{error:"owner_team_setup_not_configured"},503);
+ const b=await safeJson(request);if(!b)return json(env,{error:"invalid_json"},400);
+ const email=String(b.email||"").trim().toLowerCase(),code=String(b.code||"").trim(),password=String(b.password||"");
+ if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)||!/^\\d{6}$/.test(code)||!validPassword(password))return json(env,{error:"valid_setup_fields_required"},400);
+ const member=await db.prepare("SELECT a.id,a.status,m.status AS membership_status FROM daga_accounts a JOIN daga_owner_team_memberships m ON m.account_id=a.id WHERE lower(a.email)=? LIMIT 1").bind(email).first();
+ if(!member||member.status!=="approved"||member.membership_status!=="active")return json(env,{error:"team_invitation_not_active"},404);
+ const challenge=await db.prepare("SELECT id,code_hash,attempts FROM daga_owner_team_setup_challenges WHERE account_id=? AND consumed_at IS NULL AND expires_at>? ORDER BY created_at DESC LIMIT 1").bind(member.id,new Date().toISOString()).first();
+ if(!challenge||challenge.attempts>=5)return json(env,{error:"invalid_expired_or_used_code"},400);
+ await db.prepare("UPDATE daga_owner_team_setup_challenges SET attempts=attempts+1 WHERE id=? AND attempts<5 AND consumed_at IS NULL").bind(challenge.id).run();
+ const expected=await sha256(challenge.id+":"+code+":"+env.DAGA_OTP_PEPPER);if(!constantTimeEqual(expected,challenge.code_hash))return json(env,{error:"invalid_expired_or_used_code"},400);
+ const salt=randomToken(24),hash=await derivePassword(password,salt,PBKDF2_ITERATIONS),now=new Date().toISOString();
+ await db.batch([db.prepare("INSERT INTO daga_account_credentials (account_id,password_hash,password_salt,password_iterations,created_at,updated_at) VALUES (?,?,?,?,?,?) ON CONFLICT(account_id) DO UPDATE SET password_hash=excluded.password_hash,password_salt=excluded.password_salt,password_iterations=excluded.password_iterations,updated_at=excluded.updated_at").bind(member.id,hash,salt,PBKDF2_ITERATIONS,now,now),db.prepare("UPDATE daga_owner_team_setup_challenges SET consumed_at=? WHERE id=?").bind(now,challenge.id)]);
+ return json(env,{ok:true,message:"تم إعداد الحساب. سجّل الدخول من لوحة مالك التطبيق."});
 }
 
 export async function authenticatedOwner(request, db) {
