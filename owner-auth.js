@@ -147,10 +147,13 @@ async function ownerTeamSetupVerify(request,env){
  if(!member||member.status!=="approved"||member.membership_status!=="active")return json(env,{error:"team_invitation_not_active"},404);
  const challenge=await db.prepare("SELECT id,code_hash,attempts FROM daga_owner_team_setup_challenges WHERE account_id=? AND consumed_at IS NULL AND expires_at>? ORDER BY created_at DESC LIMIT 1").bind(member.id,new Date().toISOString()).first();
  if(!challenge||challenge.attempts>=5)return json(env,{error:"invalid_expired_or_used_code"},400);
- await db.prepare("UPDATE daga_owner_team_setup_challenges SET attempts=attempts+1 WHERE id=? AND attempts<5 AND consumed_at IS NULL").bind(challenge.id).run();
+ const claimed=await db.prepare("UPDATE daga_owner_team_setup_challenges SET attempts=attempts+1 WHERE id=? AND attempts<5 AND consumed_at IS NULL AND expires_at>? RETURNING attempts").bind(challenge.id,new Date().toISOString()).first();
+ if(!claimed||Number(claimed.attempts)>5)return json(env,{error:"invalid_expired_or_used_code"},400);
  const expected=await sha256(challenge.id+":"+code+":"+env.DAGA_OTP_PEPPER);if(!constantTimeEqual(expected,challenge.code_hash))return json(env,{error:"invalid_expired_or_used_code"},400);
- const salt=randomToken(24),hash=await derivePassword(password,salt,PBKDF2_ITERATIONS),now=new Date().toISOString();
- await db.batch([db.prepare("INSERT INTO daga_account_credentials (account_id,password_hash,password_salt,password_iterations,created_at,updated_at) VALUES (?,?,?,?,?,?) ON CONFLICT(account_id) DO UPDATE SET password_hash=excluded.password_hash,password_salt=excluded.password_salt,password_iterations=excluded.password_iterations,updated_at=excluded.updated_at").bind(member.id,hash,salt,PBKDF2_ITERATIONS,now,now),db.prepare("UPDATE daga_owner_team_setup_challenges SET consumed_at=? WHERE id=?").bind(now,challenge.id)]);
+ const now=new Date().toISOString(),consumed=await db.prepare("UPDATE daga_owner_team_setup_challenges SET consumed_at=? WHERE id=? AND consumed_at IS NULL").bind(now,challenge.id).run();
+ if(Number(consumed?.meta?.changes||0)!==1)return json(env,{error:"invalid_expired_or_used_code"},400);
+ const salt=randomToken(24),hash=await derivePassword(password,salt,PBKDF2_ITERATIONS);
+ await db.prepare("INSERT INTO daga_account_credentials (account_id,password_hash,password_salt,password_iterations,created_at,updated_at) VALUES (?,?,?,?,?,?) ON CONFLICT(account_id) DO UPDATE SET password_hash=excluded.password_hash,password_salt=excluded.password_salt,password_iterations=excluded.password_iterations,updated_at=excluded.updated_at").bind(member.id,hash,salt,PBKDF2_ITERATIONS,now,now).run();
  return json(env,{ok:true,message:"تم إعداد الحساب. سجّل الدخول من لوحة مالك التطبيق."});
 }
 
