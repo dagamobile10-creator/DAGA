@@ -966,8 +966,9 @@ async async function applyCompanyLayout(token){
   const data=await response.json().catch(()=>({})),layout=data.layout||{};
   cols.forEach(col=>{
    const role=columnRole(col);
-   if(typeof layout.columns?.[role]==='string')col.displayName=layout.columns[role];
-   const names=layout.entries?.[role];
+   if(typeof layout.columns?.[col.id]==='string')col.displayName=layout.columns[col.id];
+   else if(typeof layout.columns?.[role]==='string')col.displayName=layout.columns[role];
+   const names=layout.entries?.[col.id]||layout.entries?.[role];
    if(names&&typeof names==='object')col.entries.forEach(entry=>{
     const original=String(entry[0]||''),stable=String(entry[2]?.role||'');
     const display=names[stable]||names[original];
