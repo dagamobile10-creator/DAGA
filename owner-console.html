@@ -91,6 +91,14 @@ async function load(){
 const [ov,pl,pm,of,pay,st,ac,audit,rate]=await Promise.all([
 api('/owner/admin/overview'),api('/owner/admin/plans'),api('/owner/admin/payment-methods'),api('/owner/admin/offers'),api('/owner/admin/payments'),api('/owner/admin/stores'),api('/owner/admin/accounts'),api('/owner/admin/audit-log?limit=100'),api('/owner/admin/live-daga-rate')
 ]);
+ownerDashboardContext=JSON.stringify({
+ ownerRole:"مالك التطبيق الوحيد",
+ stores:(st.stores||[]).map(x=>({name:x.display_name,owner:x.owner_name,status:x.onboarding_status||x.status,subscription:x.store_plan_name||null,liveWordsRemaining:Number(x.live_words_remaining||0)})),
+ accounts:(ac.accounts||[]).map(x=>({name:x.display_name,role:x.role,status:x.status})),
+ plans:(pl.plans||[]).map(x=>({name:x.name,service:x.service,active:Boolean(x.is_active),priceMinor:x.price_minor,wordQuota:x.word_quota})),
+ pendingPayments:(pay.payments||[]).filter(x=>x.status==="pending_review").length,
+ availableOwnerFunctions:["إدارة الشركات وطلبات التسجيل","الاشتراكات والخطط والأسعار","مراجعة المدفوعات","إضافة رصيد حروف LIVE DAGA","إدارة حسابات الفريق والصلاحيات","تخصيص أسماء الأعمدة والبنود","سجل العمليات الإدارية"]
+}).slice(0,7000);
 $('liveRate').value=rate.pricePer1000Minor==null?'':(Number(rate.pricePer1000Minor)/100).toFixed(2);$('liveRateState').textContent=rate.pricePer1000Minor==null?'لا يمكن إنشاء باقات LIVE DAGA قبل ضبط السعر هنا.':'السعر الحالي: '+(Number(rate.pricePer1000Minor)/100).toFixed(2)+' جنيه لكل 1000 حرف. أسعار تعريفات الباقات النشطة وغير النشطة تتحدث عند تغيير السعر؛ الطلبات القديمة لا تتغير.';
 const pendingShopApprovals=(ov.stores||[]).find(x=>x.status==='pending')?.count||0;const stats=[['طلبات موافقة الشركات',pendingShopApprovals],['الشركات',sum(ov.stores)],['طلبات الدفع المعلقة',ov.pendingPaymentReviews],['الخطط النشطة',sum(ov.activePlans)],['رصيد الحروف المتبقي',ov.liveWordsOutstanding]];
 const statsEl=$('stats');if(statsEl)statsEl.innerHTML=stats.map(x=>'<div class="stat">'+escapeHtml(x[0])+'<b>'+escapeHtml(x[1])+'</b></div>').join('');else console.error('owner_console_missing_stats_target');
@@ -132,7 +140,7 @@ $('storeLabelEditor').addEventListener('click',async e=>{
 });
 
 
-const ownerLiveHistory=[];
+let ownerDashboardContext='';\nconst ownerLiveHistory=[];
 function addOwnerChat(role,content){
  const host=$('ownerLiveChat'),p=document.createElement('p');
  p.style.cssText='white-space:pre-wrap;line-height:1.6;margin:8px 0';
@@ -142,7 +150,7 @@ function addOwnerChat(role,content){
 $('ownerLiveForm').addEventListener('submit',async e=>{
  e.preventDefault();const input=$('ownerLiveInput'),button=$('ownerLiveSend'),messageText=input.value.trim();if(!messageText)return;
  input.value='';addOwnerChat('user',messageText);ownerLiveHistory.push({role:'user',content:messageText});button.disabled=true;
- try{const r=await api('/owner/admin/assistant/chat',{method:'POST',body:JSON.stringify({mode:'live',message:messageText,history:ownerLiveHistory.slice(-8)})});addOwnerChat('assistant',r.reply||'ما وصلنيش رد واضح.');ownerLiveHistory.push({role:'assistant',content:r.reply||''});}
+ try{const r=await api('/owner/admin/assistant/chat',{method:'POST',body:JSON.stringify({mode:'live',message:messageText,history:ownerLiveHistory.slice(-8),context:ownerDashboardContext})});addOwnerChat('assistant',r.reply||'ما وصلنيش رد واضح.');ownerLiveHistory.push({role:'assistant',content:r.reply||''});}
  catch(err){addOwnerChat('assistant','حصلت مشكلة في الاتصال: '+err.message);}
  finally{button.disabled=false;input.focus();}
 });
