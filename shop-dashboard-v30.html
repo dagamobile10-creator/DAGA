@@ -102,7 +102,7 @@ button{transition:filter .15s,transform .15s;border-radius:14px}button:active{tr
 </main>
 <nav class="bottom" aria-label="التنقل الرئيسي"><button class="active" onclick="showHome()">الرئيسية</button><button onclick="showTeam()">الفريق</button><button class="liveBtn" onclick="openLiveDagaPanel()">LIVE DAGA</button><button onclick="voiceDaga()">🎙️ كلم ضجه</button><button onclick="showReports()">التقارير</button><button onclick="showSettings()">الإعدادات</button></nav>
 <div class="modal" id="modal"><div class="sheet"><button class="close" onclick="closeModal()">×</button><div id="sheet"></div></div></div>
-<div id="dagaLivePanel" aria-hidden="true"><div class="livePanelHead"><span>LIVE DAGA</span><button type="button" onclick="dockLiveDagaPanel()">تصغير والرجوع للداشبورد</button></div><iframe id="dagaLiveFrame" title="LIVE DAGA" allow="microphone; autoplay" referrerpolicy="no-referrer"></iframe></div>
+<div id="dagaLivePanel" aria-hidden="true"><div class="livePanelHead"><span>LIVE DAGA</span><button type="button" onclick="toggleLiveDagaPanel()">تصغير والرجوع للداشبورد</button></div><iframe id="dagaLiveFrame" title="LIVE DAGA" allow="microphone; autoplay" referrerpolicy="no-referrer"></iframe></div>
 <script>
 const defaultCols=[
 {name:'الكروت',entries:[['رصيد أساسي','0'],['كارت وهوا','0'],['كاش أوت','0'],['سوبر باي','0'],['ممكن','0'],['إنستا ١','0'],['إنستا ٢','0'],['البنك الأهلي','0'],['فلوس','0'],['محفظة ١','0'],['محفظة ٢','0'],['محفظة ٣','0'],['محفظة ٤','0']]},
@@ -680,6 +680,13 @@ function openLiveDagaPanel(){
  document.body.style.overflow='hidden';
  if(!frame.src||!frame.src.includes('/live/?api=staging'))frame.src='/live/?api=staging';
  else{try{frame.contentWindow.postMessage('DAGA_LIVE_READY','https://daga-app-staging.dagamobile10.workers.dev')}catch(_){}}
+}
+function toggleLiveDagaPanel(){
+ const panel=document.getElementById('dagaLivePanel');
+ if(!panel)return;
+ if(panel.classList.contains('docked')){
+  panel.classList.remove('docked');panel.classList.add('open');panel.setAttribute('aria-hidden','false');document.body.style.overflow='hidden';
+ }else{dockLiveDagaPanel();}
 }
 function dockLiveDagaPanel(){
  const panel=document.getElementById('dagaLivePanel');
