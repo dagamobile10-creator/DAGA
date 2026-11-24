@@ -108,8 +108,30 @@ window.addEventListener('message',event=>{
   state.textContent='اتربطت بيانات الداشبورد'+(stamp?' — '+stamp:'')+'.';
  }
 });
+function sendLiveParentControl(type){try{const host=window.parent&&window.parent!==window?window.parent:window.opener;if(host)host.postMessage({type},new URL(DAGA_API_BASE).origin)}catch(_){}}
+function liveNavigationIntent(text){
+ const n=String(text||'').toLowerCase().replace(/[إأآ]/g,'ا').replace(/[ىي]/g,'ي').replace(/[ةه]/g,'ه').replace(/[^\u0600-\u06FFa-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
+ if(/(?:رجعني|ارجعني|وديني|رجع|ارجع).*(?:الداشبورد|داشبورد|بورد|الرئيسيه|الصفحه الرئيسيه)/.test(n))return 'dashboard';
+ if(/(?:اقفل|انهى|اطفي|وقف|اقفللي).*(?:نفسك|اللايف|live|الجلسه)?$/.test(n)||/^(?:اقفل نفسك|انهى اللايف|اقفل اللايف|اقفل الجلسه)$/.test(n))return 'end';
+ return '';
+}
 function handleUser(text){
- stopListening();replying=true;state.textContent='ضجه بيراجع الأمر…';daga.textContent='سمعتك: «'+text+'»';
+ stopListening();
+ const nav=liveNavigationIntent(text);
+ if(nav==='dashboard'){
+  state.textContent='برجعك للداشبورد واللايف مستمر…';
+  daga.textContent='حاضر، رجعتك للداشبورد. أنا لسه شغال معاك، وتقدر تفتحني تاني في أي وقت.';
+  sendLiveParentControl('DAGA_LIVE_COLLAPSE');replying=true;speak(daga.textContent);return;
+ }
+ if(nav==='end'){
+  live=false;singleMode=false;muted=true;stopListening();stopVoice();
+  shell.classList.remove('live');start.classList.remove('stop');start.textContent='ابدأ Live';
+  mic.textContent='🔇';status.textContent='تم إنهاء Live';state.textContent='الجلسة اتقفلت بأمرك.';
+  sendLiveParentControl('DAGA_LIVE_SESSION_ENDED');
+  daga.textContent='حاضر، قفلت اللايف ووقفت الاستماع. لما تحتاجني افتحني من الداشبورد.';
+  replying=true;speak(daga.textContent);return;
+ }
+ replying=true;state.textContent='ضجه بيراجع الأمر…';daga.textContent='سمعتك: «'+text+'»';
  requestDashboardOrder(text).then(result=>{
   if(!result.handled){respond(text);return;}
   if(!live&&!singleMode){replying=false;return;}
@@ -204,7 +226,7 @@ speak(data.reply);
 console.error(e);
 replying=false;
 state.textContent='تعذر الرد من ضجه';
-daga.textContent=(e.name==='TimeoutError'?'الرد اتأخر أكتر من اللازم. جرّب تقول سؤالك تاني.':'تعذر الرد من خدمة المحادثة: '+(e.message||'خطأ غير معروف'));
+daga.textContent=(e.name==='TimeoutError'?'الرد اتأخر أكتر من اللازم. جرّب تقول سؤالك تاني.':/All configured chat providers failed|No chat provider configured/i.test(e.message||'')?'خدمة المحادثة مش متاحة دلوقتي من السيرفر. اللايف لسه شغال، جرّب بعد شوية.':'تعذر الرد من خدمة المحادثة. جرّب تاني بعد لحظة.');
 if(live&&!muted)setTimeout(()=>{if(live&&!muted&&!replying&&!rec)startListening()},450);
 }
 }
