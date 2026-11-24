@@ -36,6 +36,18 @@ export async function handleCompanyInvitations(request, env, url) {
   if (!account) return json(env, { error: "authenticated_account_required" }, 401);
   if (account.status !== "approved" || account.role === "program_owner") return json(env, { error: "active_company_account_required" }, 403);
   if (path === "/api/company/auth/me" && request.method === "GET") return companyAccountMe(env, db, account);
+  if(path==="/api/company/layout-labels"&&request.method==="PUT"){
+    const body=await safeJson(request);
+    if(!body)return json(env,{error:"invalid_json"},400);
+    const storeId=String(body.storeId||"").trim(),targetKey=String(body.targetKey||"").trim(),displayName=String(body.displayName||"").trim().slice(0,80);
+    if(!/^[a-f0-9-]{36}$/i.test(storeId)||! /^(column|entry):[A-Za-z0-9_-]{3,120}$/.test(targetKey)||!displayName)return json(env,{error:"invalid_store_label"},400);
+    const store=await db.prepare("SELECT id,owner_account_id FROM daga_stores WHERE id=? AND status='approved'").bind(storeId).first();
+    if(!store||account.role!=="store_owner"||store.owner_account_id!==account.id)return json(env,{error:"company_owner_required"},403);
+    const now=new Date().toISOString();
+    await db.prepare("INSERT INTO daga_store_layout_labels (id,store_id,target_key,display_name,updated_by,updated_at) VALUES (?,?,?,?,?,?) ON CONFLICT(store_id,target_key) DO UPDATE SET display_name=excluded.display_name,updated_by=excluded.updated_by,updated_at=excluded.updated_at").bind(crypto.randomUUID(),storeId,targetKey,displayName,account.id,now).run();
+    await audit(db,account.id,"company_layout_label_updated","daga_store_layout_labels",storeId,{targetKey});
+    return json(env,{ok:true,storeId,targetKey,displayName});
+  }
   if(path==="/api/company/layout-labels"&&request.method==="GET"){
     const storeId=String(url.searchParams.get("storeId")||"").trim();
     if(!storeId)return json(env,{error:"storeId_required"},400);
