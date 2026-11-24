@@ -44,6 +44,20 @@
 </form></details>
 </section>
 <section id="dashboard" class="hidden">
+<section id="ownerDagaAssistants" class="grid" style="margin-bottom:16px">
+<section class="card" style="border-color:#75602d">
+<h2>لايف ضجّة — اتكلم واسأل</h2>
+<p>محادثة مباشرة مع مساعد مالك التطبيق. يشرح لك وظائف لوحة المالك ويساعدك تفهم الشركات والصلاحيات والاشتراكات والعمليات.</p>
+<div id="ownerLiveChat" style="height:230px;overflow:auto;background:#0c0c0d;border:1px solid var(--line);border-radius:10px;padding:12px;margin:10px 0" aria-live="polite"><p class="muted">أهلًا بيك. أنا ضجّة، مساعدك في إدارة تطبيق DAGA. اسألني عن لوحة المالك أو طريقة إدارة التطبيق.</p></div>
+<form id="ownerLiveForm"><label for="ownerLiveInput">اكتب سؤالك</label><textarea id="ownerLiveInput" rows="2" maxlength="2000" required placeholder="اسأل لايف ضجّة..."></textarea><button id="ownerLiveSend" type="submit">إرسال</button></form>
+</section>
+<section class="card" style="border-color:#75602d">
+<h2>كلم ضجّة — أوامر بموافقتك</h2>
+<p>اكتب الأمر، وضجّة يعرض عليك ملخصًا قبل التنفيذ. لا يحدث أي تغيير إلا بعد ضغطك على تأكيد التنفيذ.</p>
+<form id="ownerCommandForm"><label for="ownerCommandInput">الأمر المطلوب</label><textarea id="ownerCommandInput" rows="3" maxlength="500" required placeholder="مثال: ضيف 5000 حرف لشركة اسمها ..."></textarea><button id="ownerCommandPreview" type="submit">مراجعة الأمر</button></form>
+<div id="ownerCommandReview" class="notice hidden" style="margin-top:12px"></div>
+</section>
+</section>
 <div class="card"><div class="row"><div><h1>إدارة ضجة</h1><div id="ownerIdentity" class="muted"></div></div><button id="refresh" class="secondary">تحديث البيانات</button></div><div id="stats" class="stats"></div></div>
 <div class="grid">
 <section class="card"><h2>سعر حروف LIVE DAGA</h2><p>حدد السعر بالجنيه لكل 1000 حرف. عند تغيير السعر، يعاد تسعير تعريفات كل باقات LIVE DAGA النشطة وغير النشطة تلقائيًا. الطلبات المنشأة سابقًا تظل بسعرها المتفق عليه ولا تتغير.</p><form id="liveRateForm"><label for="liveRate">السعر لكل 1000 حرف (بالجنيه)</label><input id="liveRate" type="number" min="0.01" step="0.01" required placeholder="أدخل السعر لاعتماد التسعير التلقائي"><button type="submit">حفظ السعر وإعادة حساب الباقات</button><small id="liveRateState">اضبط سعر الألف حرف قبل إنشاء باقات LIVE DAGA.</small></form></section>
@@ -117,6 +131,44 @@ $('storeLabelEditor').addEventListener('click',async e=>{
  button.disabled=true;try{await api('/owner/admin/store-labels',{method:'PUT',body:JSON.stringify({storeId,targetKey:key,displayName})});await loadStoreLabelEditor();message('تم حفظ الاسم لهذه الشركة فقط.','ok');}catch(err){message(err.message,'error');}finally{button.disabled=false;}
 });
 
+
+const ownerLiveHistory=[];
+function addOwnerChat(role,content){
+ const host=$('ownerLiveChat'),p=document.createElement('p');
+ p.style.cssText='white-space:pre-wrap;line-height:1.6;margin:8px 0';
+ p.innerHTML='<b style="color:'+(role==='user'?'#c9a44c':'#8ed8a8')+'">'+(role==='user'?'أنت':'ضجّة')+':</b> '+escapeHtml(content);
+ host.appendChild(p);host.scrollTop=host.scrollHeight;
+}
+$('ownerLiveForm').addEventListener('submit',async e=>{
+ e.preventDefault();const input=$('ownerLiveInput'),button=$('ownerLiveSend'),messageText=input.value.trim();if(!messageText)return;
+ input.value='';addOwnerChat('user',messageText);ownerLiveHistory.push({role:'user',content:messageText});button.disabled=true;
+ try{const r=await api('/owner/admin/assistant/chat',{method:'POST',body:JSON.stringify({mode:'live',message:messageText,history:ownerLiveHistory.slice(-8)})});addOwnerChat('assistant',r.reply||'ما وصلنيش رد واضح.');ownerLiveHistory.push({role:'assistant',content:r.reply||''});}
+ catch(err){addOwnerChat('assistant','حصلت مشكلة في الاتصال: '+err.message);}
+ finally{button.disabled=false;input.focus();}
+});
+let ownerPendingCommand=null;
+$('ownerCommandForm').addEventListener('submit',async e=>{
+ e.preventDefault();const button=$('ownerCommandPreview'),host=$('ownerCommandReview'),command=$('ownerCommandInput').value.trim();if(!command)return;
+ button.disabled=true;ownerPendingCommand=null;host.classList.remove('hidden');host.textContent='براجع الأمر...';
+ try{
+  const r=await api('/owner/admin/assistant/command-preview',{method:'POST',body:JSON.stringify({command})});
+  if(!r.supported){host.textContent=r.message||'الأمر ده مش مدعوم حاليًا.';return;}
+  ownerPendingCommand=r.proposal;
+  host.innerHTML='<b>'+escapeHtml(r.summary)+'</b><p>مفيش أي تغيير حصل لحد دلوقتي. راجع التفاصيل، وبعدها أكد التنفيذ لو ده المطلوب.</p><button type="button" id="ownerCommandConfirm">تأكيد التنفيذ</button> <button type="button" class="secondary" id="ownerCommandCancel">إلغاء</button>';
+ }catch(err){host.textContent='تعذر تجهيز الأمر: '+err.message;}
+ finally{button.disabled=false;}
+});
+$('ownerCommandReview').addEventListener('click',async e=>{
+ if(e.target.id==='ownerCommandCancel'){ownerPendingCommand=null;$('ownerCommandReview').classList.add('hidden');return;}
+ if(e.target.id!=='ownerCommandConfirm'||!ownerPendingCommand)return;
+ const button=e.target,proposal=ownerPendingCommand;button.disabled=true;
+ try{
+  const result=await api('/owner/admin/assistant/command-execute',{method:'POST',body:JSON.stringify({...proposal,confirmed:true,requestId:'assistant-'+crypto.randomUUID()})});
+  ownerPendingCommand=null;$('ownerCommandReview').textContent='تم التنفيذ بنجاح. تمت إضافة '+Number(result.words).toLocaleString('en-US')+' حرف إلى رصيد LIVE DAGA. رقم العملية: '+result.entryId;
+  $('ownerCommandInput').value='';await load();
+ }catch(err){$('ownerCommandReview').textContent='لم يتم تأكيد التنفيذ: '+err.message;}
+ finally{button.disabled=false;}
+});
 function sum(rows){return (rows||[]).reduce((n,r)=>n+Number(r.count||0),0);}
 
 $('bootstrapStartForm').addEventListener('submit',async e=>{e.preventDefault();const button=$('bootstrapStartButton');button.disabled=true;bootstrapTokenInMemory=$('bootstrapToken').value;try{const r=await fetch(API+'/owner/bootstrap/start',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+bootstrapTokenInMemory},body:JSON.stringify({email:$('bootstrapEmail').value.trim()})});const d=await readApiJson(r);if(!r.ok)throw new Error(d.error||'تعذر إرسال كود التحقق');$('bootstrapVerifyForm').classList.remove('hidden');$('bootstrapDeliveryNote').textContent='تم إرسال كود التحقق إلى '+(d.emailMasked||'البريد المسجل')+'. الكود صالح لمدة 10 دقائق.';$('bootstrapStartForm').classList.add('hidden');message('تم إرسال كود التحقق للبريد. أدخله لإكمال التسجيل.','ok')}catch(err){bootstrapTokenInMemory='';$('bootstrapToken').value='';message(err.message,'error')}finally{button.disabled=false;}});
