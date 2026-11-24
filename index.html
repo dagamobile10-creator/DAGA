@@ -111,7 +111,7 @@ window.addEventListener('message',event=>{
 function handleUser(text){
  stopListening();
  const navText=String(text||'').toLowerCase().replace(/[إأآ]/g,'ا').replace(/[ىي]/g,'ي').replace(/[ةه]/g,'ه').replace(/[^\u0600-\u06FFa-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
- if(/(?:رجعني|ارجعني|وديني|افتحلي|عايز اشوف) .*(?:الداشبورد|الدashboard|الشاشه الرئيسيه)|(?:رجعني|ارجعني) للداشبورد|للداشبورد تاني/.test(navText)){
+ if(/(?:رجعني|ارجعني|وديني|افتحلي|عايز اشوف) .*(?:الداشبورد|الدashboard|الشاشه الرئيسيه)|(?:رجعني|ارجعني) للداشبورد|رجعني.*(?:تاني|للداشبورد)|للداشبورد تاني/.test(navText)){
   replying=false;try{window.parent.postMessage({type:'DAGA_LIVE_DOCK'},new URL(DAGA_API_BASE).origin)}catch(_){}
   state.textContent='Live شغال والداشبورد قدامك';daga.textContent='حاضر، رجعتك للداشبورد. هفضل معاك شغال في النافذة الصغيرة.';speak('حاضر، رجعتك للداشبورد. أنا لسه شغال معاك.');return;
  }
@@ -215,7 +215,7 @@ speak(data.reply);
 console.error(e);
 replying=false;
 state.textContent='تعذر الرد من ضجه';
-daga.textContent=(e.name==='TimeoutError'?'الرد اتأخر أكتر من اللازم. جرّب تقول سؤالك تاني.':'تعذر الرد من خدمة المحادثة: '+(e.message||'خطأ غير معروف'));
+daga.textContent=(e.name==='TimeoutError'?'الرد اتأخر أكتر من اللازم. جرّب تقول سؤالك تاني.':'خدمة المحادثة مش متاحة دلوقتي. محتاجين نراجع اتصال مزود الذكاء الاصطناعي على السيرفر.');
 if(live&&!muted)setTimeout(()=>{if(live&&!muted&&!replying&&!rec)startListening()},450);
 }
 }
