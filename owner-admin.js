@@ -452,6 +452,63 @@ export async function handleOwnerAdmin(request, env, url) {
       return json(env, {ok:true,id},201);
     }
 
+
+    if(path==="/owner/admin/assistant/chat"&&request.method==="POST"){
+      const b=await readJson(request);if(!b)return json(env,{error:"invalid_json"},400);
+      const mode=b.mode==="command"?"command":"live";
+      const message=String(b.message||"").trim().slice(0,2000);
+      if(!message)return json(env,{error:"message_required"},400);
+      const history=Array.isArray(b.history)?b.history.slice(-8).filter(x=>x&&["user","assistant"].includes(x.role)&&typeof x.content==="string").map(x=>({role:x.role,content:x.content.slice(0,1200)})):[];
+      const system="أنت ضَجّة، المساعد الخاص بمالك تطبيق DAGA محمد حامد. تتحدث بالعامية المصرية الطبيعية. أنت داخل لوحة مالك التطبيق، وصاحب الحساب الحالي تم التحقق منه خادميًا باعتباره مالك التطبيق الوحيد. افهم بنية DAGA: الشركات، حسابات مالكي الشركات والمديرين والموظفين، الاشتراكات والمدفوعات، أرصدة حروف LIVE DAGA، صلاحيات الحسابات، الأعمدة والبنود، وسجل العمليات. لا تخترع بيانات أو تزعم أنك قرأت بيانات حية لم تُرسل لك. اشرح أن مالك التطبيق وحده يملك منح وسحب الصلاحيات وإدارة الشركات. لا تدّع تنفيذ أي إجراء؛ التنفيذ يتم فقط من مسار تأكيد مستقل بعد مراجعة المالك. إذا لم تعرف إجابة فقل ذلك بوضوح. وضع المحادثة الحالي: "+mode+".";
+      const messages=[{role:"system",content:system},...history,{role:"user",content:message}];
+      try{
+        if(env.GROQ_API_KEY){
+          const r=await fetch("https://api.groq.com/openai/v1/chat/completions",{method:"POST",headers:{"Authorization":"Bearer "+env.GROQ_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({model:"openai/gpt-oss-120b",messages,max_tokens:500,temperature:0.3}),signal:AbortSignal.timeout(12000)});
+          const d=await r.json();const reply=String(d?.choices?.[0]?.message?.content||"").trim();if(r.ok&&reply)return json(env,{ok:true,reply,provider:"groq"});
+        }
+        if(env.AI){
+          const r=await env.AI.run("@cf/openai/gpt-oss-20b",{messages,max_tokens:500,reasoning_effort:"low",chat_template_kwargs:{enable_thinking:false}});
+          const reply=String(r?.response||r?.result||r?.output_text||"").trim();if(reply)return json(env,{ok:true,reply,provider:"cloudflare-ai"});
+        }
+        if(env.OPENAI_API_KEY){
+          const r=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{"Authorization":"Bearer "+env.OPENAI_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({model:"gpt-5-mini",instructions:system,input:messages.slice(1),max_output_tokens:500}),signal:AbortSignal.timeout(12000)});
+          const d=await r.json();const reply=String(d.output_text||(d.output||[]).flatMap(x=>x.content||[]).filter(x=>x.type==="output_text").map(x=>x.text||"").join("\\n")||"").trim();if(r.ok&&reply)return json(env,{ok:true,reply,provider:"openai"});
+        }
+        return json(env,{error:"owner_assistant_provider_unavailable"},503);
+      }catch(_){return json(env,{error:"owner_assistant_request_failed"},502);}
+    }
+
+    if(path==="/owner/admin/assistant/command-preview"&&request.method==="POST"){
+      const b=await readJson(request);if(!b)return json(env,{error:"invalid_json"},400);
+      const text=String(b.command||"").trim().slice(0,500);
+      const numberMatch=text.match(/[0-9٠-٩۰-۹][0-9٠-٩۰-۹,،.]*/u);
+      const normalizeDigits=s=>String(s).replace(/[٠-٩۰-۹]/g,ch=>"٠١٢٣٤٥٦٧٨٩".indexOf(ch)>=0?String("٠١٢٣٤٥٦٧٨٩".indexOf(ch)):String("۰۱۲۳۴۵۶۷۸۹".indexOf(ch))).replace(/[,.،]/g,"");
+      const words=numberMatch?Number(normalizeDigits(numberMatch[0])):0;
+      if(!words||!Number.isSafeInteger(words)||words<1||words>100000000||!/(حرف|حروف)/u.test(text)||!/(ضيف|زود|أضف|اضف|إضافة|اضافه)/u.test(text))return json(env,{ok:true,supported:false,message:"حاليًا أقدر أنفّذ من خلال كلم ضجّة أمر إضافة رصيد حروف LIVE DAGA. اكتب مثلًا: ضيف 5000 حرف لشركة اسمها كذا. باقي أنواع الأوامر لسه محتاجة ربط آمن."});
+      const stores=await db.prepare("SELECT s.id AS store_id,s.display_name,a.id AS account_id,a.display_name AS owner_name,a.email FROM daga_stores s JOIN daga_accounts a ON a.id=s.owner_account_id WHERE s.status='approved' AND a.status='approved' ORDER BY s.created_at DESC LIMIT 500").all();
+      const candidates=(stores.results||[]).filter(s=>[s.display_name,s.owner_name,s.email].some(v=>v&&text.toLocaleLowerCase("ar").includes(String(v).toLocaleLowerCase("ar"))));
+      if(candidates.length!==1)return json(env,{ok:true,supported:false,message:candidates.length?"اسم الشركة مش محدد بشكل كافي؛ اكتب اسم الشركة بالضبط.":"مش قادر أحدد الشركة من الأمر. اكتب اسم الشركة كما يظهر في لوحة المالك."});
+      const s=candidates[0];
+      return json(env,{ok:true,supported:true,proposal:{action:"credit_live_words",accountId:s.account_id,storeId:s.store_id,words,note:"إضافة رصيد من خلال كلم ضجّة"},summary:"إضافة "+words.toLocaleString("en-US")+" حرف إلى رصيد LIVE DAGA لشركة "+s.display_name+" (مالك الشركة: "+(s.owner_name||s.email)+"). لن يتغير أي رصيد قبل موافقتك الصريحة."});
+    }
+
+    if(path==="/owner/admin/assistant/command-execute"&&request.method==="POST"){
+      const b=await readJson(request);if(!b)return json(env,{error:"invalid_json"},400);
+      if(b.confirmed!==true||b.action!=="credit_live_words")return json(env,{error:"explicit_confirmation_required"},400);
+      const accountId=String(b.accountId||""),storeId=String(b.storeId||""),words=Number(b.words),requestId=String(b.requestId||"").trim();
+      const note=String(b.note||"إضافة رصيد من خلال كلم ضجّة").trim().slice(0,240);
+      if(!/^[a-f0-9-]{36}$/i.test(accountId)||!/^[a-f0-9-]{36}$/i.test(storeId)||!Number.isSafeInteger(words)||words<1||words>100000000||requestId.length<12||requestId.length>128)return json(env,{error:"invalid_command_payload"},400);
+      const account=await db.prepare("SELECT id,role,status FROM daga_accounts WHERE id=?").bind(accountId).first();
+      const owned=await db.prepare("SELECT id FROM daga_stores WHERE id=? AND owner_account_id=? AND status='approved'").bind(storeId,accountId).first();
+      if(!account||account.role!=="store_owner"||account.status!=="approved"||!owned)return json(env,{error:"company_identity_changed"},409);
+      const prior=await db.prepare("SELECT id,account_id,store_id,event_type,words,note FROM daga_live_word_ledger WHERE request_id=?").bind(requestId).first();
+      if(prior)return json(env,{error:"command_already_submitted"},409);
+      const id=crypto.randomUUID();
+      await db.prepare("INSERT INTO daga_live_word_ledger (id,account_id,store_id,event_type,words,request_id,note) VALUES (?,?,?,'credit',?,?,?)").bind(id,accountId,storeId,words,requestId,note).run();
+      await audit(db,owner.id,"assistant_live_words_credited","daga_live_word_ledger",id,{accountId,storeId,words,requestId,confirmedByOwner:true});
+      return json(env,{ok:true,entryId:id,words,executed:true},201);
+    }
+
     return json(env, {error:"owner_admin_route_not_found"},404);
   } catch (error) {
     return json(env, {error:"owner_admin_operation_failed",detail:String(error?.message||error).slice(0,240)},500);
