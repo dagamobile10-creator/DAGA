@@ -460,7 +460,8 @@ export async function handleOwnerAdmin(request, env, url) {
       if(!message)return json(env,{error:"message_required"},400);
       const history=Array.isArray(b.history)?b.history.slice(-8).filter(x=>x&&["user","assistant"].includes(x.role)&&typeof x.content==="string").map(x=>({role:x.role,content:x.content.slice(0,1200)})):[];
       const system="أنت ضَجّة، المساعد الخاص بمالك تطبيق DAGA محمد حامد. تتحدث بالعامية المصرية الطبيعية. أنت داخل لوحة مالك التطبيق، وصاحب الحساب الحالي تم التحقق منه خادميًا باعتباره مالك التطبيق الوحيد. افهم بنية DAGA: الشركات، حسابات مالكي الشركات والمديرين والموظفين، الاشتراكات والمدفوعات، أرصدة حروف LIVE DAGA، صلاحيات الحسابات، الأعمدة والبنود، وسجل العمليات. لا تخترع بيانات أو تزعم أنك قرأت بيانات حية لم تُرسل لك. اشرح أن مالك التطبيق وحده يملك منح وسحب الصلاحيات وإدارة الشركات. لا تدّع تنفيذ أي إجراء؛ التنفيذ يتم فقط من مسار تأكيد مستقل بعد مراجعة المالك. إذا لم تعرف إجابة فقل ذلك بوضوح. وضع المحادثة الحالي: "+mode+".";
-      const messages=[{role:"system",content:system},...history,{role:"user",content:message}];
+      const context=typeof b.context==="string"?b.context.slice(0,7000):"";
+      const messages=[{role:"system",content:system+"\\n\\nملخص بيانات لوحة المالك الحالية (قد يكون مختصرًا؛ لا تعتبره بديلًا عن استعلام قاعدة البيانات): "+context},...history,{role:"user",content:message}];
       try{
         if(env.GROQ_API_KEY){
           const r=await fetch("https://api.groq.com/openai/v1/chat/completions",{method:"POST",headers:{"Authorization":"Bearer "+env.GROQ_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({model:"openai/gpt-oss-120b",messages,max_tokens:500,temperature:0.3}),signal:AbortSignal.timeout(12000)});
