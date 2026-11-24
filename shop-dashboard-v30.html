@@ -76,6 +76,10 @@ button{transition:filter .15s,transform .15s;border-radius:14px}button:active{tr
 #dagaLivePanel .livePanelHead{height:54px;flex:0 0 54px;display:flex;align-items:center;justify-content:space-between;padding:0 15px;background:#11110f;border-bottom:1px solid #453923;color:#e8c779;font-weight:700}
 #dagaLivePanel .livePanelHead button{background:#211b10;color:#f0d28f;border:1px solid #59472b;border-radius:12px;padding:8px 15px;font:inherit}
 #dagaLivePanel iframe{width:100%;height:calc(100% - 54px);border:0;background:#070706}
+#dagaLivePanel.minimized{inset:auto 12px calc(76px + env(safe-area-inset-bottom)) 12px;width:min(390px,calc(100vw - 24px));height:210px;display:flex;flex-direction:column;border:1px solid #59472b;border-radius:18px;overflow:hidden;box-shadow:0 12px 45px #000c}
+#dagaLivePanel.minimized .livePanelHead{height:40px;flex-basis:40px;padding:0 10px;font-size:13px}
+#dagaLivePanel.minimized .livePanelHead button{padding:5px 10px;font-size:12px}
+#dagaLivePanel.minimized iframe{height:170px;flex:1;min-height:0}
 </style>
 </head>
 <body>
@@ -96,7 +100,7 @@ button{transition:filter .15s,transform .15s;border-radius:14px}button:active{tr
 </main>
 <nav class="bottom" aria-label="التنقل الرئيسي"><button class="active" onclick="showHome()">الرئيسية</button><button onclick="showTeam()">الفريق</button><button class="liveBtn" onclick="openLiveDagaPanel()">LIVE DAGA</button><button onclick="voiceDaga()">🎙️ كلم ضجه</button><button onclick="showReports()">التقارير</button><button onclick="showSettings()">الإعدادات</button></nav>
 <div class="modal" id="modal"><div class="sheet"><button class="close" onclick="closeModal()">×</button><div id="sheet"></div></div></div>
-<div id="dagaLivePanel" aria-hidden="true"><div class="livePanelHead"><span>LIVE DAGA</span><button type="button" onclick="closeLiveDagaPanel()">رجوع للداشبورد ×</button></div><iframe id="dagaLiveFrame" title="LIVE DAGA" allow="microphone; autoplay" referrerpolicy="no-referrer"></iframe></div>
+<div id="dagaLivePanel" aria-hidden="true"><div class="livePanelHead"><span>LIVE DAGA — شغال</span><button type="button" onclick="restoreLiveDagaPanel()">تكبير اللايف</button><button type="button" onclick="minimizeLiveDagaPanel()">رجوع للداشبورد</button></div><iframe id="dagaLiveFrame" title="LIVE DAGA" allow="microphone; autoplay" referrerpolicy="no-referrer"></iframe></div>
 <script>
 const defaultCols=[
 {name:'الكروت',entries:[['رصيد أساسي','0'],['كارت وهوا','0'],['كاش أوت','0'],['سوبر باي','0'],['ممكن','0'],['إنستا ١','0'],['إنستا ٢','0'],['البنك الأهلي','0'],['فلوس','0'],['محفظة ١','0'],['محفظة ٢','0'],['محفظة ٣','0'],['محفظة ٤','0']]},
@@ -343,6 +347,19 @@ function parseOrder(t){
  const nums=[...text.matchAll(/(?:^|\s)(\d+(?:\.\d{1,2})?)(?=\s|$)/g)];
  let amount=nums.length?Number(nums[nums.length-1][1]):(amountWords.length?Number(amountWords[0]):NaN);
  if(nums.length>1 || amountWords.length>1) return {ambiguous:'لقيت أكتر من مبلغ محتمل في الكلام. اكتب أو قل المبلغ المقصود بوضوح، ومش هسجل أي حاجة قبل التأكيد.'};
+ const deleteIntent=/(ازاله|احذف|حذف|امسح|شيل|الغاء بند)/.test(cleaned);
+ if(deleteIntent){
+  let ci=-1;
+  if(/عمود الرصيد|في الرصيد|الرصيد/.test(cleaned))ci=cols.findIndex(c=>columnRole(c)==='balance');
+  else if(/عمود الكروت|في الكروت|الكروت/.test(cleaned))ci=cols.findIndex(c=>columnRole(c)==='cards');
+  else if(/عمود الخارج|في الخارج|الخارج/.test(cleaned))ci=cols.findIndex(c=>columnRole(c)==='expenses');
+  else return {ambiguous:'حدد العمود اللي فيه البند قبل الحذف، عشان ما احذفش حاجة من مكان غلط.'};
+  if(ci<0)return {ambiguous:'مش لاقي العمود المطلوب في الداشبورد.'};
+  const candidates=cols[ci].entries.map((e,i)=>({name:String(e[0]||''),index:i,amount:num(e[1]),normalized:norm(e[0])}))
+   .filter(e=>e.normalized&&cleaned.includes(e.normalized)&&!/(ازاله|احذف|حذف|امسح|شيل|الغاء|بند|عمود|في|من|الرصيد|الكروت|الخارج)/.test(e.normalized));
+  if(candidates.length!==1)return {ambiguous:candidates.length?'لقيت أكتر من بند مطابق في '+cols[ci].name+'. قل اسم البند كاملًا.':'مش لاقي البند اللي طلبت حذفه في '+cols[ci].name+'.'};
+  return {type:'deleteEntry',ci,index:candidates[0].index,entryName:candidates[0].name,oldAmount:candidates[0].amount,raw};
+ }
  if(!Number.isFinite(amount)||amount<=0)return null;
  const cleaned=norm(text.replace(/(?:^|\s)\d+(?:\.\d{1,2})?(?=\s|$)/g,' '));
  // Service balance movement: decrease = consumed stock; increase = new vendor funding.
@@ -477,6 +494,15 @@ function review(){
  const p=parseOrder(t);
  if(!p){out.innerHTML='<p class="small">مش قادر أحدد مبلغ واضح. جرّب تقول المبلغ أو تكتبه بشكل أوضح.</p>';return}
  if(p.ambiguous){if(p.clarification){pendingClarification=p.clarification;out.innerHTML='<p class="small">'+esc(p.ambiguous)+'</p><p class="small">رد بالمايك على نفس السؤال، أو اختار إجابة من هنا. الرد الصوتي هيتربط بالسؤال الحالي ومش هيبدأ أوردر جديد.</p><div class="grid"><button class="primary" onclick="answerClarification(\'new\')">مبلغ جديد مستقل</button><button onclick="answerClarification(\'transfer\')">تسوية من الرصيد</button><button onclick="answerClarification(\'cancel\')">إلغاء</button></div>';}else{out.innerHTML='<p class="small">'+esc(p.ambiguous)+'</p>';}return}
+ if(p.type==='deleteEntry'){
+  const ci=p.ci,entry=cols[ci]?.entries[p.index];
+  if(!entry||entry[0]!==p.entryName||num(entry[1])!==p.oldAmount){out.innerHTML='<p class="small">البند اتغير من وقت قراءة الأمر. راجع البند وحاول تاني.</p>';return}
+  const impact=moneyImpactForManualEdit(ci,p.entryName,-p.oldAmount,entry),money=findMoneyEntry();
+  if(impact.delta!==0&&!money){out.innerHTML='<p class="small">مش لاقي بند الفلوس الأساسية، فمش هحذف بند مرتبط ماليًا.</p>';return}
+  if(money&&num(money.entry[1])+impact.delta<0){out.innerHTML='<p class="small">الحذف هيخلي الفلوس الأساسية بالسالب. مش هنفذ الحذف.</p>';return}
+  pendingOrder={...p,mode:'deleteEntry',moneyDelta:impact.delta,moneyBefore:money?num(money.entry[1]):null};
+  out.innerHTML='<div class="reconMini"><div>العملية <b>حذف بند</b></div><div>العمود <b>'+esc(cols[ci].name)+'</b></div><div>البند <b>'+esc(p.entryName)+'</b></div><div>القيمة الحالية <b>'+fmt(p.oldAmount)+' جنيه</b></div><div>تأثير الفلوس الأساسية <b>'+fmt(impact.delta)+' جنيه</b></div>'+(money?'<div>الفلوس قبل <b>'+fmt(num(money.entry[1]))+' جنيه</b></div><div>الفلوس بعد <b>'+fmt(num(money.entry[1])+impact.delta)+' جنيه</b></div>':'')+'</div><p class="small">'+esc(impact.description)+'</p><p class="small">هحذف البند بعد تأكيدك فقط.</p><button class="primary" onclick="executeOrder()">تأكيد الحذف</button><button onclick="pendingOrder=null;document.getElementById(\'orderPreview\').innerHTML=\'تم إلغاء الحذف. لم يتغير أي رقم.\'">إلغاء</button>';return;
+ }
  if(p.type==='namedEntrySet'){
   const ci=cols.findIndex(c=>c.name===p.column),entry=ci>=0?cols[ci].entries[p.index]:null;
   if(!entry||entry[0]!==p.entryName){out.innerHTML='<p class="small">البند اتغير من وقت قراءة الأمر. راجع البند وحاول تاني.</p>';return}
@@ -568,7 +594,15 @@ function executeOrderCore(){
  dagaLastOrderSaved=false;
  if(!pendingOrder)return; const p=pendingOrder;
  const findEntry=(ci,name)=>cols[ci].entries.findIndex(e=>e[0]===name);
- if(p.mode==='namedEntrySet'){
+ if(p.mode==='deleteEntry'){
+  const row=cols[p.ci]?.entries[p.index],money=findMoneyEntry();
+  if(!row||row[0]!==p.entryName||num(row[1])!==p.oldAmount){alert('البند اتغير من وقت المراجعة. راجع الحذف من جديد.');pendingOrder=null;return}
+  if(p.moneyDelta!==0&&(!money||num(money.entry[1])!==p.moneyBefore)){alert('الفلوس الأساسية اتغيرت من وقت المراجعة. راجع الحذف من جديد.');pendingOrder=null;return}
+  if(money&&num(money.entry[1])+p.moneyDelta<0){alert('الحذف هيخلي الفلوس الأساسية بالسالب.');pendingOrder=null;return}
+  if(p.moneyDelta!==0)money.entry[1]=String(num(money.entry[1])+p.moneyDelta);
+  const removed=cols[p.ci].entries.splice(p.index,1)[0];
+  addLedger('حذف بند بعد تأكيد LIVE DAGA',removed[0]+' — '+fmt(num(removed[1]))+' جنيه من '+cols[p.ci].name+'؛ تأثير الفلوس '+fmt(p.moneyDelta)+' جنيه.',{column:cols[p.ci].name,entryName:removed[0],oldValue:num(removed[1]),newValue:null,moneyDelta:p.moneyDelta});
+ }else if(p.mode==='namedEntrySet'){
   const row=cols[p.ci]?.entries[p.index],money=findMoneyEntry();
   if(!row||row[0]!==p.entryName||num(row[1])!==p.oldAmount){alert('البند اتغير من وقت المراجعة. اعمل مراجعة جديدة.');pendingOrder=null;return}
   if(p.moneyDelta!==0&&(!money||num(money.entry[1])!==p.moneyBefore)){alert('الفلوس الأساسية اتغيرت من وقت المراجعة. اعمل مراجعة جديدة.');pendingOrder=null;return}
@@ -670,16 +704,25 @@ function openLiveDagaPanel(){
  const panel=document.getElementById('dagaLivePanel'),frame=document.getElementById('dagaLiveFrame');
  if(!panel||!frame)return;
  dagaLiveWindow=frame.contentWindow;
- panel.classList.add('open');panel.setAttribute('aria-hidden','false');
+ panel.classList.remove('minimized');panel.classList.add('open');panel.setAttribute('aria-hidden','false');
  document.body.style.overflow='hidden';
  if(!frame.src||!frame.src.includes('/live/?api=staging'))frame.src='/live/?api=staging';
  else{try{frame.contentWindow.postMessage('DAGA_LIVE_READY','https://daga-app-staging.dagamobile10.workers.dev')}catch(_){}}
 }
+function minimizeLiveDagaPanel(){
+ const panel=document.getElementById('dagaLivePanel');if(!panel)return;
+ panel.classList.remove('open');panel.classList.add('minimized');panel.setAttribute('aria-hidden','false');
+ document.body.style.overflow='';
+}
+function restoreLiveDagaPanel(){
+ const panel=document.getElementById('dagaLivePanel');if(!panel)return;
+ panel.classList.remove('minimized');panel.classList.add('open');panel.setAttribute('aria-hidden','false');
+ document.body.style.overflow='hidden';
+}
 function closeLiveDagaPanel(){
  const panel=document.getElementById('dagaLivePanel'),frame=document.getElementById('dagaLiveFrame');
- if(panel){panel.classList.remove('open');panel.setAttribute('aria-hidden','true');}
- document.body.style.overflow='';
- dagaLiveWindow=null;dagaLiveOrderPending=false;dagaLiveOrderSummary='';
+ if(panel){panel.classList.remove('open','minimized');panel.setAttribute('aria-hidden','true');}
+ document.body.style.overflow='';dagaLiveWindow=null;dagaLiveOrderPending=false;dagaLiveOrderSummary='';
  if(frame){try{frame.contentWindow.postMessage({type:'DAGA_LIVE_CLOSE'},'https://daga-app-staging.dagamobile10.workers.dev')}catch(_){}}
 }
 function sendLiveOrderReply(source,id,reply,handled=true){
@@ -704,6 +747,7 @@ function describeLiveOrder(p){
  if(p.mode==='cashAdd')return 'هسجل '+fmt(p.amount)+' جنيه في '+(cols[p.targetIndex]?.name||'عمود الكاش')+'. الفلوس الأساسية هتزيد '+fmt(p.amount)+' جنيه.';
  if(p.mode==='accessorySale'||p.mode==='accessoryAdd')return 'هسجل '+fmt(p.amount)+' جنيه في عمود الإكسسوار باسم '+(p.product||'مبيعات أكسسوار')+'. الفلوس الأساسية هتزيد '+fmt(p.amount)+' جنيه.';
  if(p.mode==='dailyWithdrawal')return 'هسجل سحب '+fmt(p.amount)+' جنيه من '+p.name+' في عمود الخارج، والفلوس الأساسية هتقل '+fmt(p.amount)+' جنيه.';
+ if(p.mode==='deleteEntry')return 'هحذف بند '+p.entryName+' من '+cols[p.ci]?.name+' بقيمته الحالية '+fmt(p.oldAmount)+' جنيه. تأثير الفلوس الأساسية '+fmt(p.moneyDelta)+' جنيه.';
  if(p.mode==='namedEntrySet')return 'هعدل بند '+p.entryName+' من '+fmt(p.oldAmount)+' إلى '+fmt(p.newAmount)+' جنيه. تأثير الفلوس الأساسية '+fmt(p.moneyDelta)+' جنيه.';
  if(p.mode==='balanceAdd')return 'هضيف '+fmt(p.amount)+' جنيه باسم '+p.name+' في عمود الرصيد؛ لو فوري أو ممكن أو سوبر بي فده يزيد رصيد المندوب فقط من غير تأثير على الفلوس الأساسية.';
  if(p.mode==='balanceToOutsideTransfer')return 'هسوي '+fmt(p.transfer)+' جنيه من رصيد '+p.name+' وأسجل المتبقي في الخارج. تأثير الفلوس الأساسية صفر.';
@@ -714,6 +758,8 @@ function describeLiveOrder(p){
 window.addEventListener('message',function(event){
  const origin='https://daga-app-staging.dagamobile10.workers.dev';
  if(event.origin!==origin||!dagaLiveWindow||event.source!==dagaLiveWindow)return;
+ if(event.data&&event.data.type==='DAGA_LIVE_COLLAPSE'){minimizeLiveDagaPanel();return;}
+ if(event.data&&event.data.type==='DAGA_LIVE_SESSION_ENDED'){minimizeLiveDagaPanel();dagaLiveOrderPending=false;dagaLiveOrderSummary='';return;}
  if(event.data==='DAGA_LIVE_READY'){
   const user=window.DAGA_AUTH_USER||{};
   try{event.source.postMessage({type:'DAGA_AUTH',token:String(window.DAGA_SESSION_TOKEN||''),companyId:String(user.storeId||'')},origin);}catch(_){}
