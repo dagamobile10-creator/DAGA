@@ -440,8 +440,18 @@ function review(){
  const t=document.getElementById('cmd').value.trim(); if(!t)return alert('قول أو اكتب الأمر الأول');
  const out=document.getElementById('orderPreview');
  // Account inquiry is a question, not a transaction. Resolve it from current Outside/Balance rows and wait for the user's next instruction.
- const qnorm=s=>String(s||'').toLowerCase().replace(/[إأآ]/g,'ا').replace(/[ىي]/g,'ي').replace(/[ةه]/g,'ه').replace(/[ؤ]/g,'و').replace(/[^\\u0600-\\u06FFa-z0-9 ]/g,' ').replace(/\\s+/g,' ').trim();
+ const qnorm=s=>normAccountingName(s);
  const q=qnorm(t);
+ const asksColumnTotal=/(كام|مجموع|اجمالي|قد ايه|قد ايه|حساب)/.test(q);
+ if(asksColumnTotal){
+  const expenseCols=cols.map((c,i)=>({c,i})).filter(x=>columnRole(x.c)==='expenses');
+  const aliases=[['الخارج الاول','الخارج واحد','خارج واحد','خارج 1','الخارج 1'],['الخارج التاني','الخارج الثاني','الخارج اتنين','خارج اتنين','خارج 2','الخارج 2'],['الخارج التالت','الخارج الثالث','الخارج تلاته','الخارج تلاتة','خارج تلاته','خارج 3','الخارج 3']];
+  let target=null;
+  for(let i=0;i<aliases.length;i++)if(aliases[i].some(a=>q.includes(qnorm(a)))){target=expenseCols[i]||null;break;}
+  if(!target){target=cols.map((c,i)=>({c,i})).find(x=>{const n=qnorm(x.c.adminLabel||x.c.name);return n&&q.includes(n)&&/(خارج|كاش|اكسسوار|رصيد|كروت)/.test(n)})||null;}
+  if(target){const total=target.c.entries.reduce((sum,e)=>sum+num(e[1]),0);pendingOrder=null;pendingClarification=null;out.innerHTML='<div class="reconMini"><div>إجمالي '+esc(target.c.adminLabel||target.c.name)+' <b>'+fmt(total)+' جنيه</b></div>'+target.c.entries.map(e=>'<div>'+esc(e[2]?.adminLabel||e[0])+' <b>'+fmt(num(e[1]))+' جنيه</b></div>').join('')+'</div><p class="small">دي قراءة مباشرة من بيانات الداشبورد الحالية، من غير أي تعديل.</p>';return;}
+  if(/الخارج|برا/.test(q)&&/(كل|كله|الكل|الثلاثه|تلاته)/.test(q)){const total=expenseCols.reduce((sum,x)=>sum+x.c.entries.reduce((a,e)=>a+num(e[1]),0),0);pendingOrder=null;pendingClarification=null;out.innerHTML='<div class="reconMini"><div>إجمالي أعمدة الخارج الثلاثة <b>'+fmt(total)+' جنيه</b></div>'+expenseCols.map(x=>'<div>'+esc(x.c.adminLabel||x.c.name)+' <b>'+fmt(x.c.entries.reduce((a,e)=>a+num(e[1]),0))+' جنيه</b></div>').join('')+'</div><p class="small">قراءة فقط؛ لم يتم تعديل أي بيانات.</p>';return;}
+ }
  const inquiryIntent=/(شوف|شوفلي|شوف لي|عليه كام|عليها كام|حسابه|حسابها|كشف حساب|رصيده كام|عليه قد ايه|عليه اد ايه|كام عليه)/.test(q);
  if(inquiryIntent){
    const names=[];
@@ -726,6 +736,16 @@ window.addEventListener('message',function(event){
  }
  if(dagaLiveOrderPending){
   sendLiveOrderReply(event.source,id,'لسه مستني تأكيد أو إلغاء العملية المعروضة. قول «أيوه نفّذ» أو «إلغاء».',true);return;
+ }
+ const columnQuestion=/(كام|مجموع|اجمالي|إجمالي|قد ايه|قد إيه|رصيد|حساب|الموجود)/u.test(text)&&/(خارج|الرصيد|كاش|اكسسوار|اكسسوار|الكروت|الفلوس)/u.test(text);
+ if(columnQuestion){
+  voiceDaga();
+  const command=document.getElementById('cmd');
+  if(!command){sendLiveOrderReply(event.source,id,'مش قادر أقرأ الداشبورد دلوقتي.',true);return;}
+  command.value=text;review();
+  const answer=String(document.getElementById('orderPreview')?.innerText||'').trim();
+  sendLiveOrderReply(event.source,id,answer||'مش قادر أطلع إجمالي واضح من البيانات الحالية.',true);
+  return;
  }
  const parsed=parseOrder(text);
  if(!parsed){sendLiveOrderReply(event.source,id,'',false);return;}
