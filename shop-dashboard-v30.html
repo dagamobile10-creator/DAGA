@@ -760,6 +760,17 @@ window.addEventListener('message',function(event){
  if(dagaLiveOrderPending){
   sendLiveOrderReply(event.source,id,'لسه مستني تأكيد أو إلغاء العملية المعروضة. قول «أيوه نفّذ» أو «إلغاء».',true);return;
  }
+ const deleteIntent=/(احذف|حذف|شيل|ازاله|ازيل|امسح|الغاء بند)/u.test(normAccountingName(text));
+ if(deleteIntent){
+  const q=normAccountingName(text);
+  const targetCol=cols.map((c,ci)=>({c,ci})).find(x=>q.includes(normAccountingName(x.c.adminLabel||x.c.name))||((/الرصيد/u.test(q))&&columnRole(x.c)==='balance'));
+  if(!targetCol){sendLiveOrderReply(event.source,id,'فهمت إنك عايز تحذف بند، لكن محتاج تحدد العمود. مفيش أي تغيير اتسجل.',true);return;}
+  const matches=targetCol.c.entries.map((e,ei)=>({e,ei,n:normAccountingName(e[2]?.adminLabel||e[0])})).filter(x=>x.n&&q.includes(x.n)).sort((a,b)=>b.n.length-a.n.length);
+  if(!matches.length){sendLiveOrderReply(event.source,id,'دورت في عمود '+(targetCol.c.adminLabel||targetCol.c.name)+' وملاقيتش بندًا بالاسم اللي قلته. مفيش أي تغيير اتسجل.',true);return;}
+  if(matches.length>1&&matches[0].n.length===matches[1].n.length){sendLiveOrderReply(event.source,id,'لقيت أكتر من بند محتمل. حدّد اسم البند بالضبط قبل الحذف.',true);return;}
+  voiceDaga();confirmDelete(targetCol.ci,matches[0].ei);
+  sendLiveOrderReply(event.source,id,'لقيت بند '+(matches[0].e[2]?.adminLabel||matches[0].e[0])+' في عمود '+(targetCol.c.adminLabel||targetCol.c.name)+' وقيمته '+fmt(num(matches[0].e[1]))+' جنيه. فتحت مراجعة الحذف وموضح فيها تأثيره على الفلوس. راجعها وأكد الحذف من الداشبورد لو موافق. لم يتم الحذف لسه.',true);return;
+ }
  const columnQuestion=/(كام|مجموع|اجمالي|إجمالي|قد ايه|قد إيه|رصيد|حساب|الموجود)/u.test(text)&&/(خارج|الرصيد|كاش|اكسسوار|اكسسوار|الكروت|الفلوس)/u.test(text);
  if(columnQuestion){
   voiceDaga();
