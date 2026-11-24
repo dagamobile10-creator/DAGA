@@ -104,7 +104,7 @@ async function loadStoreLabelEditor(){
   for(const group of ['column','entry']){
    const items=STORE_LABEL_ITEMS.filter(x=>x.type===group);
    html+='<h3 style="margin:18px 0 10px;color:var(--gold)">'+(group==='column'?'أسماء الأعمدة':'أسماء البنود')+'</h3>';
-   for(const item of items){const current=String(saved[item.key]||item.label);html+='<div style="padding:12px;border:1px solid var(--line);border-radius:12px;margin:9px 0"><div style="font-weight:700;margin-bottom:8px">الاسم الحالي: '+escapeHtml(current)+'</div><label>الاسم الجديد</label><div class="row"><input data-label-input="'+escapeHtml(item.key)+'" value="'+escapeHtml(current)+'" maxlength="80"><button type="button" data-label-save="'+escapeHtml(item.key)+'" style="flex:0 0 auto">حفظ</button></div></div>';}
+   for(const item of items){const current=String(saved[item.key]||item.label);const parent=item.type==='entry'?STORE_LABEL_ITEMS.find(x=>x.type==='column'&&item.key.startsWith('entry:entry-'+x.key.slice(7)+'-')):null;const parentNote=parent?'<div class="muted" style="font-size:12px;margin:-3px 0 8px">العمود: '+escapeHtml(saved[parent.key]||parent.label)+'</div>':'';html+='<div style="padding:12px;border:1px solid var(--line);border-radius:12px;margin:9px 0"><div style="font-weight:700;margin-bottom:8px">الاسم الحالي: '+escapeHtml(current)+'</div>'+parentNote+'<label>الاسم الجديد</label><div class="row"><input data-label-input="'+escapeHtml(item.key)+'" value="'+escapeHtml(current)+'" maxlength="80"><button type="button" data-label-save="'+escapeHtml(item.key)+'" style="flex:0 0 auto">حفظ</button></div></div>';}
   }
   host.innerHTML=html;
  }catch(err){host.innerHTML='<p class="notice error">'+escapeHtml(err.message)+'</p>';}
