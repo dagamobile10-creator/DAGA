@@ -109,7 +109,18 @@ window.addEventListener('message',event=>{
  }
 });
 function handleUser(text){
- stopListening();replying=true;state.textContent='ضجه بيراجع الأمر…';daga.textContent='سمعتك: «'+text+'»';
+ stopListening();
+ const navText=String(text||'').toLowerCase().replace(/[إأآ]/g,'ا').replace(/[ىي]/g,'ي').replace(/[ةه]/g,'ه').replace(/[^\\u0600-\\u06FFa-z0-9 ]/g,' ').replace(/\\s+/g,' ').trim();
+ if(/(?:رجعني|ارجعني|وديني|افتحلي|عايز اشوف) .*(?:الداشبورد|الدashboard|الشاشه الرئيسيه)|(?:رجعني|ارجعني) للداشبورد|للداشبورد تاني/.test(navText)){
+  replying=false;try{window.parent.postMessage({type:'DAGA_LIVE_DOCK'},new URL(DAGA_API_BASE).origin)}catch(_){}
+  state.textContent='Live شغال والداشبورد قدامك';daga.textContent='حاضر، رجعتك للداشبورد. هفضل معاك شغال في النافذة الصغيرة.';speak('حاضر، رجعتك للداشبورد. أنا لسه شغال معاك.');return;
+ }
+ if(/(?:اقفل نفسك|اقفل اللايف|انهي اللايف|انهى اللايف|وقف اللايف|خلاص اقفل)/.test(navText)){
+  live=false;singleMode=false;muted=true;stopListening();stopVoice();shell.classList.remove('live');start.classList.remove('stop');start.textContent='ابدأ Live';
+  try{window.parent.postMessage({type:'DAGA_LIVE_DISMISS'},new URL(DAGA_API_BASE).origin)}catch(_){}
+  status.textContent='تم إنهاء Live بطلبك';state.textContent='ضجه قفل نفسه';return;
+ }
+ replying=true;state.textContent='ضجه بيراجع الأمر…';daga.textContent='سمعتك: «'+text+'»';
  requestDashboardOrder(text).then(result=>{
   if(!result.handled){respond(text);return;}
   if(!live&&!singleMode){replying=false;return;}
