@@ -400,6 +400,14 @@ function parseOrder(t){
  if(matches.length>1 && matches[0][0].length===matches[1][0].length) return {ambiguous:'لقيت أكتر من اسم ممكن في الحسابات. حدّد الشخص المقصود عشان ما نغيّرش حساب غلط.'};
  const person=matches.length?matches[0][1]:null;
 
+ // A payment/funding message from a service machine is a service-agent balance movement,
+ // not cash received into the shop's main money row. Card labels map to their owning agent.
+ const serviceReceiptIntent=/(بعتلي|بعت لي|حوللي|حول لي|وردلي|ورد لي|وصلني|دخللي|دخل لي|استلمت|استلمنا|اتحول|اتحولي|زاد|زود|شحنلي|شحن لي)/.test(cleaned);
+ const serviceReceiptAgent=serviceRows.length?serviceRows[0].agent:(person?canonicalServiceAgent(person.name):null);
+ if(serviceReceiptIntent&&serviceReceiptAgent){
+   return {type:'balanceAdd',name:canonicalServiceAgent(serviceReceiptAgent),amount,raw,serviceReceipt:true};
+ }
+
  const balanceWrite=/(?:في الرصيد|عمود الرصيد|الرصيد)/.test(cleaned) && /(اكتب|ارفع|حط|ضيف|اضيف|سجل|زود|عنده|باسم)/.test(cleaned);
  if(balanceWrite){
    let name=cleaned.replace(/(?:اكتب|ارفع|حط|ضيف|اضيف|سجل|زود|في|عمود|الرصيد|عنده|باسم|جنيه|جنيهات|ل|على|عند)/g,' ').replace(/\s+/g,' ').trim();
