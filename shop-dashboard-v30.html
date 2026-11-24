@@ -422,13 +422,13 @@ function parseOrder(t){
  if(saysOutside && addIntent && !receipt && !take){
    const name=person?person.name:cleaned.replace(/(?:ارفع|اكتب|تكتب|عايزك|عايز|لي|سجل|ضيف|حط|زود|في|الخارج|خارج|جنيه|جنيهات)/g,' ').replace(/\s+/g,' ').trim();
    if(person && person.balance>0) return {ambiguous:`لقيت ${person.name} مسجل في عمود الرصيد بمبلغ ${fmt(person.balance)} جنيه. قبل ما أضيف ${fmt(amount)} جنيه في الخارج، هل ده مبلغ جديد مستقل، ولا تقصد تسوية/نقل جزء من رصيده؟ مش هغيّر أي رقم قبل ما تحدد.`,clarification:{type:'outsideBalanceChoice',person,amount,raw}};
-   if(name)return {type:'outsideAdd',name,amount,raw};
+   return {type:'outsideAdd',name:name||'مصروف',amount,raw};
  }
  if(isAccessory && saleIntent) return {type:'accessorySale',amount,product:cleaned.replace(/(?:بعت|بيع|اتباعت|باع|بعتها|بعتله|ب|بمبلغ|سعرها|سعره|اكسسوار|اكسسوارات|جنيه|جنيهات)/g,' ').replace(/\s+/g,' ').trim()||'مبيعات أكسسوار',raw};
  if(isAccessory && !saleIntent && cashIntent) return {type:'accessoryAdd',amount,product:cleaned.replace(/(?:ارفع|ضيف|اضيف|حط|سجل|اكتب|زود|اكسسوار|اكسسوارات)/g,' ').trim()||'أكسسوار',raw};
  if(!person){
-   if(saysOutside && /(ارفع|اكتب|سجل|ضيف|حط|زود)/.test(cleaned)){
-     const name=cleaned.replace(/(?:ارفع|اكتب|سجل|ضيف|حط|زود|في|الخارج|خارج|جنيه|جنيهات)/g,' ').replace(/\s+/g,' ').trim();
+   if(saysOutside && /(ارفع|اكتب|تكتب|عايزك|سجل|ضيف|حط|زود)/.test(cleaned)){
+     const name=cleaned.replace(/(?:ارفع|اكتب|تكتب|عايزك|عايز|لي|سجل|ضيف|حط|زود|في|الخارج|خارج|جنيه|جنيهات)/g,' ').replace(/\s+/g,' ').trim();
      if(name) return {type:'outsideAdd',name,amount,raw};
    }
    return {ambiguous:'فهمت المبلغ، لكن مش قادر أحدد اسم شخص أو نوع الحركة بثقة. وضّح الشخص أو قل إذا كانت كاش أو أكسسوار أو خارج.'};
