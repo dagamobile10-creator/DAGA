@@ -791,11 +791,16 @@ function serviceCardEntryMentioned(command,name){
  const c=normAccountingName(command),n=normAccountingName(name);
  if(!n||!c)return false;
  const variants=new Set([n,n.replace(/^ال(?=رصيد)/,''),n.replace(/^رصيد(?= )/,'الرصيد')]);
- if(serviceAgentForCardEntry(name)==='فوري'){
+ const owner=serviceAgentForCardEntry(name);
+ if(owner==='فوري'){
+  // "فوري" is the owning agent name for all three card rows, so spoken machine
+  // references must resolve even when the user does not say the card sub-entry.
+  variants.add('فوري');variants.add('مندوب فوري');variants.add('ماكينة فوري');
   if(n.includes('رصيد')){variants.add('رصيد اساسي');variants.add('الرصيد الاساسي');}
   if(n.includes('كارت')){variants.add('كارت وهوا');variants.add('كارت هوا');variants.add('كارت هواء');}
   if(n.includes('كاش'))variants.add('كاش اوت');
- }
+ }else if(owner==='ممكن'){variants.add('ماكينة ممكن');}
+ else if(owner==='سوبر بي'){variants.add('سوبر بي');variants.add('سوبر باي');variants.add('ماكينة سوبر بي');}
  for(const v of variants){if(v&&c.includes(v))return true;}
  return false;
 }
