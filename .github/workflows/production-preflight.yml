@@ -49,7 +49,11 @@ jobs:
           settings="$(curl -fsS --max-time 20 -H "Authorization: Bearer $CF_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/workers/scripts/daga-voice/settings")"
           binding="$(echo "$settings" | jq -c '.result.bindings[]? | select(.name=="DAGA_APP_DB" and .type=="d1")' | head -n1)"
           if [ -z "$binding" ]; then
-            echo "::error::Production DAGA_APP_DB binding is missing. Release is blocked; confirm the intended production database before deployment."
+            endpoint="https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/d1/database"
+            listing="$(curl -fsS --max-time 20 -G -H "Authorization: Bearer $CF_API_TOKEN" "$endpoint")"
+            echo "Existing D1 database names (IDs are intentionally omitted):"
+            echo "$listing" | jq -r '.result[]?.name // empty' | sort
+            echo "::error::Production DAGA_APP_DB binding is missing. Database names above are read-only inventory; no database was selected or created."
             exit 1
           fi
           db_id="$(echo "$binding" | jq -r '.id // .database_id // empty')"
