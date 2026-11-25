@@ -12,6 +12,9 @@ on:
       - "shop-dashboard-v30.html"
       - "index.html"
       - "worker.js"
+      - "tests/**"
+      - ".github/workflows/deploy-worker.yml"
+      - "wrangler.toml"
   workflow_dispatch:
 
 permissions:
