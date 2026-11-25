@@ -425,7 +425,7 @@ function parseOrder(t){
  const addIntent=/(ارفع|ضيف|اضيف|حط|سجل|اكتب|تكتب|عايزك|زود|دخل)/.test(cleaned);
  if(isCash && !receipt && !take) return {type:'cashAdd',amount,raw};
  if(saysOutside && addIntent && !receipt && !take){
-   const name=person?person.name:cleaned.replace(/(?:ارفع|اكتب|تكتب|عايزك|عايز|لي|سجل|ضيف|حط|زود|في|الخارج|خارج|جنيه|جنيهات)/g,' ').replace(/\s+/g,' ').trim();
+   const name=person?person.name:cleaned.replace(/(?:ارفع|اكتب|تكتب|عايزك|عايز|لي|سجل|ضيف|حط|زود|في|عمود|العمود|الخارج|خارج|جنيه|جنيهات)/g,' ').replace(/\s+/g,' ').trim();
    if(person && person.balance>0) return {ambiguous:`لقيت ${person.name} مسجل في عمود الرصيد بمبلغ ${fmt(person.balance)} جنيه. قبل ما أضيف ${fmt(amount)} جنيه في الخارج، هل ده مبلغ جديد مستقل، ولا تقصد تسوية/نقل جزء من رصيده؟ مش هغيّر أي رقم قبل ما تحدد.`,clarification:{type:'outsideBalanceChoice',person,amount,raw}};
    return {type:'outsideAdd',name:name||'مصروف',amount,raw};
  }
