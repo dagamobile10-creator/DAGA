@@ -65,9 +65,9 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn('resolveCompanyVoiceContext(env, account, request.headers.get("X-DAGA-Company-ID") || "")', tts)
         self.assertIn("live_daga_quota_insufficient", worker)
 
-    def test_standard_plan_overrides_legacy_smart_flags(self):
+    def test_company_plan_is_single_tier_with_assistant_and_history(self):
         admin = (ROOT / "owner-admin.js").read_text(encoding="utf-8")
-        self.assertIn('source.tier !== "standard" && (source.smartAssistantEnabled === true || source.historyEnabled === true)', admin)
+        self.assertIn('return JSON.stringify({ tier: "single", smartAssistantEnabled: true, historyEnabled: true })', admin)
 
     def test_company_subscription_includes_smart_assistant_history_and_live_is_addon(self):
         auth = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
