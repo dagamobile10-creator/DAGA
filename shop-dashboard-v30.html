@@ -965,7 +965,7 @@ window.addEventListener('message',function(event){
  const id=event.data.id,text=String(event.data.text||'').trim();
  if(typeof id!=='string'||!text)return;
  if(dagaLiveOrderPending&&liveOrderConfirmation(text)){
-  const before=ledger[0]?.id;
+  const before=ledger[0]?.id,confirmedOrder=dagaLivePendingOrder;
   let succeeded=false;
   try{
    if(dagaLivePendingDelete)succeeded=executeLiveDelete();
@@ -974,11 +974,12 @@ window.addEventListener('message',function(event){
 
   dagaLiveOrderPending=false;
   if(succeeded){
-   const completedOrder=dagaLivePendingOrder;
+   const completedOrder=confirmedOrder;
    let reply='تم تسجيل العملية فعلًا في الداشبورد: '+dagaLiveOrderSummary;
    if(completedOrder?.mode==='balanceOutsideReconcile'){
     const leftBalance=completedOrder.balanceBefore-completedOrder.transfer,leftOutside=completedOrder.outsideBefore-completedOrder.transfer;
-    if(dagaLiveActiveOrder){dagaLiveActiveOrder.balanceTotal=leftBalance;dagaLiveActiveOrder.outsideTotal=leftOutside;dagaLiveActiveOrder.balanceRows=dagaLiveActiveOrder.balanceRows.map(x=>({...x,amount:Math.max(0,x.amount)}));dagaLiveActiveOrder.outsideRows=dagaLiveActiveOrder.outsideRows.map(x=>({...x,amount:Math.max(0,x.amount)}));}
+    const reducePreviewRows=(rows,amount)=>{let left=amount;return rows.map(x=>{const take=Math.min(x.amount,left);left-=take;return {...x,amount:x.amount-take};});};
+    if(dagaLiveActiveOrder){dagaLiveActiveOrder.balanceTotal=leftBalance;dagaLiveActiveOrder.outsideTotal=leftOutside;dagaLiveActiveOrder.balanceRows=reducePreviewRows(dagaLiveActiveOrder.balanceRows,completedOrder.transfer);dagaLiveActiveOrder.outsideRows=reducePreviewRows(dagaLiveActiveOrder.outsideRows,completedOrder.transfer);}
     reply='تمت تسوية '+completedOrder.name+': '+fmt(completedOrder.transfer)+' جنيه. المتبقي في الرصيد '+fmt(leftBalance)+' جنيه، والخارج '+fmt(leftOutside)+' جنيه. نكمل في نفس الأوردر؟';
    }
    dagaLivePendingOrder=null;dagaLiveOrderSummary='';dagaLivePendingClarification=null;sendLiveOrderReply(event.source,id,reply,true);sendLiveDashboardSnapshot();
