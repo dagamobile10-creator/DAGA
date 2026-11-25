@@ -8,6 +8,7 @@ on:
       - ".github/workflows/production-preflight.yml"
       - ".github/workflows/deploy-worker.yml"
       - "worker.js"
+      - "company-entitlements.js"
       - "wrangler.toml"
       - "migrations/**"
   workflow_dispatch:
