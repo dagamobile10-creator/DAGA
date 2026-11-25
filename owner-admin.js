@@ -405,6 +405,25 @@ export async function handleOwnerAdmin(request, env, url) {
       return json(env, {ok:true,entryId:id},201);
     }
 
+    if(path==="/owner/admin/store-labels"&&request.method==="GET"){
+      const storeId=String(url.searchParams.get("storeId")||"").trim();
+      if(!storeId)return json(env,{error:"storeId_required"},400);
+      const store=await db.prepare("SELECT id FROM daga_stores WHERE id=? AND status='approved'").bind(storeId).first();
+      if(!store)return json(env,{error:"store_not_found"},404);
+      const rows=await db.prepare("SELECT target_key,display_name FROM daga_store_layout_labels WHERE store_id=? ORDER BY target_key").bind(storeId).all();
+      return json(env,{ok:true,labels:Object.fromEntries((rows.results||[]).map(x=>[x.target_key,x.display_name]))});
+    }
+    if(path==="/owner/admin/store-labels"&&request.method==="PUT"){
+      const b=await readJson(request);if(!b)return json(env,{error:"invalid_json"},400);
+      const storeId=String(b.storeId||"").trim(),targetKey=String(b.targetKey||"").trim(),displayName=String(b.displayName||"").trim().slice(0,80);
+      if(!/^[a-f0-9-]{36}$/i.test(storeId)||! /^(column|entry):[A-Za-z0-9_-]{3,120}$/.test(targetKey)||!displayName)return json(env,{error:"invalid_store_label"},400);
+      const store=await db.prepare("SELECT id FROM daga_stores WHERE id=? AND status='approved'").bind(storeId).first();
+      if(!store)return json(env,{error:"store_not_found"},404);
+      const now=new Date().toISOString();
+      await db.prepare("INSERT INTO daga_store_layout_labels (id,store_id,target_key,display_name,updated_by,updated_at) VALUES (?,?,?,?,?,?) ON CONFLICT(store_id,target_key) DO UPDATE SET display_name=excluded.display_name,updated_by=excluded.updated_by,updated_at=excluded.updated_at").bind(crypto.randomUUID(),storeId,targetKey,displayName,owner.id,now).run();
+      await audit(db,owner.id,"store_layout_label_updated","daga_store_layout_labels",storeId,{targetKey});
+      return json(env,{ok:true,storeId,targetKey,displayName});
+    }
     if(path==="/owner/admin/columns"&&request.method==="GET"){
       const r=await db.prepare("SELECT id,scope,store_id,stable_key,display_name,data_type,behavior_json,calculation_key,is_enabled,updated_at FROM daga_column_definitions ORDER BY scope,store_id,stable_key").all();
       return json(env, {ok:true,columns:r.results||[]});
@@ -432,6 +451,7 @@ export async function handleOwnerAdmin(request, env, url) {
       await audit(db,owner.id,"column_definition_created","daga_column_definitions",id,{scope,storeId,stableKey:key});
       return json(env, {ok:true,id},201);
     }
+
 
     return json(env, {error:"owner_admin_route_not_found"},404);
   } catch (error) {

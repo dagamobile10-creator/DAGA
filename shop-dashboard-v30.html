@@ -99,7 +99,7 @@ button{transition:filter .15s,transform .15s;border-radius:14px}button:active{tr
 <div id="dagaLivePanel" aria-hidden="true"><div class="livePanelHead"><span>LIVE DAGA</span><button type="button" onclick="closeLiveDagaPanel()">رجوع للداشبورد ×</button></div><iframe id="dagaLiveFrame" title="LIVE DAGA" allow="microphone; autoplay" referrerpolicy="no-referrer"></iframe></div>
 <script>
 const defaultCols=[
-{name:'الكروت',entries:[['رصيد أساسي','0'],['كارت وهوا','0'],['كاش أوت','0'],['سوبر باي','0'],['ممكن','0'],['إنستا ١','0'],['إنستا ٢','0'],['البنك الأهلي','0'],['فلوس','0'],['محفظة ١','0'],['محفظة ٢','0'],['محفظة ٣','0'],['محفظة ٤','0']]},
+{name:'الكروت',entries:[['رصيد أساسي','0'],['كارت وهوا','0'],['كاش أوت','0'],['سوبر باي','0'],['ممكن','0'],['إنستا ١','0'],['إنستا ٢','0'],['البنك الأهلي','0'],['فلوس','0'],['محفظة ١','0'],['محفظة ٢','0'],['محفظة ٣','0'],['محفظة ٤','0'],['تجار','0']]},
 {name:'الرصيد',entries:[['رأس المال','120,000']]},
 {name:'خارج 1',entries:[['أوبشن','1,500'],['حمدان','2,000']]},
 {name:'خارج 2',entries:[['عبده','750']]},
@@ -111,28 +111,61 @@ const defaultCols=[
 {name:'الإكسسوار',entries:[['سكرينة آيفون','50'],['سكرينة أندرويد','50'],['سكرينة N95','50']]}
 ];
 let STORE_KEY=''; let cols=JSON.parse(JSON.stringify(defaultCols)); let ledger=[],closedDays=[]; let pendingOrder=null,rec=null,pendingClarification=null;
+function inferColumnRole(col,index){
+ if(col&&col.role)return col.role;const n=String(col?.name||'');
+ if(n==='الكروت'||index===0)return 'cards';if(n==='الرصيد'||index===1)return 'balance';
+ if(/^خارج/.test(n)||[2,3,4].includes(index))return 'expenses';if(/^كاش/.test(n)||[5,6,7,8].includes(index))return 'cash';
+ if(normAccountingName(n)==='الاكسسوار'||index===9)return 'accessory';return 'custom';
+}
+function inferEntryRole(col,entry){
+ if(entry&&entry[2]&&entry[2].role)return entry[2].role;
+ const n=normAccountingName(entry&&entry[0]),role=col&&col.role;
+ if(role==='cards'){if(['فلوس','الفلوس','الفلوس الاساسيه','الفلوس الاساسية','الفلوس الموجوده','فلوس المحل','فلوس الخزنه','فلوس الدرج','النقديه','النقد','فلوس الكروت'].includes(n))return 'money';const a=serviceAgentForCardEntry(entry&&entry[0]);if(a)return 'card-agent:'+a;}
+ if(role==='balance'){const a=canonicalServiceAgent(entry&&entry[0]);if(a)return 'agent:'+a;}return 'custom';
+}
+function ensureStableIdentities(){
+ const roles=['cards','balance','expenses','expenses','expenses','cash','cash','cash','cash','accessory'];
+ cols.forEach((col,i)=>{col.role=col.role||roles[i]||inferColumnRole(col,i);col.id=col.id||'column-'+col.role+'-'+i;col.entries.forEach((entry,j)=>{if(!entry[2]||typeof entry[2]!=='object')entry[2]={};entry[2].role=entry[2].role||inferEntryRole(col,entry);entry[2].id=entry[2].id||'entry-'+col.id+'-'+j;});});
+}
+function columnByRole(role){return cols.find(c=>c.role===role)||null}
+function columnRole(col){return col&&col.role?col.role:inferColumnRole(col,cols.indexOf(col))}
+function entryRole(col,entry){return entry&&entry[2]&&entry[2].role?entry[2].role:inferEntryRole(col,entry)}
+async function loadCompanyLayoutLabels(storeId,token){
+ try{
+  const r=await fetch('/api/company/layout-labels?storeId='+encodeURIComponent(storeId),{headers:{Authorization:'Bearer '+token},cache:'no-store',credentials:'omit'});
+  const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'layout_labels_load_failed');
+  const labels=d.labels||{};
+  cols.forEach(col=>{const ck='column:'+col.id;if(labels[ck])col.adminLabel=String(labels[ck]);else delete col.adminLabel;col.entries.forEach(entry=>{const id=entry[2]&&entry[2].id;if(!id)return;const label=labels['entry:'+id];if(label){entry[2].adminLabel=String(label)}else delete entry[2].adminLabel;});});
+  render();
+ }catch(err){console.warn('company_layout_labels_unavailable',String(err&&err.message||err));}
+}
 function loadStoreData(storeId){
  STORE_KEY='daga_dashboard_v30_store_'+encodeURIComponent(String(storeId));
  cols=JSON.parse(JSON.stringify(defaultCols));ledger=[];closedDays=[];
  try{const saved=JSON.parse(localStorage.getItem(STORE_KEY)||'null');if(saved){if(Array.isArray(saved.cols)&&saved.cols.length===10)cols=saved.cols;if(Array.isArray(saved.ledger))ledger=saved.ledger;if(Array.isArray(saved.closedDays))closedDays=saved.closedDays;}}catch(e){}
- ensureMoneyEntry();
+ ensureStableIdentities();ensureMoneyEntry();ensureToggarEntry();ensureStableIdentities();
 }
 function persist(){try{localStorage.setItem(STORE_KEY,JSON.stringify({cols,ledger,closedDays}));return true}catch(e){alert('تعذر الحفظ على هذا الجهاز. صدّر نسخة احتياطية قبل المتابعة.');return false}}
 function num(v){return Number(String(v).replace(/[^0-9.-]/g,''))||0} function fmt(v){return Math.round(v).toLocaleString('en-US')} function esc(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
 function sumCol(name){const c=cols.find(x=>x.name===name);return c?c.entries.reduce((a,e)=>a+num(e[1]),0):0}
 function findMoneyEntry(){
- const c=cols.find(x=>x.name==='الكروت'); if(!c)return null;
+ const c=columnByRole('cards'); if(!c)return null;
  const exact=['فلوس','الفلوس','الفلوس الأساسية','الفلوس الاساسية','الفلوس الموجودة','فلوس المحل','فلوس الخزنة','فلوس الدرج','النقدية','النقد','فلوس الكروت'];
- for(let i=0;i<c.entries.length;i++){const n=String(c.entries[i][0]||'').trim().toLowerCase();if(exact.includes(n))return {col:c,index:i,entry:c.entries[i]};}
+ for(let i=0;i<c.entries.length;i++){const n=String(c.entries[i][0]||'').trim().toLowerCase();if(entryRole(c,c.entries[i])==='money'||exact.includes(n))return {col:c,index:i,entry:c.entries[i]};}
  // Match clear money labels only; do not accidentally modify bank, card, or wallet balances.
  for(let i=0;i<c.entries.length;i++){const n=String(c.entries[i][0]||'').trim().toLowerCase();if(/^(رصيد الفلوس|فلوس المحل|فلوس الدرج|فلوس الخزنة|اجمالي الفلوس|إجمالي الفلوس|فلوس الكروت)$/.test(n))return {col:c,index:i,entry:c.entries[i]};}
  return null;
 }
 function ensureMoneyEntry(){
- const cards=cols.find(x=>x.name==='الكروت');if(!cards)return;
+ const cards=columnByRole('cards');if(!cards)return;
  if(!findMoneyEntry()){cards.entries.unshift(['الفلوس','0']);}
 }
-ensureMoneyEntry();
+function ensureToggarEntry(){
+ const cards=columnByRole('cards');if(!cards)return;
+ const existing=cards.entries.find(e=>normAccountingName(e&&e[0])==='تجار');
+ if(!existing)cards.entries.push(['تجار','0',{role:'custom',id:'entry-cards-toggar'}]);
+}
+ensureStableIdentities();ensureMoneyEntry();
 function changeMoney(delta){
  const found=findMoneyEntry();
  if(!found) return {ok:false,message:'مش لاقي بند «فلوس» الموجود داخل عمود الكروت. ما أضفتش بند حركات بديل، وما غيّرتش أي رقم. لازم نطابق اسم البند الفعلي في الداشبورد.'};
@@ -141,19 +174,19 @@ function changeMoney(delta){
  found.entry[1]=String(after);
  return {ok:true,before,after,label:found.entry[0]};
 }
-function isDailyMoneyColumn(ci){const name=String(cols[ci]?.name||'');return /^كاش/.test(name)||normAccountingName(name)==='الاكسسوار'}
+function isDailyMoneyColumn(ci){return ['cash','accessory'].includes(columnRole(cols[ci]))}
 function isDailyWithdrawalName(name){const n=normAccountingName(name);return ['كاش','الكاش','كاش اليوم','سحب كاش','الكاش اليوم','اكسسوار','الاكسسوار','اكسسوارات','اكسسوارات اليوم'].includes(n)}
 // One-time compatibility bridge: only unposted legacy daily rows are transferred; posted rows are never counted twice.
 function migrateLegacyDailyAccounting(){
  const daily=cols.map((c,ci)=>({c,ci})).filter(x=>isDailyMoneyColumn(x.ci));
  const pending=daily.flatMap(x=>x.c.entries.filter(e=>!e[2]||e[2].moneyPosted!==true).map(e=>({entry:e,amount:num(e[1])}))).filter(x=>x.amount!==0);
- const withdrawals=cols.map((c,ci)=>({c,ci})).filter(x=>/^خارج/.test(x.c.name)).flatMap(x=>x.c.entries.filter(e=>isDailyWithdrawalName(e[0])&&(!e[2]||e[2].moneyPosted!==true)).map(e=>({entry:e,amount:num(e[1])}))).filter(x=>x.amount!==0);
+ const withdrawals=cols.map((c,ci)=>({c,ci})).filter(x=>columnRole(x.c)==='expenses').flatMap(x=>x.c.entries.filter(e=>isDailyWithdrawalName(e[0])&&(!e[2]||e[2].moneyPosted!==true)).map(e=>({entry:e,amount:num(e[1])}))).filter(x=>x.amount!==0);
  const delta=pending.reduce((a,x)=>a+x.amount,0)-withdrawals.reduce((a,x)=>a+x.amount,0);
  const money=findMoneyEntry();
  if(!money)return;
  if(delta!==0){const result=changeMoney(delta);if(!result.ok){daily.forEach(x=>x.c.entries.forEach(e=>{if(!e[2])e[2]={moneyPosted:false}}));persist();return;}}
  daily.forEach(x=>x.c.entries.forEach(e=>{if(!e[2]||e[2].moneyPosted!==true)e[2]={...(e[2]||{}),moneyPosted:true}}));
- cols.forEach(c=>{if(/^خارج/.test(c.name))c.entries.forEach(e=>{if(!isDailyWithdrawalName(e[0]))e[2]={...(e[2]||{}),moneyPosted:true}})});
+ cols.forEach(c=>{if(columnRole(c)==='expenses')c.entries.forEach(e=>{if(!isDailyWithdrawalName(e[0]))e[2]={...(e[2]||{}),moneyPosted:true}})});
  withdrawals.forEach(x=>x.entry[2]={...(x.entry[2]||{}),moneyPosted:true});
  if(delta!==0||pending.length||withdrawals.length){addLedger('ترحيل أرصدة يومية قديمة',`تم ترحيل الأرصدة اليومية المفتوحة عند تحديث النظام: كاش وإكسسوار ${fmt(pending.reduce((a,x)=>a+x.amount,0))} جنيه، وسحوبات مرتبطة ${fmt(withdrawals.reduce((a,x)=>a+x.amount,0))} جنيه؛ الصافي ${delta>0?'+':''}${fmt(delta)} جنيه إلى الفلوس الأساسية.`,{column:'ترحيل يومي',moneyDelta:delta});}else persist();
 }
@@ -182,11 +215,13 @@ function renderLiveWordBalance(){
  if(value)value.textContent=Math.floor(remaining).toLocaleString('en-US')+' حرف';
  if(status)status.textContent=remaining>0?'الرصيد المتاح للشركة — يتم الخصم حسب عدد حروف ردود LIVE DAGA.':'لا يوجد رصيد حروف متاح حاليًا. اطلب شحن الرصيد من مالك التطبيق.';
 }
-function render(){updateLiveDate();refreshAccountRoleLabel();renderLiveWordBalance();const h=document.getElementById('headers'),c=document.getElementById('cells');h.innerHTML='';c.innerHTML='';cols.forEach((col,i)=>{const th=document.createElement('th');th.innerHTML='<div class="colhead"><span>'+esc(col.name)+'</span></div>';h.appendChild(th);const td=document.createElement('td');const list=document.createElement('div');list.className='entryList';col.entries.forEach((e,j)=>{const d=document.createElement('div');d.className='entry';d.innerHTML='<div><span class="name">'+esc(e[0])+'</span><span class="sub">ضغطة للتعديل · ضغطة مطوّلة للتفاصيل</span></div><span class="amount">'+fmt(num(e[1]))+'</span>';attachEntryGestures(d,i,j);list.appendChild(d)});const total=document.createElement('div');total.className='colTotal';total.innerHTML='<span>إجمالي العمود</span><b>'+fmt(sumCol(col.name))+' ج.م</b>';const footer=document.createElement('div');footer.className='colFooter';const add=document.createElement('button');add.className='miniBtn';add.textContent='＋ بند جديد';add.onclick=ev=>{ev.stopPropagation();addEntry(i)};const del=document.createElement('button');del.className='miniBtn danger';del.textContent='− حذف بند';del.onclick=ev=>{ev.stopPropagation();removeEntry(i)};footer.append(add,del);td.append(list,total,footer);c.appendChild(td)});updateRecon()}
+async function saveCompanyLayoutLabel(targetKey,displayName){const user=window.DAGA_AUTH_USER||{};if(!user.storeId||!window.DAGA_SESSION_TOKEN)throw new Error('جلسة الشركة غير متاحة. سجّل الدخول من جديد.');const response=await fetch('/api/company/layout-labels',{method:'PUT',headers:{'Content-Type':'application/json',Authorization:'Bearer '+window.DAGA_SESSION_TOKEN},body:JSON.stringify({storeId:user.storeId,targetKey,displayName}),cache:'no-store',credentials:'omit'});const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.error||'تعذر حفظ الاسم للشركة');return data}
+async function editColumnName(i){const col=cols[i];if(!col)return;const next=prompt('اكتب الاسم الجديد للعمود:',col.adminLabel||col.name);if(next===null)return;const name=next.trim();if(!name)return alert('اسم العمود لا يمكن أن يكون فارغًا.');if(cols.some((c,j)=>j!==i&&String(c.adminLabel||c.name).trim()===name))return alert('اسم العمود مستخدم بالفعل؛ اختار اسمًا مختلفًا.');const old=col.adminLabel||col.name;try{await saveCompanyLayoutLabel('column:'+col.id,name);col.adminLabel=name;addLedger('تغيير اسم عمود',old+' ← '+name,{columnId:col.id,columnRole:col.role,oldName:old,newName:name});if(!persist())return;render()}catch(error){alert(error.message||'تعذر حفظ اسم العمود');}}
+function render(){updateLiveDate();refreshAccountRoleLabel();renderLiveWordBalance();const h=document.getElementById('headers'),c=document.getElementById('cells');h.innerHTML='';c.innerHTML='';cols.forEach((col,i)=>{const th=document.createElement('th');th.innerHTML='<div class="colhead"><span>'+esc(col.adminLabel||col.name)+'</span><button type="button" class="miniBtn" title="تغيير اسم العمود" onclick="editColumnName('+i+')">✎</button></div>';h.appendChild(th);const td=document.createElement('td');const list=document.createElement('div');list.className='entryList';col.entries.forEach((e,j)=>{const d=document.createElement('div');d.className='entry';d.innerHTML='<div><span class="name">'+esc((e[2]&&e[2].adminLabel)||e[0])+'</span><span class="sub">ضغطة للتعديل · ضغطة مطوّلة للتفاصيل</span></div><span class="amount">'+fmt(num(e[1]))+'</span>';attachEntryGestures(d,i,j);list.appendChild(d)});const total=document.createElement('div');total.className='colTotal';total.innerHTML='<span>إجمالي العمود</span><b>'+fmt(col.entries.reduce((a,e)=>a+num(e[1]),0))+' ج.م</b>';const footer=document.createElement('div');footer.className='colFooter';const add=document.createElement('button');add.className='miniBtn';add.textContent='＋ بند جديد';add.onclick=ev=>{ev.stopPropagation();addEntry(i)};const del=document.createElement('button');del.className='miniBtn danger';del.textContent='− حذف بند';del.onclick=ev=>{ev.stopPropagation();removeEntry(i)};footer.append(add,del);td.append(list,total,footer);c.appendChild(td)});updateRecon()}
 function getDayReconciliation(){
- const capitalCol=cols.find(c=>c.name==='الرصيد');
+ const capitalCol=columnByRole('balance');
  const capital=capitalCol?capitalCol.entries.reduce((a,e)=>a+num(e[1]),0):0;
- const otherColumns=cols.filter(c=>c.name!=='الرصيد');
+ const otherColumns=cols.filter(c=>columnRole(c)!=='balance');
  const otherTotal=otherColumns.reduce((sum,c)=>sum+c.entries.reduce((a,e)=>a+num(e[1]),0),0);
  const diff=otherTotal-capital;
  return {capital,otherTotal,diff,otherColumns,otherTotals:Object.fromEntries(otherColumns.map(c=>[c.name,c.entries.reduce((a,e)=>a+num(e[1]),0)]))};
@@ -210,32 +245,32 @@ function confirmCreateEntry(){
  const p=pendingCreate;if(!p)return;const money=findMoneyEntry();
  if(p.impact.delta!==0&&(!money||num(money.entry[1])!==p.moneyBefore)){pendingCreate=null;alert('الفلوس الأساسية اتغيرت من وقت المراجعة. راجع الإضافة من جديد.');render();return}
  if(p.impact.agentDelta&&getServiceAgentBalance(p.impact.agentName).value!==p.agentBefore){pendingCreate=null;alert('رصيد المندوب اتغير من وقت المراجعة. راجع الإضافة من جديد.');render();return}
- if(p.impact.agentDelta){const a=applyServiceAgentDelta(p.impact.agentName,p.impact.agentDelta);if(!a.ok){alert(a.message);return}}
+ if(p.impact.agentDelta){const a=applyServiceAgentDelta(p.impact.agentName,p.impact.agentDelta,p.impact.agentLabel);if(!a.ok){alert(a.message);return}}
  if(p.impact.delta!==0)money.entry[1]=String(num(money.entry[1])+p.impact.delta);
- const created=[p.n,String(p.amount)];if(isDailyMoneyColumn(p.i)||/^خارج/.test(cols[p.i].name))created[2]={moneyPosted:true};cols[p.i].entries.push(created);
+ const created=[p.n,String(p.amount),{role:columnRole(cols[p.i])==='cards'&&serviceAgentForCardEntry(p.n)?'card-agent:'+serviceAgentForCardEntry(p.n):columnRole(cols[p.i])==='balance'&&canonicalServiceAgent(p.n)?'agent:'+canonicalServiceAgent(p.n):'custom',id:'entry-'+Date.now()+'-'+Math.random().toString(36).slice(2)}];if(isDailyMoneyColumn(p.i)||columnRole(cols[p.i])==='expenses')created[2]={...created[2],moneyPosted:true};cols[p.i].entries.push(created);
  addLedger('إضافة بند بعد مراجعة',p.n+' — '+fmt(p.amount)+' جنيه في '+cols[p.i].name+'؛ تأثير الفلوس '+fmt(p.impact.delta)+' جنيه'+(p.impact.agentName?'؛ رصيد '+p.impact.agentName+' زاد '+fmt(p.impact.agentDelta)+' جنيه':''),{column:cols[p.i].name,entryName:p.n,oldValue:null,newValue:p.amount,moneyDelta:p.impact.delta,agentName:p.impact.agentName||null,agentDelta:p.impact.agentDelta||0});
  pendingCreate=null;persist();closeModal();render();open('<h2>تمت الإضافة</h2><p class="status">تم حفظ البند بعد التأكيد.</p><button class="primary" onclick="closeModal()">تمام</button>');
 }
-function removeEntry(i){if(!cols[i].entries.length)return alert('مفيش بنود في العمود');open(`<h2>اختار البند للحذف</h2><p class="small">من عمود ${esc(cols[i].name)}. الحذف سيتسجل في سجل الحركات.</p>${cols[i].entries.map((e,j)=>`<button class="removeRow" onclick="confirmDelete(${i},${j})"><span>${esc(e[0])}</span><b>${fmt(num(e[1]))} ج.م</b></button>`).join('')}`)}
-function confirmDelete(i,j){const e=cols[i].entries[j],money=findMoneyEntry();let impact=moneyImpactForManualEdit(i,e[0],-num(e[1]),e);if(i===0&&!(money&&money.entry[0]===e[0]))impact={delta:0,description:'حذف بند من قائمة الكروت لا ينشئ حركة فلوس تلقائيًا؛ أي تسوية فعلية تُراجع وتسجل كعملية مستقلة.'};if(i===0&&money&&money.entry[0]===e[0]){open(`<h2>حذف بند الفلوس الأساسية؟</h2><p class="small">ده البند اللي باقي الحسابات مرتبطة بيه. حذفه هيوقف المزامنة المالية، لذلك مش هيتحذف من الشاشة دي. غيّر اسمه أو راجع إعدادات البند بدلًا من ذلك.</p><button class="primary" onclick="closeModal()">فهمت</button>`);return}if(impact.delta!==0&&!money){alert('مش لاقي بند الفلوس الأساسية؛ مش هحذف بندًا مرتبطًا ماليًا من غير ما أقدر أراجع أثره.');return}if(money&&num(money.entry[1])+impact.delta<0){alert('حذف البند هيخلي الفلوس الأساسية بالسالب. راجع الحساب.');return}open(`<h2>مراجعة حذف بند</h2><div class="reconMini"><div>وقت المراجعة <b>${esc(localStamp())}</b></div><div>البند <b>${esc(e[0])} — ${esc(cols[i].name)}</b></div><div>القيمة المراد حذفها <b>${fmt(num(e[1]))} ج.م</b></div><div>تأثير الفلوس الأساسية <b>${impact.delta>0?'+':''}${fmt(impact.delta)} ج.م</b></div>${money?`<div>الفلوس قبل <b>${fmt(num(money.entry[1]))} ج.م</b></div><div>الفلوس بعد <b>${fmt(num(money.entry[1])+impact.delta)} ج.م</b></div>`:''}</div><p class="small">سيختفي البند من العرض الحالي، مع الاحتفاظ بسجل الحذف في التاريخ. حذف بند من الكروت وحده لا يغيّر الفلوس تلقائيًا.</p><div class="grid"><button class="primary" onclick="doDelete(${i},${j},${impact.delta},${money?num(money.entry[1]):'null'})">تأكيد الحذف</button><button onclick="removeEntry(${i})">رجوع</button></div>`)}
+function removeEntry(i){if(!cols[i].entries.length)return alert('مفيش بنود في العمود');open(`<h2>اختار البند للحذف</h2><p class="small">من عمود ${esc(cols[i].name)}. الحذف سيتسجل في سجل الحركات.</p>${cols[i].entries.map((e,j)=>`<button class="removeRow" onclick="confirmDelete(${i},${j})"><span>${esc((e[2]&&e[2].adminLabel)||e[0])}</span><b>${fmt(num(e[1]))} ج.م</b></button>`).join('')}`)}
+function confirmDelete(i,j){const e=cols[i].entries[j],money=findMoneyEntry();let impact=moneyImpactForManualEdit(i,e[0],-num(e[1]),e);if(i===0&&normAccountingName(e[0])!=='تجار'&&!(money&&money.entry[0]===e[0]))impact={delta:0,description:'حذف بند من قائمة الكروت لا ينشئ حركة فلوس تلقائيًا؛ أي تسوية فعلية تُراجع وتسجل كعملية مستقلة.'};if(i===0&&money&&money.entry[0]===e[0]){open(`<h2>حذف بند الفلوس الأساسية؟</h2><p class="small">ده البند اللي باقي الحسابات مرتبطة بيه. حذفه هيوقف المزامنة المالية، لذلك مش هيتحذف من الشاشة دي. غيّر اسمه أو راجع إعدادات البند بدلًا من ذلك.</p><button class="primary" onclick="closeModal()">فهمت</button>`);return}if(impact.delta!==0&&!money){alert('مش لاقي بند الفلوس الأساسية؛ مش هحذف بندًا مرتبطًا ماليًا من غير ما أقدر أراجع أثره.');return}if(money&&num(money.entry[1])+impact.delta<0){alert('حذف البند هيخلي الفلوس الأساسية بالسالب. راجع الحساب.');return}open(`<h2>مراجعة حذف بند</h2><div class="reconMini"><div>وقت المراجعة <b>${esc(localStamp())}</b></div><div>البند <b>${esc((e[2]&&e[2].adminLabel)||e[0])} — ${esc(cols[i].name)}</b></div><div>القيمة المراد حذفها <b>${fmt(num(e[1]))} ج.م</b></div><div>تأثير الفلوس الأساسية <b>${impact.delta>0?'+':''}${fmt(impact.delta)} ج.م</b></div>${money?`<div>الفلوس قبل <b>${fmt(num(money.entry[1]))} ج.م</b></div><div>الفلوس بعد <b>${fmt(num(money.entry[1])+impact.delta)} ج.م</b></div>`:''}</div><p class="small">سيختفي البند من العرض الحالي، مع الاحتفاظ بسجل الحذف في التاريخ. حذف بند من الكروت وحده لا يغيّر الفلوس تلقائيًا.</p><div class="grid"><button class="primary" onclick="doDelete(${i},${j},${impact.delta},${money?num(money.entry[1]):'null'})">تأكيد الحذف</button><button onclick="removeEntry(${i})">رجوع</button></div>`)}
 function doDelete(i,j,impactDelta=0,moneyBefore=null){const backup={cols:JSON.parse(JSON.stringify(cols)),ledger:JSON.parse(JSON.stringify(ledger)),closedDays:JSON.parse(JSON.stringify(closedDays))};const e=cols[i].entries[j];if(!e)return;const money=findMoneyEntry();if(impactDelta!==0&&(!money||num(money.entry[1])!==moneyBefore)){alert('الفلوس الأساسية اتغيرت من وقت المراجعة. راجع الحذف من جديد.');render();return}if(impactDelta!==0)money.entry[1]=String(num(money.entry[1])+impactDelta);const removed=cols[i].entries.splice(j,1)[0];addLedger('حذف بند بعد مراجعة',`${removed[0]} — ${fmt(num(removed[1]))} جنيه من ${cols[i].name}; تأثير الفلوس ${impactDelta>0?'+':''}${fmt(impactDelta)} جنيه.`,{column:cols[i].name,entryName:removed[0],oldValue:num(removed[1]),newValue:null,moneyDelta:impactDelta});closeModal();if(!persist()){cols=backup.cols;ledger=backup.ledger;closedDays=backup.closedDays;persist();render();return;}render()}
-function editEntry(i,j){const e=cols[i].entries[j];open(`<h2>تعديل البند</h2><p class="small">العمود: <b>${esc(cols[i].name)}</b></p><label>الاسم / البيان</label><input id="n" value="${esc(e[0])}"><label>المبلغ / القيمة</label><input id="a" value="${esc(e[1])}" inputmode="decimal"><p class="small">وقت طلب التعديل: ${esc(localStamp())}. قبل الحفظ هتظهر مراجعة بالفرق وتأثيره المتوقع على الفلوس الأساسية.</p><div class="grid"><button class="primary" onclick="saveEntry(${i},${j})">مراجعة التعديل</button><button onclick="deleteEntry(${i},${j})">حذف البند</button></div>`)}
+function editEntry(i,j){const e=cols[i].entries[j];open(`<h2>تعديل البند</h2><p class="small">العمود: <b>${esc(cols[i].name)}</b></p><label>الاسم / البيان</label><input id="n" value="${esc((e[2]&&e[2].adminLabel)||e[0])}"><label>المبلغ / القيمة</label><input id="a" value="${esc(e[1])}" inputmode="decimal"><p class="small">وقت طلب التعديل: ${esc(localStamp())}. قبل الحفظ هتظهر مراجعة بالفرق وتأثيره المتوقع على الفلوس الأساسية.</p><div class="grid"><button class="primary" onclick="saveEntry(${i},${j})">مراجعة التعديل</button><button onclick="deleteEntry(${i},${j})">حذف البند</button></div>`)}
 let pendingManualEdit=null;
 function moneyImpactForManualEdit(ci,entryName,delta,existingEntry=null){
- const col=cols[ci]?.name||'';
+ const col=cols[ci]?.name||'',role=columnRole(cols[ci]);
  if(delta===0)return {delta:0,agentDelta:0,agentName:null,description:'لا يوجد فرق مالي؛ الاسم فقط سيتغير.'};
- if(col==='الكروت'){
+ if(role==='cards'){
   const f=findMoneyEntry();if(f&&f.entry[0]===entryName)return {delta:0,agentDelta:0,agentName:null,description:'ده بند الفلوس الأساسية نفسه؛ لن نعدّل الفلوس مرة ثانية.'};
-  const agent=serviceAgentForCardEntry(entryName);
-  if(agent){if(delta>0)return {delta:0,agentDelta:delta,agentName:agent,description:'شحن جديد لخدمة '+agent+'؛ يزيد رصيد الماكينة ورصيد المندوب بفرق الشحن فقط، من غير أي تأثير على الفلوس الأساسية.'};return {delta:-delta,agentDelta:0,agentName:null,description:'استهلاك من رصيد ماكينة '+agent+'؛ الفرق المستهلك يزيد الفلوس الأساسية، ولا يخصم من رصيد المندوب.'};}
+  const savedRole=existingEntry?entryRole(cols[ci],existingEntry):'';const agent=savedRole.startsWith('card-agent:')?savedRole.slice(11):serviceAgentForCardEntry(entryName);
+  if(agent){if(delta>0)return {delta:0,agentDelta:delta,agentName:agent,agentLabel:entryName,description:'شحن جديد لخدمة '+agent+'؛ يزيد رصيد الماكينة ورصيد المندوب بفرق الشحن فقط، من غير أي تأثير على الفلوس الأساسية.'};return {delta:-delta,agentDelta:0,agentName:null,description:'استهلاك من رصيد ماكينة '+agent+'؛ الفرق المستهلك يزيد الفلوس الأساسية، ولا يخصم من رصيد المندوب.'};}
   return {delta:-delta,agentDelta:0,agentName:null,description:'تغيير رصيد بند نقدي داخل الكروت يقابله تغيير عكسي في الفلوس الأساسية.'};
  }
- if(col==='الرصيد'){if(canonicalServiceAgent(entryName)){if(delta<0)return {delta:delta,agentDelta:0,agentName:null,description:'تسوية/شطب من رصيد مندوب خدمة '+canonicalServiceAgent(entryName)+'؛ الفلوس الأساسية تنقص بنفس المبلغ المشطوب.'};return {delta:0,agentDelta:0,agentName:null,description:'زيادة رصيد المندوب تُسجل في حسابه فقط؛ لا تؤثر على الفلوس الأساسية.'};}return {delta:delta,agentDelta:0,agentName:null,description:'البند العادي في عمود الرصيد مرتبط بالفلوس الأساسية مباشرة؛ زيادة الرصيد تزود الفلوس، وتقليله أو حذفه يقلل الفلوس بنفس الفرق.'};}
- if(/^خارج/.test(col)){
+ if(role==='balance'){if((existingEntry&&entryRole(cols[ci],existingEntry).startsWith('agent:'))||canonicalServiceAgent(entryName)){if(delta<0)return {delta:delta,agentDelta:0,agentName:null,description:'تسوية/شطب من رصيد مندوب خدمة '+canonicalServiceAgent(entryName)+'؛ الفلوس الأساسية تنقص بنفس المبلغ المشطوب.'};return {delta:0,agentDelta:0,agentName:null,description:'زيادة رصيد المندوب تُسجل في حسابه فقط؛ لا تؤثر على الفلوس الأساسية.'};}return {delta:delta,agentDelta:0,agentName:null,description:'البند العادي في عمود الرصيد مرتبط بالفلوس الأساسية مباشرة؛ زيادة الرصيد تزود الفلوس، وتقليله أو حذفه يقلل الفلوس بنفس الفرق.'};}
+ if(role==='expenses'){
   const deltaToMoney=existingEntry&&isDailyWithdrawalName(entryName)&&existingEntry[2]?.moneyPosted!==true?-(num(existingEntry[1])+delta):-delta;
   return {delta:deltaToMoney,agentDelta:0,agentName:null,description:'كل إضافة أو تعديل أو حذف في الخارج يؤثر على الفلوس الأساسية فور التأكيد؛ والسحب اليومي غير المرحّل يُرحّل بقيمته الجديدة مرة واحدة.'};
  }
- if(/^كاش/.test(col)||normAccountingName(col)==='الاكسسوار'){
+ if(role==='cash'||role==='accessory'){
   const deltaToMoney=existingEntry&&existingEntry[2]?.moneyPosted!==true?num(existingEntry[1])+delta:delta;
   return {delta:deltaToMoney,agentDelta:0,agentName:null,description:'الكاش والإكسسوار يؤثران على الفلوس الأساسية فور التأكيد؛ وأي بند يومي قديم غير مرحّل يُحتسب بقيمته الجديدة مرة واحدة.'};
  }
@@ -246,7 +281,7 @@ function saveEntry(i,j){
  const n=document.getElementById('n').value.trim(),a=document.getElementById('a').value.trim();
  if(!n||a===''||num(a)<0)return alert('اكتب الاسم ومبلغًا صحيحًا');
  const old=[...cols[i].entries[j]],newAmount=num(a),delta=newAmount-num(old[1]);
- const isMoneyRow=i===0&&findMoneyEntry()?.entry===cols[i].entries[j];if(isMoneyRow&&n!==old[0]&&!/^(الفلوس|فلوس|الفلوس الأساسية|الفلوس الاساسية|الفلوس الموجودة|فلوس المحل|فلوس الخزنة|فلوس الدرج|النقدية|النقد|فلوس الكروت)$/i.test(n))return alert('ده بند الفلوس الأساسية المرتبط بكل الحسابات. ما تغيّرش اسمه من هنا؛ تقدر تعدّل المبلغ فقط.');
+ const isMoneyRow=entryRole(cols[i],cols[i].entries[j])==='money'||(columnRole(cols[i])==='cards'&&findMoneyEntry()?.entry===cols[i].entries[j]);/* Keep the money role in entry metadata when its visible name changes. */
  const impact=moneyImpactForManualEdit(i,old[0],delta,old),money=findMoneyEntry();
  if(impact.delta!==0&&!money){return alert('مش لاقي بند «فلوس» داخل عمود الكروت، فمش هقدر أنفّذ تعديل مرتبط بأمان. لم يتغير أي رقم.')}
  if(money&&num(money.entry[1])+impact.delta<0)return alert('التعديل هيخلي الفلوس الأساسية بالسالب. راجع القيمة قبل المتابعة.');
@@ -254,16 +289,17 @@ function saveEntry(i,j){
  const sign=impact.delta>0?'+':'';
  open(`<h2>مراجعة تعديل يدوي</h2><div class="reconMini"><div>وقت المراجعة <b>${esc(localStamp(pendingManualEdit.requestedAt))}</b></div><div>البند <b>${esc(old[0])} — ${esc(cols[i].name)}</b></div><div>القيمة القديمة <b>${fmt(num(old[1]))} ج.م</b></div><div>القيمة الجديدة <b>${fmt(newAmount)} ج.م</b></div><div>الفرق في البند <b>${delta>0?'+':''}${fmt(delta)} ج.م</b></div><div>تأثير الفلوس الأساسية <b>${impact.delta>0?'+':''}${fmt(impact.delta)} ج.م</b></div>${impact.agentName?`<div>المندوب ${esc(impact.agentName)} <b>${impact.agentDelta>0?'+':''}${fmt(impact.agentDelta)} ج.م</b></div>`:''}${money?`<div>الفلوس قبل <b>${fmt(num(money.entry[1]))} ج.م</b></div><div>الفلوس بعد <b>${fmt(num(money.entry[1])+impact.delta)} ج.م</b></div>`:''}</div><p class="small">${esc(impact.description)}</p><p class="small">دي مراجعة فقط. لن يتغير أي رقم قبل التأكيد.</p><div class="grid"><button class="primary" onclick="confirmManualEdit()">تأكيد وتنفيذ</button><button onclick="pendingManualEdit=null;editEntry(${i},${j})">رجوع</button></div>`);
 }
-function confirmManualEdit(){
+async function confirmManualEdit(){
  const transactionBackup={cols:JSON.parse(JSON.stringify(cols)),ledger:JSON.parse(JSON.stringify(ledger)),closedDays:JSON.parse(JSON.stringify(closedDays))};
  const p=pendingManualEdit;if(!p)return;const current=cols[p.i]?.entries[p.j];
  if(!current||current[0]!==p.old[0]||num(current[1])!==num(p.old[1])){pendingManualEdit=null;alert('البند اتغير من وقت المراجعة. افتح التعديل من جديد.');render();return}
  const money=findMoneyEntry();
  if(p.impact.delta!==0&&(!money||num(money.entry[1])!==p.moneyBefore)){pendingManualEdit=null;alert('الفلوس الأساسية اتغيرت من وقت المراجعة. راجع العملية من جديد.');render();return}
  if(p.impact.agentDelta&&getServiceAgentBalance(p.impact.agentName).value!==p.agentBefore){pendingManualEdit=null;alert('رصيد المندوب اتغير من وقت المراجعة. راجع العملية من جديد.');render();return}
- if(p.impact.agentDelta){const a=applyServiceAgentDelta(p.impact.agentName,p.impact.agentDelta);if(!a.ok){alert(a.message);return}}
+ const updatedMeta={...(p.old[2]||{})};if(!updatedMeta.role)updatedMeta.role=entryRole(cols[p.i],p.old);if(columnRole(cols[p.i])==='expenses'||isDailyMoneyColumn(p.i))updatedMeta.moneyPosted=true;
+ if(p.n!==p.old[0]){try{await saveCompanyLayoutLabel('entry:'+String(updatedMeta.id||''),p.n)}catch(error){alert(error.message||'تعذر حفظ اسم البند؛ لم يتم تنفيذ أي تغيير مالي.');return;}updatedMeta.adminLabel=p.n;}
+ if(p.impact.agentDelta){const a=applyServiceAgentDelta(p.impact.agentName,p.impact.agentDelta,p.impact.agentLabel);if(!a.ok){alert(a.message);return}}
  if(p.impact.delta!==0)money.entry[1]=String(num(money.entry[1])+p.impact.delta);
- const updatedMeta={...(p.old[2]||{})};if(/^خارج/.test(cols[p.i].name)||isDailyMoneyColumn(p.i))updatedMeta.moneyPosted=true;
  cols[p.i].entries[p.j]=[p.n,String(p.newAmount),updatedMeta];
  addLedger('تعديل يدوي مع مراجعة',p.old[0]+' ('+fmt(num(p.old[1]))+') ← '+p.n+' ('+fmt(p.newAmount)+') في '+cols[p.i].name+'؛ فرق البند '+fmt(p.delta)+'؛ تأثير الفلوس '+fmt(p.impact.delta)+(p.impact.agentName?'؛ رصيد '+p.impact.agentName+' '+fmt(p.impact.agentDelta):''),{column:cols[p.i].name,entryName:p.n,previousName:p.old[0],oldValue:num(p.old[1]),newValue:p.newAmount,moneyDelta:p.impact.delta,agentName:p.impact.agentName||null,agentDelta:p.impact.agentDelta||0});
  pendingManualEdit=null;if(!persist()){cols=transactionBackup.cols;ledger=transactionBackup.ledger;closedDays=transactionBackup.closedDays;render();return;}closeModal();render();open('<h2>تم تنفيذ التعديل</h2><p class="status">تم الحفظ بعد تأكيدك.</p><button class="primary" onclick="closeModal()">تمام</button>');
@@ -272,7 +308,7 @@ function showEntryHistory(ci,ei){
  const col=cols[ci],entry=col?.entries[ei];if(!entry)return;
  const name=entry[0],related=ledger.filter(x=>(x.column===col.name&&(x.entryName===name||x.previousName===name))||String(x.details||'').includes(name)&&String(x.details||'').includes(col.name)).slice(0,30);
  const rows=related.length?related.map(x=>`<div class="reconMini"><div><b>${esc(x.action||'حركة')}</b><span>${esc(localStamp(x.at))}</span></div><div>${esc(x.details||'')}</div></div>`).join(''):'<p class="small">مفيش سجل تفصيلي محفوظ لهذا البند قبل كده. من دلوقتي، التعديلات الجديدة هتتسجل بالتاريخ والوقت؛ مش هنخترع تاريخ قديم.</p>';
- open(`<h2>كشف حساب البند</h2><p class="small">البند: <b>${esc(name)}</b> — العمود: <b>${esc(col.name)}</b></p><div class="reconMini"><div>القيمة الحالية <b>${fmt(num(entry[1]))} ج.م</b></div><div>وقت فتح الكشف <b>${esc(localStamp())}</b></div></div><h3>الحركات المسجلة</h3>${rows}<button class="primary" onclick="editEntry(${ci},${ei})">تعديل البند</button><button onclick="closeModal()">إغلاق</button>`);
+ open(`<h2>كشف حساب البند</h2><p class="small">البند: <b>${esc(name)}</b> — العمود: <b>${esc(col.adminLabel||col.name)}</b></p><div class="reconMini"><div>القيمة الحالية <b>${fmt(num(entry[1]))} ج.م</b></div><div>وقت فتح الكشف <b>${esc(localStamp())}</b></div></div><h3>الحركات المسجلة</h3>${rows}<button class="primary" onclick="editEntry(${ci},${ei})">تعديل البند</button><button onclick="closeModal()">إغلاق</button>`);
 }
 function deleteEntry(i,j){confirmDelete(i,j)}
 function voiceDaga(){if(!window.DAGA_AUTH_USER||!window.DAGA_AUTH_USER.storeId){alert('سجّل الدخول الأول.');return;}if(window.DAGA_AUTH_USER.ledgerEnabled!==true&&window.DAGA_AUTH_USER.smartAssistantEnabled!==true){alert('ميزة كلم ضجة متاحة بعد تفعيل اشتراك DAGA للشركة.');return;}pendingOrder=null;open('<h2>كلم ضجه — تنفيذ الأوامر</h2><p class="small">اضغط الميكروفون وقل الأمر بالمصري، أو اكتبه للتجربة. ضجه تعرض التغيير المقترح، ولا تسجله إلا بعد تأكيدك. أمثلة طبيعية: «ارفع كاش خمسة جنيه»، «اكتب في الخارج أوبشن 500»، «فوري خد الألفين بتوعه». راجع كل حركة قبل اعتمادها.</p><button class="primary" onclick="startVoice()">🎙️ ابدأ الكلام</button><div id="st" class="status">جاهز أسمعك.</div><label>الأوردر</label><input id="cmd" placeholder="اكتب الأوردر هنا"><button class="primary" onclick="review()">مراجعة الأوردر</button><div id="orderPreview"></div>')}
@@ -315,8 +351,8 @@ function parseOrder(t){
  if(!Number.isFinite(amount)||amount<=0)return null;
  const cleaned=norm(text.replace(/(?:^|\s)\d+(?:\.\d{1,2})?(?=\s|$)/g,' '));
  // Service balance movement: decrease = consumed stock; increase = new vendor funding.
- const cardsForDelta=cols.find(c=>c.name==='الكروت');
- const serviceRows=(cardsForDelta?.entries||[]).map((e,i)=>({name:String(e[0]||''),index:i,amount:num(e[1]),agent:serviceAgentForCardEntry(e[0]),normalized:norm(e[0])})).filter(e=>e.agent&&serviceCardEntryMentioned(cleaned,e.name));
+ const cardsForDelta=columnByRole('cards');
+ const serviceRows=(cardsForDelta?.entries||[]).map((e,i)=>({name:String(e[0]||''),index:i,amount:num(e[1]),agent:(entryRole(cardsForDelta,e).startsWith('card-agent:')?entryRole(cardsForDelta,e).slice(11):serviceAgentForCardEntry(e[0])),normalized:norm(e[0])})).filter(e=>e.agent&&serviceCardEntryMentioned(cleaned,e.name));
  if(serviceRows.length){serviceRows.sort((a,b)=>b.normalized.length-a.normalized.length);const best=serviceRows[0];
   const subtractIntent=/(اخصم|خصم|انقص|نقص|اسحب|استهلك)/.test(cleaned),addServiceIntent=/(زود|زيد|ضيف|اضيف|ارفع|حط|سجل|اكتب|دخل)/.test(cleaned);
   if(subtractIntent||addServiceIntent){const delta=subtractIntent?-amount:amount,newAmount=best.amount+delta;
@@ -327,7 +363,7 @@ function parseOrder(t){
  // Named item edits: e.g. "عدل كرت الهوا وخليهم 2000 جنيه".
  const editIntent=/(?:عدل|عدّل|غير|غيّر|خلي|خليهم|خليه|خليها|بدل|بدّل|بقى|اصبح|أصبح)/.test(cleaned);
  if(editIntent){
-   const cards=cols.find(c=>c.name==='الكروت');
+   const cards=columnByRole('cards');
    const entries=(cards?.entries||[]).map((e,i)=>({name:String(e[0]||''),normName:norm(e[0]),index:i,amount:num(e[1])}))
      .filter(e=>e.normName && cleaned.includes(e.normName) && !/^(الفلوس|فلوس|الفلوس الاساسيه|الرصيد الاساسي)$/.test(e.normName))
      .sort((a,b)=>b.normName.length-a.normName.length);
@@ -339,7 +375,7 @@ function parseOrder(t){
  }
  const isCash=/(كاش|نقدي|نقدا|فلوس كاش)/.test(cleaned);
  const isAccessory=/(اكسسوار|اكسسوارات|اكسسوار|سماعه|سماعة|سماعات|سكرينه|سكرينة|جراب|شاحن)/.test(cleaned);
- const cashIntent=/(ارفع|ضيف|اضيف|حط|سجل|اكتب|زود|دخل|قبضت|قبضنا)/.test(cleaned);
+ const cashIntent=/(ارفع|ضيف|اضيف|حط|سجل|اكتب|تكتب|عايزك|زود|دخل|قبضت|قبضنا)/.test(cleaned);
  const saleIntent=/(بعت|بيع|اتباعت|باع|مباع|بعتها|بعتله)/.test(cleaned);
  const dailyWithdrawIntent=/(خدت|اخدت|أخدت|اخذ|اخد|أخذ|سحبت|سحب|صرف|طلعت|اخذت)/.test(cleaned);
  if((isCash||isAccessory) && dailyWithdrawIntent && !saleIntent){
@@ -351,8 +387,8 @@ function parseOrder(t){
    return {type:'accessorySale',amount,product:product||'مبيعات أكسسوار',raw};
  }
  // Outside and balance are ledgers, while "cards" records the signed cash movement.
- const outsideCols=cols.filter(c=>/^خارج/.test(c.name));
- const balanceCol=cols.find(c=>c.name==='الرصيد');
+ const outsideCols=cols.filter(c=>columnRole(c)==='expenses');
+ const balanceCol=columnByRole('balance');
  const allPeople=new Map();
  outsideCols.forEach(c=>c.entries.forEach(e=>{
    const key=norm(e[0]); if(!key||/تحصيلات|حركات/.test(key))return;
@@ -369,7 +405,15 @@ function parseOrder(t){
  if(matches.length>1 && matches[0][0].length===matches[1][0].length) return {ambiguous:'لقيت أكتر من اسم ممكن في الحسابات. حدّد الشخص المقصود عشان ما نغيّرش حساب غلط.'};
  const person=matches.length?matches[0][1]:null;
 
- const balanceWrite=/(?:في الرصيد|عمود الرصيد|الرصيد)/.test(cleaned) && /(اكتب|ارفع|حط|ضيف|اضيف|سجل|زود|عنده|باسم)/.test(cleaned);
+ // A payment/funding message from a service machine is a service-agent balance movement,
+ // not cash received into the shop's main money row. Card labels map to their owning agent.
+ const serviceReceiptIntent=/(بعتلي|بعت لي|حوللي|حول لي|وردلي|ورد لي|وصلني|دخللي|دخل لي|استلمت|استلمنا|اتحول|اتحولي|زاد|زود|شحنلي|شحن لي)/.test(cleaned);
+ const serviceReceiptAgent=serviceRows.length?serviceRows[0].agent:(person?canonicalServiceAgent(person.name):null);
+ if(serviceReceiptIntent&&serviceReceiptAgent){
+   return {type:'balanceAdd',name:canonicalServiceAgent(serviceReceiptAgent),amount,raw,serviceReceipt:true};
+ }
+
+ const balanceWrite=/(?:في الرصيد|عمود الرصيد|الرصيد)/.test(cleaned) && /(اكتب|تكتب|عايزك|ارفع|حط|ضيف|اضيف|سجل|زود|عنده|باسم)/.test(cleaned);
  if(balanceWrite){
    let name=cleaned.replace(/(?:اكتب|ارفع|حط|ضيف|اضيف|سجل|زود|في|عمود|الرصيد|عنده|باسم|جنيه|جنيهات|ل|على|عند)/g,' ').replace(/\s+/g,' ').trim();
    if(!name) return {ambiguous:'فهمت إنك عايز تسجل مبلغ في الرصيد، لكن محتاج اسم الشخص.'};
@@ -378,18 +422,18 @@ function parseOrder(t){
  const receipt=/(دفعلي|دفع ليا|دفع لي|سد.?دلي|سدد لي|استلمت منه|رجعلي|رجع لي|ردلي|رد لي|اداني|ادانى|أعطاني|اعطاني|دفع|حول لي|حوللي|حوّل لي|حول|حوّل|جابلي|جالي)/.test(cleaned);
  const take=/(خد|اخد|أخد|استلم|صرف|سحب|اديت|أديت|دفعت له|دفعت لم|راح له)/.test(cleaned);
  const saysOutside=/(خارج|برا|عليه فلوس|مديون|سلف)/.test(cleaned);
- const addIntent=/(ارفع|ضيف|اضيف|حط|سجل|اكتب|زود|دخل)/.test(cleaned);
+ const addIntent=/(ارفع|ضيف|اضيف|حط|سجل|اكتب|تكتب|عايزك|زود|دخل)/.test(cleaned);
  if(isCash && !receipt && !take) return {type:'cashAdd',amount,raw};
  if(saysOutside && addIntent && !receipt && !take){
-   const name=person?person.name:cleaned.replace(/(?:ارفع|اكتب|سجل|ضيف|حط|زود|في|الخارج|خارج|جنيه|جنيهات)/g,' ').replace(/\s+/g,' ').trim();
+   const name=person?person.name:cleaned.replace(/(?:ارفع|اكتب|تكتب|عايزك|عايز|لي|سجل|ضيف|حط|زود|في|الخارج|خارج|جنيه|جنيهات)/g,' ').replace(/\s+/g,' ').trim();
    if(person && person.balance>0) return {ambiguous:`لقيت ${person.name} مسجل في عمود الرصيد بمبلغ ${fmt(person.balance)} جنيه. قبل ما أضيف ${fmt(amount)} جنيه في الخارج، هل ده مبلغ جديد مستقل، ولا تقصد تسوية/نقل جزء من رصيده؟ مش هغيّر أي رقم قبل ما تحدد.`,clarification:{type:'outsideBalanceChoice',person,amount,raw}};
-   if(name)return {type:'outsideAdd',name,amount,raw};
+   return {type:'outsideAdd',name:name||'مصروف',amount,raw};
  }
  if(isAccessory && saleIntent) return {type:'accessorySale',amount,product:cleaned.replace(/(?:بعت|بيع|اتباعت|باع|بعتها|بعتله|ب|بمبلغ|سعرها|سعره|اكسسوار|اكسسوارات|جنيه|جنيهات)/g,' ').replace(/\s+/g,' ').trim()||'مبيعات أكسسوار',raw};
  if(isAccessory && !saleIntent && cashIntent) return {type:'accessoryAdd',amount,product:cleaned.replace(/(?:ارفع|ضيف|اضيف|حط|سجل|اكتب|زود|اكسسوار|اكسسوارات)/g,' ').trim()||'أكسسوار',raw};
  if(!person){
-   if(saysOutside && /(ارفع|اكتب|سجل|ضيف|حط|زود)/.test(cleaned)){
-     const name=cleaned.replace(/(?:ارفع|اكتب|سجل|ضيف|حط|زود|في|الخارج|خارج|جنيه|جنيهات)/g,' ').replace(/\s+/g,' ').trim();
+   if(saysOutside && /(ارفع|اكتب|تكتب|عايزك|سجل|ضيف|حط|زود)/.test(cleaned)){
+     const name=cleaned.replace(/(?:ارفع|اكتب|تكتب|عايزك|عايز|لي|سجل|ضيف|حط|زود|في|الخارج|خارج|جنيه|جنيهات)/g,' ').replace(/\s+/g,' ').trim();
      if(name) return {type:'outsideAdd',name,amount,raw};
    }
    return {ambiguous:'فهمت المبلغ، لكن مش قادر أحدد اسم شخص أو نوع الحركة بثقة. وضّح الشخص أو قل إذا كانت كاش أو أكسسوار أو خارج.'};
@@ -409,17 +453,27 @@ function review(){
  const t=document.getElementById('cmd').value.trim(); if(!t)return alert('قول أو اكتب الأمر الأول');
  const out=document.getElementById('orderPreview');
  // Account inquiry is a question, not a transaction. Resolve it from current Outside/Balance rows and wait for the user's next instruction.
- const qnorm=s=>String(s||'').toLowerCase().replace(/[إأآ]/g,'ا').replace(/[ىي]/g,'ي').replace(/[ةه]/g,'ه').replace(/[ؤ]/g,'و').replace(/[^\\u0600-\\u06FFa-z0-9 ]/g,' ').replace(/\\s+/g,' ').trim();
+ const qnorm=s=>normAccountingName(s);
  const q=qnorm(t);
+ const asksColumnTotal=/(كام|مجموع|اجمالي|قد ايه|قد ايه|حساب)/.test(q);
+ if(asksColumnTotal){
+  const expenseCols=cols.map((c,i)=>({c,i})).filter(x=>columnRole(x.c)==='expenses');
+  const aliases=[['الخارج الاول','الخارج واحد','خارج واحد','خارج 1','الخارج 1'],['الخارج التاني','الخارج الثاني','الخارج اتنين','خارج اتنين','خارج 2','الخارج 2'],['الخارج التالت','الخارج الثالث','الخارج تلاته','الخارج تلاتة','خارج تلاته','خارج 3','الخارج 3']];
+  let target=null;
+  for(let i=0;i<aliases.length;i++)if(aliases[i].some(a=>q.includes(qnorm(a)))){target=expenseCols[i]||null;break;}
+  if(!target){target=cols.map((c,i)=>({c,i})).find(x=>{const n=qnorm(x.c.adminLabel||x.c.name);return n&&q.includes(n)&&/(خارج|كاش|اكسسوار|رصيد|كروت)/.test(n)})||null;}
+  if(target){const total=target.c.entries.reduce((sum,e)=>sum+num(e[1]),0);pendingOrder=null;pendingClarification=null;out.innerHTML='<div class="reconMini"><div>إجمالي '+esc(target.c.adminLabel||target.c.name)+' <b>'+fmt(total)+' جنيه</b></div>'+target.c.entries.map(e=>'<div>'+esc(e[2]?.adminLabel||e[0])+' <b>'+fmt(num(e[1]))+' جنيه</b></div>').join('')+'</div><p class="small">دي قراءة مباشرة من بيانات الداشبورد الحالية، من غير أي تعديل.</p>';return;}
+  if(/الخارج|برا/.test(q)&&/(كل|كله|الكل|الثلاثه|تلاته)/.test(q)){const total=expenseCols.reduce((sum,x)=>sum+x.c.entries.reduce((a,e)=>a+num(e[1]),0),0);pendingOrder=null;pendingClarification=null;out.innerHTML='<div class="reconMini"><div>إجمالي أعمدة الخارج الثلاثة <b>'+fmt(total)+' جنيه</b></div>'+expenseCols.map(x=>'<div>'+esc(x.c.adminLabel||x.c.name)+' <b>'+fmt(x.c.entries.reduce((a,e)=>a+num(e[1]),0))+' جنيه</b></div>').join('')+'</div><p class="small">قراءة فقط؛ لم يتم تعديل أي بيانات.</p>';return;}
+ }
  const inquiryIntent=/(شوف|شوفلي|شوف لي|عليه كام|عليها كام|حسابه|حسابها|كشف حساب|رصيده كام|عليه قد ايه|عليه اد ايه|كام عليه)/.test(q);
  if(inquiryIntent){
    const names=[];
-   cols.forEach((c,ci)=>{if(/^خارج/.test(c.name)||c.name==='الرصيد')c.entries.forEach(e=>{if(e[0]&&!names.some(x=>qnorm(x.name)===qnorm(e[0])))names.push({name:e[0]})})});
+   cols.forEach((c,ci)=>{if(columnRole(c)==='expenses'||columnRole(c)==='balance')c.entries.forEach(e=>{if(e[0]&&!names.some(x=>qnorm(x.name)===qnorm(e[0])))names.push({name:e[0]})})});
    const matched=names.filter(x=>q.includes(qnorm(x.name))).sort((a,b)=>qnorm(b.name).length-qnorm(a.name).length);
    if(!matched.length){out.innerHTML='<p class="small">فهمت إنك بتسأل عن حساب شخص، لكن مش لاقي اسمًا مطابقًا في أعمدة الخارج أو الرصيد. اكتب الاسم زي ما هو ظاهر في الحساب.</p>';return}
    const personName=matched[0].name, key=qnorm(personName);
    const outside=[],balance=[];
-   cols.forEach((c,ci)=>c.entries.forEach(e=>{if(qnorm(e[0])===key){if(/^خارج/.test(c.name))outside.push({column:c.name,amount:num(e[1])});if(c.name==='الرصيد')balance.push({column:c.name,amount:num(e[1])})}}));
+   cols.forEach((c,ci)=>c.entries.forEach(e=>{if(qnorm(e[0])===key){if(columnRole(c)==='expenses')outside.push({column:c.name,amount:num(e[1])});if(columnRole(c)==='balance')balance.push({column:c.name,amount:num(e[1])})}}));
    const outSum=outside.reduce((a,x)=>a+x.amount,0),balSum=balance.reduce((a,x)=>a+x.amount,0);
    pendingOrder=null;pendingClarification=null;
    out.innerHTML=`<div class="reconMini"><div><span>استعلام حساب — من غير تسجيل حركة</span><b>${esc(personName)}</b></div><div>إجمالي الخارج / المستحق عليه <b>${fmt(outSum)} جنيه</b></div><div>إجمالي الرصيد المسجل باسمه <b>${fmt(balSum)} جنيه</b></div>${outside.map(x=>`<div>${esc(x.column)} <b>${fmt(x.amount)} جنيه</b></div>`).join('')}${balance.map(x=>`<div>الرصيد <b>${fmt(x.amount)} جنيه</b></div>`).join('')}</div><p class="small">دي قراءة للحساب فقط؛ لم يتم تعديل أي رصيد. قول لي دلوقتي عايز تسجل قبض، أو تسوية، أو تعديل، وهكمل من الأرقام الحالية.</p>`;
@@ -440,10 +494,10 @@ function review(){
   out.innerHTML='<div class="reconMini"><div>البند <b>'+esc(p.entryName)+'</b></div><div>القيمة القديمة <b>'+fmt(p.oldAmount)+'</b></div><div>القيمة الجديدة <b>'+fmt(p.newAmount)+'</b></div><div>تأثير الفلوس <b>'+fmt(impact.delta)+'</b></div>'+(impact.agentName?'<div>رصيد '+esc(impact.agentName)+' <b>'+fmt(impact.agentDelta)+'</b></div>':'')+'</div><p class="small">'+esc(impact.description)+'</p><button class="primary" onclick="executeOrder()">تأكيد وتنفيذ</button><button onclick="pendingOrder=null;document.getElementById(\'orderPreview\').innerHTML=\'تم إلغاء العملية.\'">إلغاء</button>';return;
  }
 
- const cardsIndex=cols.findIndex(c=>c.name==='الكروت'), balanceIndex=cols.findIndex(c=>c.name==='الرصيد');
- const cashCols=cols.map((c,i)=>({c,i})).filter(x=>/^كاش/.test(x.c.name));
- const outsideCols=cols.map((c,i)=>({c,i})).filter(x=>/^خارج/.test(x.c.name));
- const accessoryIndex=cols.findIndex(c=>c.name==='الإكسسوار');
+ const cardsIndex=cols.findIndex(c=>columnRole(c)==='cards'), balanceIndex=cols.findIndex(c=>columnRole(c)==='balance');
+ const cashCols=cols.map((c,i)=>({c,i})).filter(x=>columnRole(x.c)==='cash');
+ const outsideCols=cols.map((c,i)=>({c,i})).filter(x=>columnRole(x.c)==='expenses');
+ const accessoryIndex=cols.findIndex(c=>columnRole(c)==='accessory');
  if(cardsIndex<0||balanceIndex<0){out.innerHTML='<p class="small">تعذر تحديد الأعمدة الأساسية. لم يتم تنفيذ أي تغيير.</p>';return}
  if(p.type==='dailyWithdrawal'){
    const target=outsideCols.find(x=>x.c.entries.some(e=>norm(e[0])===norm(p.name)))||outsideCols[0];
@@ -501,12 +555,12 @@ function answerClarification(choice){
  const q=pendingClarification;if(!q)return;
  const out=document.getElementById('orderPreview');
  if(choice==='cancel'){pendingClarification=null;pendingOrder=null;if(out)out.innerHTML='<p class="status">تم إلغاء السؤال والحركة؛ لم يتغير أي رصيد.</p>';return}
- const outsideCols=cols.map((c,i)=>({c,i})).filter(x=>/^خارج/.test(x.c.name));
+ const outsideCols=cols.map((c,i)=>({c,i})).filter(x=>columnRole(x.c)==='expenses');
  const target=outsideCols.find(x=>x.c.entries.length===0)||outsideCols[0];
- const balanceCol=cols.find(c=>c.name==='الرصيد');const balanceIndex=cols.indexOf(balanceCol);
+ const balanceCol=columnByRole('balance');const balanceIndex=cols.indexOf(balanceCol);
  if(!target||!balanceCol){if(out)out.innerHTML='<p class="small">مش لاقي عمود الخارج أو الرصيد. ما اتغيرش أي رقم.</p>';pendingClarification=null;return}
  if(choice==='new'){
-   pendingOrder={type:'outsideAdd',mode:'outsideAdd',name:q.person.name,amount:q.amount,targetIndex:target.i,cardsIndex:cols.findIndex(c=>c.name==='الكروت'),clarificationAnswered:true};
+   pendingOrder={type:'outsideAdd',mode:'outsideAdd',name:q.person.name,amount:q.amount,targetIndex:target.i,cardsIndex:cols.findIndex(c=>columnRole(c)==='cards'),clarificationAnswered:true};
    pendingClarification=null;
    if(out)out.innerHTML=`<div class="reconMini"><div>الإجابة <b>مبلغ جديد مستقل</b></div><div>الاسم <b>${esc(q.person.name)}</b></div><div>المبلغ <b>${fmt(q.amount)} جنيه</b></div><div>التأثير المتوقع <b>خصم ${fmt(q.amount)} جنيه من بند فلوس في الكروت</b></div></div><p class="small">راجع العملية ثم أكدها. لسه مفيش أي تغيير اتسجل.</p><button class="primary" onclick="executeOrder()">تأكيد وتنفيذ</button><button onclick="pendingOrder=null;document.getElementById('orderPreview').innerHTML='تم إلغاء العملية.'">إلغاء</button>`;return;
  }
@@ -533,11 +587,11 @@ function executeOrderCore(){
 
  const setEntry=(ci,idx,val)=>{if(idx>=0)cols[ci].entries[idx][1]=String(val)};
  const addSigned=(ci,label,delta)=>{const entries=cols[ci].entries;let i=entries.findIndex(e=>e[0]===label);if(i<0)entries.push([label,String(delta)]);else setEntry(ci,i,num(entries[i][1])+delta)};
- const addToNamed=(ci,name,delta)=>{const label=cols[ci]?.name==='الرصيد'?normalizeServiceAgentLabel(name):name,agent=cols[ci]?.name==='الرصيد'?canonicalServiceAgent(label):null;let i=agent?cols[ci].entries.findIndex(e=>canonicalServiceAgent(e[0])===agent):findEntry(ci,label);if(i<0)cols[ci].entries.push([label,String(delta)]);else setEntry(ci,i,num(cols[ci].entries[i][1])+delta)};
+ const addToNamed=(ci,name,delta)=>{const isBalance=columnRole(cols[ci])==='balance',label=isBalance?String(name||'').trim():name,agent=isBalance?canonicalServiceAgent(label):null;let i=agent?cols[ci].entries.findIndex(e=>entryRole(cols[ci],e)==='agent:'+agent||canonicalServiceAgent(e[0])===agent):findEntry(ci,label);if(i<0)cols[ci].entries.push([label,String(delta),agent?{role:'agent:'+agent,id:'agent-'+agent}:{}]);else setEntry(ci,i,num(cols[ci].entries[i][1])+delta)};
  const updateRows=(rows,delta)=>{let remaining=delta;for(const r of rows||[]){if(remaining<=0)break;const idx=findEntry(r.ci,r.name);if(idx<0)continue;const cur=num(cols[r.ci].entries[idx][1]),take=Math.min(cur,remaining);setEntry(r.ci,idx,Math.max(0,cur-take));remaining-=take;}return remaining;};
  if(p.mode==='balanceToOutsideTransfer'){
    const bal=cols[p.balanceIndex], target=cols[p.targetIndex];
-   if(!bal||!target||!/^خارج/.test(target.name)){alert('الأعمدة اتغيرت من وقت المراجعة. راجع الأمر من جديد.');pendingOrder=null;return;}
+   if(!bal||!target||columnRole(target)!=='expenses'){alert('الأعمدة اتغيرت من وقت المراجعة. راجع الأمر من جديد.');pendingOrder=null;return;}
    const rows=p.rows||[];let left=p.transfer;
    for(const r of rows){if(left<=0)break;const idx=cols[r.ci]?.entries.findIndex(e=>e[0]===r.name)??-1;if(idx<0)continue;const cur=num(cols[r.ci].entries[idx][1]),take=Math.min(cur,left);cols[r.ci].entries[idx][1]=String(Math.max(0,cur-take));left-=take;}
    if(left>0){alert('رصيد الشخص اتغير من وقت المراجعة. لم أُكمل التسويه؛ راجع الحساب من جديد.');pendingOrder=null;render();return;}
@@ -560,7 +614,7 @@ function executeOrderCore(){
    addLedger('تسجيل بند أكسسوار يومي',`تم تسجيل ${p.product} بقيمة ${fmt(p.amount)} جنيه؛ زادت الفلوس الأساسية فورًا من ${fmt(money.before)} إلى ${fmt(money.after)} جنيه. التسوية تصفّر عمود الإكسسوار فقط.`,{column:'الإكسسوار',entryName:p.product,amount:p.amount,moneyDelta:p.amount});
  }else if(p.mode==='dailyWithdrawal'){
    const target=cols[p.targetIndex];
-   if(!target||!/^خارج/.test(target.name)){alert('مش لاقي عمود خارج مناسب.');return}
+   if(!target||columnRole(target)!=='expenses'){alert('مش لاقي عمود خارج مناسب.');return}
    const money=changeMoney(-p.amount);if(!money.ok){alert(money.message);return}
    addToNamed(p.targetIndex,p.name,p.amount);const withdrawalRow=target.entries.find(e=>e[0]===p.name);if(withdrawalRow)withdrawalRow[2]={moneyPosted:true};
    addLedger('سحب يومي من الكاش/الأكسسوار',`تم تسجيل سحب ${fmt(p.amount)} جنيه باسم ${p.name} في ${target.name} وخصمه من الفلوس الأساسية فورًا. التسوية تصفّر السحب فقط من غير خصم تاني.`,{column:target.name,entryName:p.name,amount:p.amount,moneyDelta:-p.amount});
@@ -581,12 +635,12 @@ function executeOrderCore(){
   if(!moneyCheck){alert('مش لاقي بند الفلوس الأساسية. لم يتغير حساب الشخص.');pendingOrder=null;return}
   if(num(moneyCheck.entry[1])<moneyToDeduct){alert('الفلوس الأساسية أقل من المبلغ المطلوب تسويته من الرصيد. لم يتغير أي حساب.');pendingOrder=null;return}
   const remaining=updateRows(p.person.balanceRows,p.paid);if(remaining>0){alert('الرصيد تغيّر أثناء المراجعة. راجع الأمر من جديد.');pendingOrder=null;return}
-  if(p.excess>0){const target=cols[p.outsideTargetIndex];if(!target||!/^خارج/.test(target.name)){alert('مش لاقي عمود خارج لتسجيل الزيادة. راجع الحساب.');return}addToNamed(p.outsideTargetIndex,p.name,p.excess)}
+  if(p.excess>0){const target=cols[p.outsideTargetIndex];if(!target||columnRole(target)!=='expenses'){alert('مش لاقي عمود خارج لتسجيل الزيادة. راجع الحساب.');return}addToNamed(p.outsideTargetIndex,p.name,p.excess)}
   const money=changeMoney(-moneyToDeduct);if(!money.ok){alert(money.message);return}const moneyDelta=-moneyToDeduct;
   addLedger('صرف/تسوية رصيد مندوب',p.name+' استلم '+fmt(p.amount)+' جنيه؛ اتسوى '+fmt(p.paid)+' من الرصيد. '+(serviceAgent?'تم خصم المبلغ المشطوب من رصيد المندوب من الفلوس الأساسية.':'تم خصم المبلغ المدفوع من الفلوس مرة واحدة.'),{column:'الرصيد والخارج',entryName:p.name,paid:p.amount,settled:p.paid,excess:p.excess,moneyDelta});
 
  }else if(p.mode==='outgoing'){
-   const target=p.rows.find(r=>/^خارج/.test(cols[r.ci].name))?.ci ?? cols.findIndex(c=>c.name==='خارج 1');
+   const target=p.rows.find(r=>columnRole(cols[r.ci])==='expenses')?.ci ?? cols.findIndex(c=>columnRole(c)==='expenses');
    if(target<0){alert('مش لاقي عمود خارج مناسب.');return}
    addToNamed(target,p.name,p.amount);
    const money=changeMoney(-p.amount); if(!money.ok){alert(money.message);return;}
@@ -696,6 +750,16 @@ window.addEventListener('message',function(event){
  if(dagaLiveOrderPending){
   sendLiveOrderReply(event.source,id,'لسه مستني تأكيد أو إلغاء العملية المعروضة. قول «أيوه نفّذ» أو «إلغاء».',true);return;
  }
+ const columnQuestion=/(كام|مجموع|اجمالي|إجمالي|قد ايه|قد إيه|رصيد|حساب|الموجود)/u.test(text)&&/(خارج|الرصيد|كاش|اكسسوار|اكسسوار|الكروت|الفلوس)/u.test(text);
+ if(columnQuestion){
+  voiceDaga();
+  const command=document.getElementById('cmd');
+  if(!command){sendLiveOrderReply(event.source,id,'مش قادر أقرأ الداشبورد دلوقتي.',true);return;}
+  command.value=text;review();
+  const answer=String(document.getElementById('orderPreview')?.innerText||'').trim();
+  sendLiveOrderReply(event.source,id,answer||'مش قادر أطلع إجمالي واضح من البيانات الحالية.',true);
+  return;
+ }
  const parsed=parseOrder(text);
  if(!parsed){sendLiveOrderReply(event.source,id,'',false);return;}
  voiceDaga();
@@ -725,35 +789,40 @@ function serviceAgentForCardEntry(name){
  const n=normAccountingName(name).replace(/^ال(?=رصيد)/,'');
  if(['رصيد اساسي','كارت وهوا','كارت هوا','كارت هواء','كاش اوت'].includes(n))return 'فوري';
  if(n==='ممكن')return 'ممكن';
- if(['سوبر باي','سوبر بي'].includes(n))return 'سوبر بي';
+ if(['سوبر باي','سوبر بي','super pay','superpay'].includes(n))return 'سوبر بي';
  return null;
 }
 function serviceCardEntryMentioned(command,name){
  const c=normAccountingName(command),n=normAccountingName(name);
  if(!n||!c)return false;
  const variants=new Set([n,n.replace(/^ال(?=رصيد)/,''),n.replace(/^رصيد(?= )/,'الرصيد')]);
- if(serviceAgentForCardEntry(name)==='فوري'){
+ const owner=serviceAgentForCardEntry(name);
+ if(owner==='فوري'){
+  // "فوري" is the owning agent name for all three card rows, so spoken machine
+  // references must resolve even when the user does not say the card sub-entry.
+  variants.add('فوري');variants.add('مندوب فوري');variants.add('ماكينة فوري');
   if(n.includes('رصيد')){variants.add('رصيد اساسي');variants.add('الرصيد الاساسي');}
   if(n.includes('كارت')){variants.add('كارت وهوا');variants.add('كارت هوا');variants.add('كارت هواء');}
   if(n.includes('كاش'))variants.add('كاش اوت');
- }
+ }else if(owner==='ممكن'){variants.add('ماكينة ممكن');}
+ else if(owner==='سوبر بي'){variants.add('سوبر بي');variants.add('سوبر باي');variants.add('ماكينة سوبر بي');}
  for(const v of variants){if(v&&c.includes(v))return true;}
  return false;
 }
 function getServiceAgentBalance(agent){
  const canonical=canonicalServiceAgent(agent);if(!canonical)return {column:null,index:-1,entry:null,value:0};
- const column=cols.find(c=>c.name==='الرصيد');if(!column)return {column:null,index:-1,entry:null,value:0};
+ const column=columnByRole('balance');if(!column)return {column:null,index:-1,entry:null,value:0};
  const aliases=canonical==='فوري'?['فوري','فورى']:canonical==='سوبر بي'?['سوبر بي','سوبر باي','سوبر باى']:['ممكن'];
- const indexes=column.entries.map((e,i)=>({e,i})).filter(x=>aliases.includes(normAccountingName(x.e[0])));
+ const role='agent:'+canonical;const indexes=column.entries.map((e,i)=>({e,i})).filter(x=>entryRole(column,x.e)===role||aliases.includes(normAccountingName(x.e[0])));
  const index=indexes.length?indexes[0].i:-1,entry=index>=0?column.entries[index]:null;
  const value=indexes.length?indexes.reduce((sum,x)=>sum+num(x.e[1]),0):0;
  return {column,index,entry,value,indexes};
 }
-function applyServiceAgentDelta(agent,delta){
+function applyServiceAgentDelta(agent,delta,label){
  const state=getServiceAgentBalance(agent);if(!delta)return {ok:true,before:state.value,after:state.value};
  if(!state.column)return {ok:false,message:'مش لاقي عمود الرصيد لتحديث المندوب '+agent+'.'};
  const after=state.value+delta;if(after<0)return {ok:false,message:'تعديل رصيد المندوب '+agent+' هيخلي رصيده بالسالب. راجع القيمة.'};
- if(state.index<0)state.column.entries.push([canonicalServiceAgent(agent),String(after)]);
+ if(state.index<0)state.column.entries.push([canonicalServiceAgent(agent),String(after),{role:'agent:'+canonicalServiceAgent(agent),id:'agent-'+canonicalServiceAgent(agent)}]);
  else{
   state.entry[0]=canonicalServiceAgent(agent);state.entry[1]=String(after);
   (state.indexes||[]).slice(1).sort((a,b)=>b.i-a.i).forEach(x=>state.column.entries.splice(x.i,1));
@@ -761,11 +830,19 @@ function applyServiceAgentDelta(agent,delta){
  return {ok:true,before:state.value,after};
 }
 function normalizeServiceAgentLabel(name){return canonicalServiceAgent(name)||String(name||'').trim();}
+function syncServiceAgentLabel(agent,label){
+ if(!label)return;const canonical=canonicalServiceAgent(agent);if(!canonical)return;
+ const state=getServiceAgentBalance(canonical);
+ if(state.column&&state.index>=0){state.entry[0]=canonical;if(!state.entry[2]||typeof state.entry[2]!=='object')state.entry[2]={};state.entry[2].role='agent:'+canonical;}
+ const cards=columnByRole('cards');
+ const cardEntry=cards?.entries.find(e=>entryRole(cards,e)==='card-agent:'+canonical);
+ if(cardEntry)cardEntry[0]=String(label);
+}
 function getDailyClosePlan(){
  const money=findMoneyEntry(),moneyBefore=money?num(money.entry[1]):null;
- const cashCols=cols.map((c,i)=>({c,i})).filter(x=>/^كاش/.test(x.c.name));
- const accessoryCols=cols.map((c,i)=>({c,i})).filter(x=>normAccountingName(x.c.name)==='الاكسسوار');
- const outsideCols=cols.map((c,i)=>({c,i})).filter(x=>/^خارج/.test(x.c.name));
+ const cashCols=cols.map((c,i)=>({c,i})).filter(x=>columnRole(x.c)==='cash');
+ const accessoryCols=cols.map((c,i)=>({c,i})).filter(x=>columnRole(x.c)==='accessory');
+ const outsideCols=cols.map((c,i)=>({c,i})).filter(x=>columnRole(x.c)==='expenses');
  const isCashName=n=>['كاش','الكاش','كاش اليوم','سحب كاش','الكاش اليوم'].includes(normAccountingName(n));
  const isAccessoryName=n=>['اكسسوار','الاكسسوار','اكسسوارات','اكسسوارات اليوم'].includes(normAccountingName(n));
  const sumRows=arr=>arr.reduce((sum,x)=>sum+x.c.entries.reduce((a,e)=>a+num(e[1]),0),0);
@@ -948,7 +1025,7 @@ async function bootAuthenticatedDashboard(token,selectedCompanyId){
   document.querySelectorAll('button[onclick="voiceDaga()"]').forEach(b=>{b.hidden=!smartAllowed;b.disabled=!smartAllowed;b.title=smartAllowed?'':'زر كلم ضجة متاح بعد تفعيل اشتراك DAGA للشركة.';b.setAttribute('aria-disabled',String(!smartAllowed));});
   document.querySelectorAll('button.liveBtn').forEach(b=>{b.hidden=!liveAllowed;b.disabled=!liveAllowed;b.title='LIVE DAGA متاحة؛ يلزم وجود رصيد حروف للتحدث.';b.setAttribute('aria-disabled',String(!liveAllowed));});
   document.querySelectorAll('button[onclick="showReports()"]').forEach(b=>{b.hidden=false;b.disabled=false;b.title=window.DAGA_AUTH_USER.historyEnabled?'':'تفاصيل الأيام السابقة متاحة بعد تفعيل اشتراك DAGA للشركة.';});
-  loadStoreData(company.id);migrateLegacyDailyAccounting();
+  loadStoreData(company.id);migrateLegacyDailyAccounting();loadCompanyLayoutLabels(company.id,window.DAGA_SESSION_TOKEN);
   const header=document.querySelector('header.top .row');
   if(header&&!document.getElementById('accountLogout')){const b=document.createElement('button');b.id='accountLogout';b.type='button';b.textContent='تسجيل الخروج';b.style.cssText='margin:0 10px;padding:8px 11px;border:1px solid #4a402c;border-radius:9px;background:#15120c;color:#d7ad57;font:inherit;font-size:12px;cursor:pointer';b.addEventListener('click',async()=>{b.disabled=true;try{await fetch('/api/company/auth/logout',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:'{}',cache:'no-store',credentials:'omit'});}finally{window.location.replace('/shop-access/');}});header.insertBefore(b,header.lastElementChild);}
   render();

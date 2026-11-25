@@ -5,7 +5,7 @@ const DEFAULT_INVITE_TTL_HOURS = 72;
 export async function handleCompanyInvitations(request, env, url) {
   const path = url.pathname.replace(/\/+$/, "") || "/";
   const publicPaths = ["/api/company/auth/register", "/api/company/auth/register/verify", "/api/company/auth/login", "/api/company/auth/setup/start", "/api/company/auth/setup/verify", "/api/company/auth/recovery/start", "/api/company/auth/recovery/complete"];
-  const accountPaths = ["/api/company/auth/me", "/api/company/auth/logout"];
+  const accountPaths = ["/api/company/auth/me", "/api/company/auth/logout", "/api/company/layout-labels"];
   const isInvitationIdPath = /^\/api\/company\/invitations\/[0-9a-f-]{36}(?:\/revoke)?$/i.test(path);
   const isMemberPermissionPath = /^\/api\/company\/members\/[0-9a-f-]{36}\/permissions$/i.test(path);
   const isMembersPath = path === "/api/company/members";
@@ -36,6 +36,30 @@ export async function handleCompanyInvitations(request, env, url) {
   if (!account) return json(env, { error: "authenticated_account_required" }, 401);
   if (account.status !== "approved" || account.role === "program_owner") return json(env, { error: "active_company_account_required" }, 403);
   if (path === "/api/company/auth/me" && request.method === "GET") return companyAccountMe(env, db, account);
+  if(path==="/api/company/layout-labels"&&request.method==="PUT"){
+    const body=await safeJson(request);
+    if(!body)return json(env,{error:"invalid_json"},400);
+    const storeId=String(body.storeId||"").trim(),targetKey=String(body.targetKey||"").trim(),displayName=String(body.displayName||"").trim().slice(0,80);
+    if(!/^[a-f0-9-]{36}$/i.test(storeId)||! /^(column|entry):[A-Za-z0-9_-]{3,120}$/.test(targetKey)||!displayName)return json(env,{error:"invalid_store_label"},400);
+    const store=await db.prepare("SELECT id,owner_account_id FROM daga_stores WHERE id=? AND status='approved'").bind(storeId).first();
+    if(!store||account.role!=="store_owner"||store.owner_account_id!==account.id)return json(env,{error:"company_owner_required"},403);
+    const now=new Date().toISOString();
+    await db.prepare("INSERT INTO daga_store_layout_labels (id,store_id,target_key,display_name,updated_by,updated_at) VALUES (?,?,?,?,?,?) ON CONFLICT(store_id,target_key) DO UPDATE SET display_name=excluded.display_name,updated_by=excluded.updated_by,updated_at=excluded.updated_at").bind(crypto.randomUUID(),storeId,targetKey,displayName,account.id,now).run();
+    await audit(db,account.id,"company_layout_label_updated","daga_store_layout_labels",storeId,{targetKey});
+    return json(env,{ok:true,storeId,targetKey,displayName});
+  }
+  if(path==="/api/company/layout-labels"&&request.method==="GET"){
+    const storeId=String(url.searchParams.get("storeId")||"").trim();
+    if(!storeId)return json(env,{error:"storeId_required"},400);
+    const store=await db.prepare("SELECT id,owner_account_id FROM daga_stores WHERE id=? AND status='approved'").bind(storeId).first();
+    if(!store)return json(env,{error:"company_not_found"},404);
+    const owns=account.role==="store_owner"&&store.owner_account_id===account.id;
+    const member=owns?null:await db.prepare("SELECT id FROM daga_store_memberships WHERE store_id=? AND account_id=? AND status='active' LIMIT 1").bind(storeId,account.id).first();
+    if(!owns&&!member)return json(env,{error:"company_membership_required"},403);
+    const rows=await db.prepare("SELECT target_key,display_name FROM daga_store_layout_labels WHERE store_id=? ORDER BY target_key").bind(storeId).all();
+    return json(env,{ok:true,labels:Object.fromEntries((rows.results||[]).map(x=>[x.target_key,x.display_name]))});
+  }
+
   if (path === "/api/company/auth/logout" && request.method === "POST") return companyAccountLogout(request, env, db);
 
   try {
