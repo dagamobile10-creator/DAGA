@@ -483,7 +483,7 @@ function review(){
  // A named-person inquiry has priority over a generic column-total question.
  // This prevents phrases like "مدحت اللي عليه في الخارج واللي ليه في الرصيد كام"
  // from dumping every row in all outside columns.
- const inquiryIntent=/(شوف|شوفلي|شوف لي|عليه كام|عليها كام|ليه كام|لي كام|حسابه|حسابها|كشف حساب|رصيده كام|عليه قد ايه|عليه اد ايه|كام عليه|اللي عليه|اللي ليه|من اللي عليه|من اللي ليه|فلوس في عمود الرصيد|فلوس في الخارج|عليه فلوس في الخارج|ليه فلوس في الرصيد|الفرق بين|المفروض يبقوا|الاتنين واحد|اجمعهم|اجمع لي|اجمالي باسم|مجموع باسم)/.test(q);
+ const inquiryIntent=/(شوف|شوفلي|شوف لي|عليه كام|عليها كام|ليه كام|لي كام|حسابه|حسابها|كشف حساب|رصيده كام|عليه قد ايه|عليه اد ايه|كام عليه|اللي عليه|اللي ليه|من اللي عليه|من اللي ليه|فلوس في عمود الرصيد|فلوس في الخارج|عليه فلوس في الخارج|ليه فلوس في الرصيد|الفرق بين|المفروض يبقوا|الاتنين واحد|اجمعهم|اجمع لي|اجمالي باسم|مجموع باسم|تسويه|اسوي|اعمل تسويه|نعمل تسويه)/.test(q);
  const writeIntent=/(اكتب|تكتب|عايزك|سجل|ضيف|اضيف|زود|ارفع|حط|دخل|نفذ)/.test(q);
  const asksNamedLedger=/(خارج|برا|الرصيد)/.test(q)&&/(كام|مجموع|اجمالي|حساب|عليه|اللي عليه|اللي ليه|المفروض يبقوا|الاتنين واحد|اجمعهم|اجمع لي)/.test(q)&&!writeIntent;
  if(asksNamedLedger||(/(المفروض يبقوا|الاتنين واحد|اجمعهم|اجمع لي)/.test(q)&&!writeIntent)){
@@ -547,7 +547,7 @@ function review(){
  if(inquiryIntent){
    const names=[];
    cols.forEach((c,ci)=>{if(columnRole(c)==='expenses'||columnRole(c)==='balance')c.entries.forEach(e=>{if(e[0]&&!names.some(x=>qnorm(x.name)===qnorm(e[0])))names.push({name:e[0]})})});
-   const matched=names.filter(x=>q.includes(qnorm(x.name))).sort((a,b)=>qnorm(b.name).length-qnorm(a.name).length);
+   const paddedQuery=' '+q+' ';const matched=names.filter(x=>{const key=qnorm(x.name);return key&&paddedQuery.includes(' '+key+' ')}).sort((a,b)=>qnorm(b.name).length-qnorm(a.name).length);
    if(!matched.length){out.innerHTML='<p class="small">فهمت إنك بتسأل عن حساب شخص، لكن مش لاقي اسمًا مطابقًا في أعمدة الخارج أو الرصيد. اكتب الاسم زي ما هو ظاهر في الحساب.</p>';return}
    const personName=matched[0].name, key=qnorm(personName);
    const outside=[],balance=[];
@@ -1010,6 +1010,22 @@ window.addEventListener('message',function(event){
   dagaLivePendingDelete={ci:targetCol.ci,index:matches[0].ei,name:String(entry[0]),amount:num(entry[1]),impactDelta:impact.delta,moneyBefore:money?num(money.entry[1]):null};
   dagaLiveOrderPending=true;dagaLiveOrderSummary='حذف '+String(entry[2]?.adminLabel||entry[0])+' من '+(targetCol.c.adminLabel||targetCol.c.name);
   sendLiveOrderReply(event.source,id,'مراجعة حذف داخل LIVE: البند '+String(entry[2]?.adminLabel||entry[0])+' في عمود '+(targetCol.c.adminLabel||targetCol.c.name)+'. القيمة الحالية '+fmt(num(entry[1]))+' جنيه. تأثير الفلوس الأساسية '+fmt(impact.delta)+' جنيه. هل تؤكد الحذف؟ قول أيوه نفّذ أو إلغاء. لم يتم الحذف بعد.',true);return;
+ }
+ const accountQuestion=/(تسويه|تسويه|اسوي|سوي|نعمل تسويه|اعمل حساب|كشف حساب|عليه كام|عليها كام|ليه كام|لي كام|حسابه|حسابها)/u.test(normAccountingName(text));
+ if(accountQuestion){
+  const q=normAccountingName(text),padded=' '+q+' ',names=[];
+  cols.forEach(c=>{if(columnRole(c)==='expenses'||columnRole(c)==='balance')(c.entries||[]).forEach(e=>{const name=String(e[0]||'').trim(),key=normAccountingName(name);if(key&&!names.some(x=>normAccountingName(x)===key))names.push(name);});});
+  const matched=names.filter(name=>{const key=normAccountingName(name);return key&&padded.includes(' '+key+' ')}).sort((a,b)=>normAccountingName(b).length-normAccountingName(a).length);
+  if(!matched.length){sendLiveOrderReply(event.source,id,'مش لاقي اسمًا مطابقًا في أعمدة الرصيد أو الخارج. اكتب الاسم زي ما هو ظاهر في الدفتر. مفيش أي حركة اتسجلت.',true);return;}
+  const longest=normAccountingName(matched[0]).length,top=matched.filter(name=>normAccountingName(name).length===longest);
+  if(top.length!==1){sendLiveOrderReply(event.source,id,'لقيت أكتر من اسم محتمل: '+top.join('، ')+'. حدّد الاسم كاملًا قبل ما أراجع الحساب. مفيش أي حركة اتسجلت.',true);return;}
+  const person=top[0],key=normAccountingName(person),outside=[],balance=[];
+  cols.forEach(c=>(c.entries||[]).forEach(e=>{if(normAccountingName(e[0])===key){const row={column:String(c.adminLabel||c.name),amount:num(e[1])};if(columnRole(c)==='expenses')outside.push(row);if(columnRole(c)==='balance')balance.push(row);}}));
+  const outsideTotal=outside.reduce((sum,x)=>sum+x.amount,0),balanceTotal=balance.reduce((sum,x)=>sum+x.amount,0),net=outsideTotal-balanceTotal;
+  const netText=net>0?'صافي الخارج عليه بعد خصم رصيده '+fmt(net)+' جنيه':net<0?'صافي المستحق له بعد خصم الخارج '+fmt(-net)+' جنيه':'حسابه متساوي: مفيش فرق بين الرصيد والخارج';
+  const detail=[...balance.map(x=>'الرصيد — '+x.column+': '+fmt(x.amount)+' جنيه'),...outside.map(x=>'الخارج — '+x.column+': '+fmt(x.amount)+' جنيه')];
+  const reply='راجعت الدفتر نفسه، وده حساب '+person+': إجمالي الرصيد له '+fmt(balanceTotal)+' جنيه، وإجمالي الخارج عليه '+fmt(outsideTotal)+' جنيه. '+netText+'. '+(detail.length?detail.join('؛ '):'ملقتش له أي قيود في الرصيد أو الخارج.')+'. دي قراءة فقط؛ لم يتم تعديل أي رقم. لو عايز تسوية، هعرض لك طريقة التسوية وتأثيرها على الفلوس الأساسية قبل التأكيد.';
+  sendLiveOrderReply(event.source,id,reply,true);return;
  }
  const columnQuestion=/(كام|مجموع|اجمالي|إجمالي|قد ايه|قد إيه|حساب|الموجود|عليه كام|رصيده كام)/u.test(text)&&/(خارج|الرصيد|كاش|اكسسوار|الاكسسوار|الكروت|الفلوس)/u.test(text)&&!/(اكتب|تكتب|عايزك|سجل|ضيف|اضيف|زود|ارفع|حط|نفذ|نفّذ)/u.test(text);
  if(columnQuestion){
