@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.dagamobile10.daga',
-  appName: 'DAGA Staging',
+  appName: 'ضجّة',
   webDir: 'www',
   server: {
     url: 'https://daga-app-staging.dagamobile10.workers.dev/',
