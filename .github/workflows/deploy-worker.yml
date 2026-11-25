@@ -77,6 +77,24 @@ jobs:
           echo "$applied" | jq -e '.success == true' >/dev/null
           echo "Persistent D1 memory database and table are ready."
 
+      - name: Provision production application D1 database and apply schema migrations
+        env:
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          endpoint="https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/d1/database"
+          listing="$(curl -fsS -G -H "Authorization: Bearer $CF_API_TOKEN" --data-urlencode "name=daga-app-live" "$endpoint")"
+          db_id="$(echo "$listing" | jq -r '.result[]? | select(.name=="daga-app-live") | .uuid' | head -n1)"
+          if [ -z "$db_id" ] || [ "$db_id" = "null" ]; then
+            created="$(curl -fsS -X POST "$endpoint" -H "Authorization: Bearer $CF_API_TOKEN" -H "Content-Type: application/json" --data '{"name":"daga-app-live"}')"
+            echo "$created" | jq -e '.success == true' >/dev/null
+            db_id="$(echo "$created" | jq -r '.result.uuid')"
+          fi
+          test -n "$db_id" && test "$db_id" != "null"
+          printf '\n[[d1_databases]]\nbinding = "DAGA_APP_DB"\ndatabase_name = "daga-app-live"\ndatabase_id = "%s"\nmigrations_dir = "migrations"\n' "$db_id" >> wrangler.toml
+          npx --yes wrangler@3.90.0 d1 migrations apply daga-app-live --remote --config wrangler.toml
+          echo "Production application D1 schema migrations are applied."
       - name: Inspect LiveAvatar binding metadata without reading values
         env:
           CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -116,6 +134,29 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: deploy
 
+      - name: Configure required production authentication, email, and voice secrets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          DAGA_OTP_PEPPER: ${{ secrets.DAGA_OTP_PEPPER }}
+          DAGA_OWNER_BOOTSTRAP_TOKEN: ${{ secrets.DAGA_OWNER_BOOTSTRAP_TOKEN }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          DAGA_EMAIL_FROM: ${{ secrets.DAGA_EMAIL_FROM }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+        run: |
+          set -euo pipefail
+          missing=()
+          for name in DAGA_OTP_PEPPER DAGA_OWNER_BOOTSTRAP_TOKEN RESEND_API_KEY DAGA_EMAIL_FROM ELEVENLABS_API_KEY; do
+            if [ -z "${!name:-}" ]; then missing+=("$name"); fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::Missing required production secrets: ${missing[*]}"
+            exit 1
+          fi
+          for name in DAGA_OTP_PEPPER DAGA_OWNER_BOOTSTRAP_TOKEN RESEND_API_KEY DAGA_EMAIL_FROM ELEVENLABS_API_KEY; do
+            printf '%s' "${!name}" | npx --yes wrangler@3.90.0 secret put "$name" --name daga-voice --config wrangler.toml
+          done
+          echo "Required production secrets are configured without exposing their values."
       - name: Restore recovered LiveAvatar key as a Worker secret
         if: env.LIVEAVATAR_RECOVERED_KEY != ''
         env:
