@@ -194,5 +194,54 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn("historyEnabled: storeEnabled", auth)
         self.assertIn('store_or_live_subscription_required', worker)
 
+    def test_live_order_balance_commands_are_not_misclassified_as_balance_questions(self):
+        dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
+        self.assertIn("const columnQuestion=/(كام|مجموع|اجمالي|إجمالي|قد ايه|قد إيه|حساب|الموجود|عليه كام|رصيده كام)/u", dashboard)
+        self.assertIn("!/(اكتب|تكتب|عايزك|سجل|ضيف|اضيف|زود|ارفع|حط|نفذ|نفّذ)/u.test(text)", dashboard)
+        self.assertIn("balanceWrite", dashboard)
+        self.assertIn("|عمود|العمود|الخارج|خارج|جنيه|جنيهات)", dashboard)
+
+    def test_owner_can_revoke_manager_or_employee_access_and_sessions(self):
+        invitations = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
+        dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
+        self.assertIn("isMemberRemovalPath", invitations)
+        self.assertIn('request.method === "DELETE"', invitations)
+        self.assertIn("removeCompanyMember(request, env, db, account", invitations)
+        self.assertIn("SET status='removed'", invitations)
+        self.assertIn("UPDATE daga_auth_sessions SET revoked_at=?", invitations)
+        self.assertIn("data-remove-team-member", dashboard)
+        self.assertIn("حذف العضو وإلغاء الوصول", dashboard)
+
+    def test_company_subscription_is_single_tier_and_live_daga_is_character_addon(self):
+        portal = (ROOT / "company" / "portal.html").read_text(encoding="utf-8")
+        owner = (ROOT / "owner-console.html").read_text(encoding="utf-8")
+        self.assertIn('option value="store">اشتراك الشركة — النظام الكامل', portal)
+        self.assertIn('option value="live_daga">إضافة LIVE ضجّة — رصيد حروف', portal)
+        self.assertIn("features={tier:'single',smartAssistantEnabled:true,historyEnabled:true}", owner)
+        self.assertNotIn("مستوى اشتراك الشركه:", owner)
+
+    def test_support_whatsapp_uses_owner_configured_contact_not_company_number(self):
+        worker = (ROOT / "worker.js").read_text(encoding="utf-8")
+        admin = (ROOT / "owner-admin.js").read_text(encoding="utf-8")
+        dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
+        self.assertIn('url.pathname === "/api/support/contact"', worker)
+        self.assertIn('/owner/admin/support-contact', admin)
+        self.assertIn('location.origin+"/api/support/contact"', dashboard)
+        self.assertNotIn('const phone="201020124846"', dashboard)
+
+    def test_company_password_recovery_uses_email_otp_and_new_password_only(self):
+        invitations = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
+        owner_auth = (ROOT / "owner-auth.js").read_text(encoding="utf-8")
+        portal = (ROOT / "company" / "portal.html").read_text(encoding="utf-8")
+        owner_console = (ROOT / "owner-console.html").read_text(encoding="utf-8")
+        self.assertIn('emailCode=String(body.emailCode||"").trim(),newPassword=String(body.newPassword||"")', invitations)
+        self.assertNotIn("recoveryCode.length", invitations)
+        self.assertNotIn("oldRecovery", owner_auth)
+        self.assertNotIn("newRecovery", owner_auth)
+        self.assertNotIn('id="recoveryOldCode"', portal)
+        self.assertNotIn('id="recoveryNewCode"', portal)
+        self.assertNotIn('id="recoveryOldCode"', owner_console)
+        self.assertNotIn('id="recoveryNewCode"', owner_console)
+
 if __name__ == "__main__":
     unittest.main()
