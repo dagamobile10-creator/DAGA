@@ -168,14 +168,17 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn("رقم واتساب الشركة للتواصل والدعم (اختياري)", portal)
         self.assertNotIn('id="onboardingContactPhone" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" required', portal)
 
-    def test_company_support_whatsapp_uses_selected_company_contact_not_app_owner(self):
+    def test_company_support_whatsapp_uses_owner_configured_support_contact(self):
         profile = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
         self.assertIn("s.contact_phone", profile)
         self.assertIn("contactPhone: row.contact_phone || \"\"", profile)
         dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
         self.assertIn("contactPhone:company.contactPhone||''", dashboard)
-        self.assertIn("String(user.contactPhone||\"\")", dashboard)
-        self.assertIn('const url="https://wa.me/"+phone', dashboard)
+        self.assertIn('location.origin+"/api/support/contact"', dashboard)
+        self.assertIn('const phone=String(data.whatsapp||"").replace', dashboard)
+        self.assertNotIn('const phone="201020124846"', dashboard)
+        owner = (ROOT / "owner-console.html").read_text(encoding="utf-8")
+        self.assertIn("/owner/admin/support-contact", owner)
 
     def test_live_page_uses_shop_owner_login_and_resolves_store_identity(self):
         live = (ROOT / "index.html").read_text(encoding="utf-8")
