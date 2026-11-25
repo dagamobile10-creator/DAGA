@@ -1,0 +1,86 @@
+name: DAGA Android staging APK
+
+on:
+  push:
+    branches:
+      - release/daga-android-candidate
+    paths:
+      - "package.json"
+      - "capacitor.config.ts"
+      - "www/**"
+      - ".github/workflows/android-build.yml"
+      - "shop-dashboard-v30.html"
+      - "index.html"
+      - "worker.js"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout release candidate
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Generate Android project
+        env:
+          DAGA_APP_URL: https://daga-app-staging.dagamobile10.workers.dev
+        run: |
+          npx cap add android
+          npx cap sync android
+
+      - name: Add Android runtime permissions
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("android/app/src/main/AndroidManifest.xml")
+          s = p.read_text(encoding="utf-8")
+          marker = "<manifest"
+          if marker not in s:
+              raise SystemExit("Android manifest is missing")
+          permissions = [
+              '    <uses-permission android:name="android.permission.INTERNET" />',
+              '    <uses-permission android:name="android.permission.RECORD_AUDIO" />',
+              '    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />',
+              '    <uses-permission android:name="android.permission.CAMERA" />'
+          ]
+          for permission in permissions:
+              if permission not in s:
+                  s = s.replace("<application", "\\n".join(permissions) + "\\n    <application", 1)
+          p.write_text(s, encoding="utf-8")
+          PY
+          grep -q 'android.permission.RECORD_AUDIO' android/app/src/main/AndroidManifest.xml
+          grep -q 'android.permission.CAMERA' android/app/src/main/AndroidManifest.xml
+
+      - name: Run existing DAGA regression tests
+        run: |
+          python3 -m py_compile tests/test_*.py
+          for test in tests/test_*.py; do
+            echo "Running $test"
+            python3 "$test"
+          done
+
+      - name: Build debug APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleDebug
+
+      - name: Upload staging APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: DAGA-Android-Staging-Debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
