@@ -470,7 +470,7 @@ function review(){
  // A named-person inquiry has priority over a generic column-total question.
  // This prevents phrases like "مدحت اللي عليه في الخارج واللي ليه في الرصيد كام"
  // from dumping every row in all outside columns.
- const inquiryIntent=/(شوف|شوفلي|شوف لي|عليه كام|عليها كام|حسابه|حسابها|كشف حساب|رصيده كام|عليه قد ايه|عليه اد ايه|كام عليه|اللي عليه|اللي ليه|من اللي عليه|من اللي ليه|فلوس في عمود الرصيد|فلوس في الخارج|عليه فلوس في الخارج|ليه فلوس في الرصيد|الفرق بين|المفروض يبقوا|الاتنين واحد|اجمعهم|اجمع لي|اجمالي باسم|مجموع باسم)/.test(q);
+ const inquiryIntent=/(شوف|شوفلي|شوف لي|عليه كام|عليها كام|ليه كام|لي كام|حسابه|حسابها|كشف حساب|رصيده كام|عليه قد ايه|عليه اد ايه|كام عليه|اللي عليه|اللي ليه|من اللي عليه|من اللي ليه|فلوس في عمود الرصيد|فلوس في الخارج|عليه فلوس في الخارج|ليه فلوس في الرصيد|الفرق بين|المفروض يبقوا|الاتنين واحد|اجمعهم|اجمع لي|اجمالي باسم|مجموع باسم)/.test(q);
  const writeIntent=/(اكتب|تكتب|عايزك|سجل|ضيف|اضيف|زود|ارفع|حط|دخل|نفذ)/.test(q);
  const asksNamedLedger=/(خارج|برا|الرصيد)/.test(q)&&/(كام|مجموع|اجمالي|حساب|عليه|اللي عليه|اللي ليه|المفروض يبقوا|الاتنين واحد|اجمعهم|اجمع لي)/.test(q)&&!writeIntent;
  if(asksNamedLedger||(/(المفروض يبقوا|الاتنين واحد|اجمعهم|اجمع لي)/.test(q)&&!writeIntent)){
@@ -598,6 +598,10 @@ function review(){
    if(moneyDelta!==0&&!money){out.innerHTML='<p class="status">مش لاقي بند الفلوس الأساسية؛ لم يتم تجهيز العملية.</p>';return;}
    if(money&&num(money.entry[1])+moneyDelta<0){out.innerHTML='<p class="status">إضافة الرصيد هتخلي الفلوس الأساسية بالسالب. راجع المبلغ.</p>';return;}
    const currentBalance=serviceAgent?getServiceAgentBalance(serviceAgent).value:(cols[balanceIndex]?.entries||[]).filter(e=>normAccountingName(e[0])===normAccountingName(p.name)).reduce((sum,e)=>sum+num(e[1]),0);
+   if(currentBalance>0){
+    pendingOrder=null;pendingClarification={type:'balanceAddChoice',name:p.name,amount:p.amount,currentBalance,serviceAgent,balanceIndex,moneyBefore:money?num(money.entry[1]):null};
+    out.innerHTML=`<div class="reconMini"><div>الاسم <b>${esc(p.name)}</b></div><div>الرصيد الحالي قبل الأمر <b>${fmt(currentBalance)} جنيه</b></div><div>المبلغ اللي طلبته <b>${fmt(p.amount)} جنيه</b></div></div><p class="small">لقيت رصيدًا موجودًا بالفعل باسم ${esc(p.name)}. تقصد أضيف ${fmt(p.amount)} جنيه فوق الموجود فيبقى الإجمالي ${fmt(currentBalance+p.amount)} جنيه، ولا تقصد إن إجمالي الرصيد يبقى ${fmt(p.amount)} جنيه بدل ${fmt(currentBalance)}؟</p><button class="primary" onclick="answerClarificationFromText('أضف فوق الموجود')">أضف فوق الموجود</button><button onclick="answerClarificationFromText('خلي الإجمالي هو المبلغ الجديد')">خلي الإجمالي ${fmt(p.amount)}</button><button onclick="answerClarificationFromText('إلغاء')">إلغاء</button>`;return;
+   }
    pendingOrder={...p,mode:'balanceAdd',balanceIndex,cardsIndex,serviceAgent,moneyDelta,moneyBefore:money?num(money.entry[1]):null,currentBalance};
    out.innerHTML=`<div class="reconMini"><div><span>تاريخ ووقت المراجعة</span><b>${esc(localStamp())}</b></div><div><span>الأمر المفهوم</span><b>إضافة ${fmt(p.amount)} جنيه في الرصيد باسم ${esc(p.name)}.</b></div><div>الرصيد الحالي للشخص <b>${fmt(currentBalance)} ج.م</b></div><div>الرصيد بعد الإضافة <b>${fmt(currentBalance+p.amount)} ج.م</b></div><div>تأثير الفلوس الأساسية <b>${moneyDelta>0?'+':''}${fmt(moneyDelta)} ج.م</b></div>${money?`<div>الفلوس قبل <b>${fmt(num(money.entry[1]))} ج.م</b></div><div>الفلوس بعد <b>${fmt(num(money.entry[1])+moneyDelta)} ج.م</b></div>`:''}<p class="small">${serviceAgent?'ده رصيد مندوب '+esc(serviceAgent)+'؛ مستقل عن الفلوس الأساسية.':'ده بند رصيد عادي؛ إضافته تزود الفلوس الأساسية بنفس المبلغ.'}</p><button class="primary" onclick="executeOrder()">تأكيد وتنفيذ</button><button onclick="pendingOrder=null;document.getElementById('orderPreview').innerHTML='تم إلغاء العملية.'">إلغاء</button></div>`;return;
  }
@@ -621,6 +625,19 @@ function review(){
 }
 function answerClarificationFromText(text){
  const v=String(text||'').toLowerCase().replace(/[إأآ]/g,'ا').replace(/[ىي]/g,'ي').replace(/[ةه]/g,'ه').replace(/[^\u0600-\u06FFa-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
+ if(pendingClarification?.type==='balanceAddChoice'){
+  const q=pendingClarification,yesAdd=/(اضف فوق الموجود|اضيف فوق الموجود|زود على الموجود|خليهم يزيدوا|ضيف المبلغ فوق)/.test(v),setTotal=/(خلي الاجمالي|الاجمالي يبقى|بدل الموجود|استبدل|خلي الرصيد|يبقى الرصيد|مش تضيف|بدل ما تزود)/.test(v);
+  if(/^(الغاء|الغي|وقف|الغى العملية)$/.test(v)){pendingClarification=null;pendingOrder=null;const box=document.getElementById('orderPreview');if(box)box.innerHTML='<p class="status">تم إلغاء الحركة. لم يتغير أي رصيد.</p>';return;}
+  if(!yesAdd&&!setTotal){const box=document.getElementById('orderPreview');if(box)box.innerHTML='<p class="small">تقصد أضيف المبلغ فوق الرصيد الحالي، ولا أخلي الإجمالي هو المبلغ الجديد؟ لم يتم تسجيل أي تغيير.</p><button class="primary" onclick="answerClarificationFromText(\'أضف فوق الموجود\')">أضف فوق الموجود</button><button onclick="answerClarificationFromText(\'خلي الإجمالي هو المبلغ الجديد\')">استبدل الإجمالي</button><button onclick="answerClarificationFromText(\'إلغاء\')">إلغاء</button>';return;}
+  const delta=yesAdd?q.amount:q.amount-q.currentBalance,after=q.currentBalance+delta,money=findMoneyEntry(),moneyDelta=q.serviceAgent?0:delta;
+  if(after<0){const box=document.getElementById('orderPreview');if(box)box.innerHTML='<p class="small">الإجمالي المطلوب لا يمكن أن يكون سالبًا. لم يتغير أي رصيد.</p>';return;}
+  if(moneyDelta!==0&&(!money||num(money.entry[1])+moneyDelta<0)){const box=document.getElementById('orderPreview');if(box)box.innerHTML='<p class="small">التغيير هيخلي الفلوس الأساسية بالسالب أو بند الفلوس غير متاح. لم يتم تسجيل أي شيء.</p>';return;}
+  pendingOrder={type:'balanceAdd',mode:'balanceAdd',name:q.name,amount:delta,balanceIndex:q.balanceIndex,cardsIndex:cols.findIndex(c=>columnRole(c)==='cards'),serviceAgent:q.serviceAgent,moneyDelta,moneyBefore:q.moneyBefore,currentBalance:q.currentBalance,balanceTarget:after,balanceChoice:yesAdd?'add':'set'};
+  pendingClarification=null;
+  const box=document.getElementById('orderPreview');
+  if(box)box.innerHTML=`<div class="reconMini"><div>الاسم <b>${esc(q.name)}</b></div><div>الرصيد قبل <b>${fmt(q.currentBalance)} جنيه</b></div><div>التغيير المطلوب <b>${delta>=0?'+':''}${fmt(delta)} جنيه</b></div><div>الرصيد بعد <b>${fmt(after)} جنيه</b></div><div>تأثير الفلوس الأساسية <b>${moneyDelta>=0?'+':''}${fmt(moneyDelta)} جنيه</b></div></div><p class="small">دي مراجعة نهائية. مفيش أي تغيير اتسجل لسه.</p><button class="primary" onclick="executeOrder()">تأكيد وتنفيذ</button><button onclick="pendingOrder=null;document.getElementById('orderPreview').innerHTML='تم إلغاء العملية.'">إلغاء</button>`;
+  return;
+ }
  if(pendingClarification?.type==='settlementOffer'){
   const q=pendingClarification,order=q.order,yes=/(ايوه|اه|تمام|ماشي|سوي|سوى|تسويه|خصم|من الرصيد|اعمل التسويه)/.test(v),no=/(^| )(لا|لأ|سيب|خليه|خلي الرصيد|من غير تسويه|مش عايز)( |$)/.test(v);
   if(/^(الغاء|الغي|وقف|الغى العملية)$/.test(v)){pendingClarification=null;pendingOrder=null;const box=document.getElementById('orderPreview');if(box)box.innerHTML='<p class="status">تم إلغاء الحركة بالكامل. مفيش أي تغيير اتسجل.</p>';return;}
@@ -643,7 +660,7 @@ function answerClarificationFromText(text){
  }
  // A leading "لا" often corrects the previous suggestion; check the full affirmative intent first.
  if(/^(لا|لا انا|لا عايز|لا قصدي|لأ|لأ انا|لأ عايز) .*(مبلغ جديد|جديد مستقل|عملية جديدة|ضيف جديد|اضيف جديد|سجل جديد)/.test(v)||/(مبلغ جديد|جديد مستقل|عملية جديدة|من بره|مستقل|ضيف جديد|اضيف جديد|سجل جديد|ضيفه جديد)/.test(v)){answerClarification('new');return}
- if(/(سوي|سوى|تسويه|تسويه الحساب|من الرصيد|انقل|نقل|خصم من الرصيد|رصيده|رصيد جمال|سوّي القديم|سوي القديم|اه ايوه سوي|ايوه سوي|أيوه سوي|خصم القديم|سوّي الحساب)/.test(v)){answerClarification('transfer');return}
+ if(/(سوي|سوى|تسويه|تسويه الحساب|من الرصيد|انقل|نقل|خصم من الرصيد|رصيده|رصيد جمال|سوّي القديم|سوي القديم|اه ايوه سوي|ايوه سوي|أيوه سوي|خصم القديم|سوّي الحساب|اشطب|شطب|شيل القديم|اشطب القديم|السبعمية|السبعميه|ال 700|الـ 700|خصم القديم)/.test(v)){answerClarification('transfer');return}
  if(/^(الغاء|الغي|بلاش|وقف|لا|لأ|مش عايز|مش قصدي|الغاء العملية|الغى العملية)$/.test(v)){answerClarification('cancel');return}
  const out=document.getElementById('orderPreview');if(out)out.innerHTML='<p class="small">لسه مش واضح قصدك إيه. السؤال الأصلي لسه مفتوح ومفيش أي تغيير اتسجل. قول «مبلغ جديد» لو ده مبلغ مستقل، أو «سوّي من الرصيد» لو تقصد التسويه، أو «إلغاء».</p><button class="primary" onclick="startVoice()">🎙️ رد على نفس السؤال بالمايك</button><button onclick="answerClarification(\'new\')">مبلغ جديد مستقل</button><button onclick="answerClarification(\'transfer\')">تسوية من الرصيد</button><button onclick="answerClarification(\'cancel\')">إلغاء</button>';
 }
@@ -805,11 +822,43 @@ function openLiveDagaPanel(){
 }
 function toggleLiveDagaPanel(){const panel=document.getElementById('dagaLivePanel');if(!panel)return;if(panel.classList.contains('docked')){panel.classList.remove('docked');panel.classList.add('open');panel.setAttribute('aria-hidden','false');document.body.style.overflow='hidden';}else{dockLiveDagaPanel();}}
 function dockLiveDagaPanel(){const panel=document.getElementById('dagaLivePanel');if(!panel)return;panel.classList.add('open','docked');panel.setAttribute('aria-hidden','false');document.body.style.overflow='';try{document.getElementById('dagaLiveFrame')?.contentWindow.postMessage({type:'DAGA_LIVE_DOCKED'},'https://daga-app-staging.dagamobile10.workers.dev')}catch(_){}}
+let dagaLiveSavedCommandState=null;
+function openLiveDagaPanel(){
+ const user=window.DAGA_AUTH_USER||{};
+ if(user.smartAssistantEnabled!==true||user.liveDagaEnabled!==true)return;
+ if(!window.DAGA_SESSION_TOKEN)return;
+ const panel=document.getElementById('dagaLivePanel'),frame=document.getElementById('dagaLiveFrame');
+ if(!panel||!frame)return;
+ if(!dagaLiveWindow){
+  const cmd=document.getElementById('cmd'),preview=document.getElementById('orderPreview');
+  dagaLiveSavedCommandState={pendingOrder,pendingClarification,modalOpen:!!(cmd&&preview),commandText:cmd?.value||'',previewHtml:preview?.innerHTML||''};
+  pendingOrder=null;pendingClarification=null;dagaLiveOrderPending=false;dagaLiveOrderSummary='';
+  if(cmd)cmd.value='';if(preview)preview.innerHTML='';
+ }
+ dagaLiveWindow=frame.contentWindow;
+ panel.classList.add('open');panel.setAttribute('aria-hidden','false');
+ document.body.style.overflow='hidden';
+ if(!frame.src||!frame.src.includes('/live/?api=staging'))frame.src='/live/?api=staging';
+ else{try{frame.contentWindow.postMessage('DAGA_LIVE_READY','https://daga-app-staging.dagamobile10.workers.dev')}catch(_){}}
+}
 function closeLiveDagaPanel(){
  const panel=document.getElementById('dagaLivePanel'),frame=document.getElementById('dagaLiveFrame');
  if(panel){panel.classList.remove('open','docked');panel.setAttribute('aria-hidden','true');}
  document.body.style.overflow='';
  dagaLiveWindow=null;dagaLiveOrderPending=false;dagaLiveOrderSummary='';
+ // Discard any unconfirmed LIVE-only command/clarification. It must never leak into
+ // the separate "كلم ضجة" modal after LIVE is closed.
+ pendingOrder=null;pendingClarification=null;
+ const cmd=document.getElementById('cmd'),preview=document.getElementById('orderPreview');
+ if(dagaLiveSavedCommandState){
+  pendingOrder=dagaLiveSavedCommandState.pendingOrder;
+  pendingClarification=dagaLiveSavedCommandState.pendingClarification;
+  if(cmd)cmd.value=dagaLiveSavedCommandState.commandText;
+  if(preview)preview.innerHTML=dagaLiveSavedCommandState.previewHtml;
+  const restore=dagaLiveSavedCommandState.modalOpen;
+  dagaLiveSavedCommandState=null;
+  if(!restore&&document.getElementById('sheet')?.innerText?.includes('كلم ضجه — تنفيذ الأوامر'))closeModal();
+ }else if(cmd){cmd.value='';if(preview)preview.innerHTML='';}
  if(frame){try{frame.contentWindow.postMessage({type:'DAGA_LIVE_CLOSE'},'https://daga-app-staging.dagamobile10.workers.dev')}catch(_){}}
 }
 function sendLiveOrderReply(source,id,reply,handled=true){
@@ -895,7 +944,7 @@ window.addEventListener('message',function(event){
  if(dagaLiveOrderPending){
   sendLiveOrderReply(event.source,id,'لسه مستني تأكيد أو إلغاء العملية المعروضة. قول «أيوه نفّذ» أو «إلغاء».',true);return;
  }
- const deleteIntent=/(احذف|حذف|شيل|ازاله|ازيل|امسح|الغاء بند)/u.test(normAccountingName(text));
+ const deleteIntent=/(احذف|حذف|شيل|اشطب|شطب|ازاله|ازيل|امسح|الغاء بند)/u.test(normAccountingName(text));
  if(deleteIntent){
   const q=normAccountingName(text);
   const targetCol=cols.map((c,ci)=>({c,ci})).find(x=>q.includes(normAccountingName(x.c.adminLabel||x.c.name))||((/الرصيد/u.test(q))&&columnRole(x.c)==='balance'));
