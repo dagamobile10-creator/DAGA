@@ -99,7 +99,7 @@ button{transition:filter .15s,transform .15s;border-radius:14px}button:active{tr
 <div id="dagaLivePanel" aria-hidden="true"><div class="livePanelHead"><span>LIVE DAGA</span><button type="button" onclick="closeLiveDagaPanel()">رجوع للداشبورد ×</button></div><iframe id="dagaLiveFrame" title="LIVE DAGA" allow="microphone; autoplay" referrerpolicy="no-referrer"></iframe></div>
 <script>
 const defaultCols=[
-{name:'الكروت',entries:[['رصيد أساسي','0'],['كارت وهوا','0'],['كاش أوت','0'],['سوبر باي','0'],['ممكن','0'],['إنستا ١','0'],['إنستا ٢','0'],['البنك الأهلي','0'],['فلوس','0'],['محفظة ١','0'],['محفظة ٢','0'],['محفظة ٣','0'],['محفظة ٤','0']]},
+{name:'الكروت',entries:[['رصيد أساسي','0'],['كارت وهوا','0'],['كاش أوت','0'],['سوبر باي','0'],['ممكن','0'],['إنستا ١','0'],['إنستا ٢','0'],['البنك الأهلي','0'],['فلوس','0'],['محفظة ١','0'],['محفظة ٢','0'],['محفظة ٣','0'],['محفظة ٤','0'],['تجار','0']]},
 {name:'الرصيد',entries:[['رأس المال','120,000']]},
 {name:'خارج 1',entries:[['أوبشن','1,500'],['حمدان','2,000']]},
 {name:'خارج 2',entries:[['عبده','750']]},
@@ -143,7 +143,7 @@ function loadStoreData(storeId){
  STORE_KEY='daga_dashboard_v30_store_'+encodeURIComponent(String(storeId));
  cols=JSON.parse(JSON.stringify(defaultCols));ledger=[];closedDays=[];
  try{const saved=JSON.parse(localStorage.getItem(STORE_KEY)||'null');if(saved){if(Array.isArray(saved.cols)&&saved.cols.length===10)cols=saved.cols;if(Array.isArray(saved.ledger))ledger=saved.ledger;if(Array.isArray(saved.closedDays))closedDays=saved.closedDays;}}catch(e){}
- ensureStableIdentities();ensureMoneyEntry();ensureStableIdentities();
+ ensureStableIdentities();ensureMoneyEntry();ensureToggarEntry();ensureStableIdentities();
 }
 function persist(){try{localStorage.setItem(STORE_KEY,JSON.stringify({cols,ledger,closedDays}));return true}catch(e){alert('تعذر الحفظ على هذا الجهاز. صدّر نسخة احتياطية قبل المتابعة.');return false}}
 function num(v){return Number(String(v).replace(/[^0-9.-]/g,''))||0} function fmt(v){return Math.round(v).toLocaleString('en-US')} function esc(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
@@ -159,6 +159,11 @@ function findMoneyEntry(){
 function ensureMoneyEntry(){
  const cards=columnByRole('cards');if(!cards)return;
  if(!findMoneyEntry()){cards.entries.unshift(['الفلوس','0']);}
+}
+function ensureToggarEntry(){
+ const cards=columnByRole('cards');if(!cards)return;
+ const existing=cards.entries.find(e=>normAccountingName(e&&e[0])==='تجار');
+ if(!existing)cards.entries.push(['تجار','0',{role:'custom',id:'entry-cards-toggar'}]);
 }
 ensureStableIdentities();ensureMoneyEntry();
 function changeMoney(delta){
