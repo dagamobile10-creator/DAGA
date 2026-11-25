@@ -25,11 +25,10 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
 
     def test_portal_passes_session_and_selected_company(self):
         portal = (ROOT / "company" / "portal.html").read_text(encoding="utf-8")
-        self.assertIn('type:"DAGA_AUTH",token:sessionToken,companyId:activeCompany.id', portal)
-        self.assertNotIn("sessionStorage", portal)
-        self.assertIn('window.open("about:blank","_blank")', portal)
-        self.assertIn('shopWindow.location.assign("/shop/")', portal)
-        self.assertIn('event.source!==shopWindow', portal)
+        self.assertIn("DAGA_SHOP_AUTH_BRIDGE", portal)
+        self.assertIn("sessionStorage.setItem", portal)
+        self.assertIn("companyId:activeCompany.id", portal)
+        self.assertIn('window.location.assign("/shop/")', portal)
 
     def test_role_is_normalized_and_not_used_as_security_boundary(self):
         dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
