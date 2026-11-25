@@ -964,6 +964,30 @@ window.addEventListener('message',function(event){
  if(!event.data||event.data.type!=='DAGA_LIVE_ORDER_REQUEST')return;
  const id=event.data.id,text=String(event.data.text||'').trim();
  if(typeof id!=='string'||!text)return;
+ // Friendly conversation is a first-class LIVE intent, not a financial command.
+ // It must be answered before order parsing and must never clear/replace an open order.
+ const social=normAccountingName(text);
+ let socialReply='';
+ if(/^(صباح الفل|صباح الخير|صباح النور|صباح الورد|صباح الجمال|صباحو|يسعد صباحك)( يا)?( صاحبي| حبيبي| يا صاحبي)?$/.test(social)){
+  socialReply='صباح النور والفل والياسمين يا صاحبي ❤️ ربنا يجعل يومك جميل.';
+ }else if(/^(مساء الفل|مساء الخير|مساء النور|مساء الورد|مساء الجمال)( يا)?( صاحبي| حبيبي| يا صاحبي)?$/.test(social)){
+  socialReply='مساء النور يا صاحبي ❤️ منوّرني.';
+ }else if(/(صلي على النبي|صل على النبي|اللهم صل على النبي|اللهم صلي على النبي|اذكر النبي)/.test(social)){
+  socialReply='اللهم صلِّ وسلم وبارك على سيدنا محمد ❤️';
+ }else if(/^(السلام عليكم|سلام عليكم|السلام عليكو)$/.test(social)){
+  socialReply='وعليكم السلام ورحمة الله وبركاته يا صاحبي.';
+ }else if(/^(عامل ايه|عامل ايه يا صاحبي|اخبارك ايه|ازيك|ازيك يا صاحبي|انت كويس|طمني عليك)$/.test(social)){
+  socialReply='الحمد لله يا صاحبي، طول ما إنت بخير أنا تمام. إنت أخبارك إيه؟';
+ }else if(/^(شكرا|شكرا يا صاحبي|متشكر|تسلم|تسلم يا صاحبي|ربنا يخليك|الله يكرمك|كتر خيرك)$/.test(social)){
+  socialReply='حبيبي يا صاحبي، ده من ذوقك. أنا معاك.';
+ }else if(/^(بحبك|انت صاحبي|يا صاحبي|حبيبي|يا حبيبي|يا ريس|يا باشا)$/.test(social)){
+  socialReply='حبيبي يا صاحبي ❤️ قولّي، أنا سامعك.';
+ }else if(/^(انت غبي|يا غبي|انت حمار|يا حمار|انت فاشل|انت مش فاهم|انت غلس|يا غلس)$/.test(social)){
+  socialReply='حقك عليّا لو ضايقتك يا صاحبي. خلّيني أصلّح الغلط ونكمل بهدوء.';
+ }else if(/^(قول نكته|احكي نكته|ضحكني|عايز اضحك)$/.test(social)){
+  socialReply='مرة واحد اشترى ساعة ذكية، سألها: الساعة كام؟ قالتله: على حسب إنت مستعجل على إيه! 😄';
+ }
+ if(socialReply){sendLiveOrderReply(event.source,id,socialReply,true);return;}
  if(dagaLiveOrderPending&&liveOrderConfirmation(text)){
   const before=ledger[0]?.id,confirmedOrder=dagaLivePendingOrder;
   let succeeded=false;
