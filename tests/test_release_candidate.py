@@ -10,11 +10,13 @@ worker = read("worker.js")
 config = read("capacitor.config.ts")
 deploy = read(".github/workflows/deploy-worker.yml")
 wrangler = read("wrangler.toml")
+entry = read("entry/index.html")
 
 assert "const DAGA_APP_ORIGIN=window.location.origin;" in dashboard
 assert "const origin=DAGA_APP_ORIGIN;" in dashboard
 assert "postMessage({type:'DAGA_AUTH'" in dashboard
 assert "DAGA_LIVE_SRC='/live/'" in dashboard
+assert "بيئة الاختبار" not in entry
 assert "https://daga-app-staging.dagamobile10.workers.dev');" not in dashboard
 for route in ("/go", "/live", "/owner", "/shop", "/company", "/invite"):
     assert route in worker, f"Worker route missing: {route}"
