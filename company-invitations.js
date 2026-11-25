@@ -68,7 +68,7 @@ export async function handleCompanyInvitations(request, env, url) {
     const permissionRoute = path.match(/^\/api\/company\/members\/([0-9a-f-]{36})\/permissions$/i);
     if (permissionRoute && request.method === "PATCH") return updateMemberPermissions(request, env, db, account, permissionRoute[1]);
     const memberRemoval = path.match(/^\/api\/company\/members\/([0-9a-f-]{36})$/i);
-    if (memberRemoval && request.method === "DELETE") return removeCompanyMember(env, db, account, memberRemoval[1]);
+    if (memberRemoval && request.method === "DELETE") return removeCompanyMember(request, env, db, account, memberRemoval[1]);
     if (path === "/api/company/invitations" && request.method === "GET") return listInvitations(url, db, account);
     if (isMembersPath && request.method === "GET") return listCompanyMembers(url, env, db, account);
     if (path === "/api/company/invitations/accept" && request.method === "POST") return acceptInvitation(request, env, db, account);
