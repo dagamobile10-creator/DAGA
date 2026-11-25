@@ -729,7 +729,14 @@ function executeOrderCore(){
  const addSigned=(ci,label,delta)=>{const entries=cols[ci].entries;let i=entries.findIndex(e=>e[0]===label);if(i<0)entries.push([label,String(delta)]);else setEntry(ci,i,num(entries[i][1])+delta)};
  const addToNamed=(ci,name,delta)=>{const isBalance=columnRole(cols[ci])==='balance',label=isBalance?String(name||'').trim():name,agent=isBalance?canonicalServiceAgent(label):null;let i=agent?cols[ci].entries.findIndex(e=>entryRole(cols[ci],e)==='agent:'+agent||canonicalServiceAgent(e[0])===agent):findEntry(ci,label);if(i<0)cols[ci].entries.push([label,String(delta),agent?{role:'agent:'+agent,id:'agent-'+agent}:{}]);else setEntry(ci,i,num(cols[ci].entries[i][1])+delta)};
  const updateRows=(rows,delta)=>{let remaining=delta;for(const r of rows||[]){if(remaining<=0)break;const idx=findEntry(r.ci,r.name);if(idx<0)continue;const cur=num(cols[r.ci].entries[idx][1]),take=Math.min(cur,remaining);setEntry(r.ci,idx,Math.max(0,cur-take));remaining-=take;}return remaining;};
- if(p.mode==='balanceToOutsideTransfer'){
+ if(p.mode==='balanceOutsideReconcile'){
+   const allRows=[...(p.balanceRows||[]),...(p.outsideRows||[])];
+   for(const r of allRows){const row=cols[r.ci]?.entries.find(e=>e[0]===r.name);if(!row||num(row[1])!==r.amount){alert('بيانات حساب '+p.name+' اتغيرت من وقت المراجعة. اعمل مراجعة جديدة.');pendingOrder=null;return;}}
+   const reduceRows=(rows,amount)=>{let left=amount;for(const r of rows){if(left<=0)break;const row=cols[r.ci].entries.find(e=>e[0]===r.name);const take=Math.min(num(row[1]),left);row[1]=String(num(row[1])-take);left-=take;}return left;};
+   const balanceLeft=reduceRows(p.balanceRows,p.transfer),outsideLeft=reduceRows(p.outsideRows,p.transfer);
+   if(balanceLeft>0||outsideLeft>0)throw new Error('reconciliation_rows_changed');
+   addLedger('تسوية حساب بين الرصيد والخارج',p.name+': تمت تسوية '+fmt(p.transfer)+' جنيه من الرصيد والخارج؛ الفلوس الأساسية لم تتغير.',{column:'الرصيد والخارج',entryName:p.name,oldValue:p.balanceBefore,newValue:p.balanceBefore-p.transfer,moneyDelta:0});
+ }else if(p.mode==='balanceToOutsideTransfer'){
    const bal=cols[p.balanceIndex], target=cols[p.targetIndex];
    if(!bal||!target||columnRole(target)!=='expenses'){alert('الأعمدة اتغيرت من وقت المراجعة. راجع الأمر من جديد.');pendingOrder=null;return;}
    const rows=p.rows||[];let left=p.transfer;
@@ -890,7 +897,7 @@ function closeLiveDagaPanel(){
  if(panel){panel.classList.remove('open','docked');panel.setAttribute('aria-hidden','true');}
  document.body.style.overflow='';
  dagaLiveWindow=null;dagaLiveOrderPending=false;dagaLiveOrderSummary='';
- dagaLivePendingOrder=null;dagaLivePendingClarification=null;dagaLivePendingDelete=null;dagaLiveLastPreview='';
+ dagaLivePendingOrder=null;dagaLivePendingClarification=null;dagaLivePendingDelete=null;dagaLiveLastPreview='';dagaLiveActiveOrder=null;
  // Discard any unconfirmed LIVE-only command/clarification. It must never leak into
  // the separate "كلم ضجة" modal after LIVE is closed.
  pendingOrder=null;pendingClarification=null;
@@ -958,7 +965,7 @@ window.addEventListener('message',function(event){
  const id=event.data.id,text=String(event.data.text||'').trim();
  if(typeof id!=='string'||!text)return;
  if(dagaLiveOrderPending&&liveOrderConfirmation(text)){
-  const before=ledger[0]?.id;
+  const before=ledger[0]?.id,confirmedOrder=dagaLivePendingOrder;
   let succeeded=false;
   try{
    if(dagaLivePendingDelete)succeeded=executeLiveDelete();
@@ -967,8 +974,15 @@ window.addEventListener('message',function(event){
 
   dagaLiveOrderPending=false;
   if(succeeded){
-   const reply='تم تسجيل العملية فعلًا في الداشبورد: '+dagaLiveOrderSummary;
-   dagaLiveOrderSummary='';dagaLivePendingClarification=null;sendLiveOrderReply(event.source,id,reply,true);sendLiveDashboardSnapshot();
+   const completedOrder=confirmedOrder;
+   let reply='تم تسجيل العملية فعلًا في الداشبورد: '+dagaLiveOrderSummary;
+   if(completedOrder?.mode==='balanceOutsideReconcile'){
+    const leftBalance=completedOrder.balanceBefore-completedOrder.transfer,leftOutside=completedOrder.outsideBefore-completedOrder.transfer;
+    const reducePreviewRows=(rows,amount)=>{let left=amount;return rows.map(x=>{const take=Math.min(x.amount,left);left-=take;return {...x,amount:x.amount-take};});};
+    if(dagaLiveActiveOrder){dagaLiveActiveOrder.balanceTotal=leftBalance;dagaLiveActiveOrder.outsideTotal=leftOutside;dagaLiveActiveOrder.balanceRows=reducePreviewRows(dagaLiveActiveOrder.balanceRows,completedOrder.transfer);dagaLiveActiveOrder.outsideRows=reducePreviewRows(dagaLiveActiveOrder.outsideRows,completedOrder.transfer);}
+    reply='تمت تسوية '+completedOrder.name+': '+fmt(completedOrder.transfer)+' جنيه. المتبقي في الرصيد '+fmt(leftBalance)+' جنيه، والخارج '+fmt(leftOutside)+' جنيه. نكمل في نفس الأوردر؟';
+   }
+   dagaLivePendingOrder=null;dagaLiveOrderSummary='';dagaLivePendingClarification=null;sendLiveOrderReply(event.source,id,reply,true);sendLiveDashboardSnapshot();
   }else{
    dagaLiveOrderSummary='';
    sendLiveOrderReply(event.source,id,'ما تمش التنفيذ. البيانات ممكن تكون اتغيرت أو فيه مشكلة في الحفظ. راجع الداشبورد؛ مفيش تأكيد بنجاح العملية.',true);
@@ -977,7 +991,7 @@ window.addEventListener('message',function(event){
  }
  if(dagaLiveOrderPending&&liveOrderCancellation(text)){
   dagaLivePendingOrder=null;dagaLivePendingClarification=null;dagaLivePendingDelete=null;dagaLiveOrderPending=false;dagaLiveOrderSummary='';
-  sendLiveOrderReply(event.source,id,'تم إلغاء العملية داخل LIVE. مفيش أي تغيير اتسجل، ومحادثة كلم ضجة فضلت مستقلة.',true);return;
+  sendLiveOrderReply(event.source,id,'تم إلغاء الخطوة دي. مفيش أي تغيير اتسجل. لسه في أوردر '+(dagaLiveActiveOrder?.name||'الحساب الحالي')+'.',true);return;
  }
  if(dagaLivePendingClarification){
   // A LIVE answer belongs to LIVE only; it must never answer Klem DAGA's pending question.
@@ -1011,11 +1025,28 @@ window.addEventListener('message',function(event){
   dagaLiveOrderPending=true;dagaLiveOrderSummary='حذف '+String(entry[2]?.adminLabel||entry[0])+' من '+(targetCol.c.adminLabel||targetCol.c.name);
   sendLiveOrderReply(event.source,id,'مراجعة حذف داخل LIVE: البند '+String(entry[2]?.adminLabel||entry[0])+' في عمود '+(targetCol.c.adminLabel||targetCol.c.name)+'. القيمة الحالية '+fmt(num(entry[1]))+' جنيه. تأثير الفلوس الأساسية '+fmt(impact.delta)+' جنيه. هل تؤكد الحذف؟ قول أيوه نفّذ أو إلغاء. لم يتم الحذف بعد.',true);return;
  }
- const accountQuestion=/(تسويه|تسويه|اسوي|سوي|نعمل تسويه|اعمل حساب|كشف حساب|عليه كام|عليها كام|ليه كام|لي كام|حسابه|حسابها)/u.test(normAccountingName(text));
+ const normalizedText=normAccountingName(text);
+ const exitOrderIntent=/(نخرج من الاوردر|اخرج من الاوردر|انهاء الاوردر|انهي الاوردر|خلصنا الاوردر|نقفل الاوردر|نخرج ونشوف غيره|نبدأ اوردر جديد)/u.test(normalizedText);
+ if(exitOrderIntent&&dagaLiveActiveOrder){
+  dagaLivePendingOrder=null;dagaLivePendingClarification=null;dagaLivePendingDelete=null;dagaLiveOrderPending=false;dagaLiveOrderSummary='';dagaLiveActiveOrder=null;
+  sendLiveOrderReply(event.source,id,'تمام، خرجنا من الأوردر. قولّي الطلب الجديد.',true);return;
+ }
+ if(dagaLiveActiveOrder&&!dagaLiveOrderPending&&!dagaLivePendingClarification&&/(اعرض|وريني|اظهر|جهز|عايز اشوف|عايز اعرف|التسويه|التسوية|دي)/u.test(normalizedText)&&/(تسويه|تسويه|حساب|الاوردر|دي)/u.test(normalizedText)){
+  const a=dagaLiveActiveOrder,transfer=Math.min(a.balanceTotal,a.outsideTotal);
+  if(transfer<=0){sendLiveOrderReply(event.source,id,'مفيش مبلغ متقابل للتسوية في حساب '+a.name+'. مفيش أي تغيير اتسجل.',true);return;}
+  dagaLivePendingOrder={mode:'balanceOutsideReconcile',name:a.name,transfer,balanceRows:a.balanceRows.map(x=>({...x})),outsideRows:a.outsideRows.map(x=>({...x})),balanceBefore:a.balanceTotal,outsideBefore:a.outsideTotal};
+  dagaLiveOrderPending=true;dagaLiveOrderSummary='تسوية حساب '+a.name;
+  const remainingBalance=a.balanceTotal-transfer,remainingOutside=a.outsideTotal-transfer;
+  sendLiveOrderReply(event.source,id,'معاينة تسوية '+a.name+': هنسوّي '+fmt(transfer)+' جنيه من الرصيد والخارج. المتبقي في الرصيد '+fmt(remainingBalance)+' جنيه، والخارج '+fmt(remainingOutside)+' جنيه. الفلوس الأساسية مش هتتغير. أأكد؟ قول «أيوه نفّذ» أو «إلغاء».',true);return;
+ }
+ if(dagaLiveActiveOrder&&!dagaLiveOrderPending&&!dagaLivePendingClarification&&!exitOrderIntent){
+  sendLiveOrderReply(event.source,id,'إحنا لسه في أوردر '+dagaLiveActiveOrder.name+'. نكمله الأول، أو قول «نخرج من الأوردر» ونبدأ غيره.',true);return;
+ }
+ const accountQuestion=/(تسويه|تسويه|اسوي|سوي|نعمل تسويه|اعمل حساب|كشف حساب|عليه كام|عليها كام|ليه كام|لي كام|حسابه|حسابها)/u.test(normalizedText);
  if(accountQuestion){
   const q=normAccountingName(text),padded=' '+q+' ',names=[];
   cols.forEach(c=>{if(columnRole(c)==='expenses'||columnRole(c)==='balance')(c.entries||[]).forEach(e=>{const name=String(e[0]||'').trim(),key=normAccountingName(name);if(key&&!names.some(x=>normAccountingName(x)===key))names.push(name);});});
-  const matched=names.filter(name=>{const key=normAccountingName(name);return key&&padded.includes(' '+key+' ')}).sort((a,b)=>normAccountingName(b).length-normAccountingName(a).length);
+  const matched=names.filter(name=>{const key=normAccountingName(name);return key&&(padded.includes(' '+key+' ')||padded.includes(' ل'+key+' ')||padded.includes(' لل'+key+' '))}).sort((a,b)=>normAccountingName(b).length-normAccountingName(a).length);
   if(!matched.length){sendLiveOrderReply(event.source,id,'مش لاقي اسمًا مطابقًا في أعمدة الرصيد أو الخارج. اكتب الاسم زي ما هو ظاهر في الدفتر. مفيش أي حركة اتسجلت.',true);return;}
   const longest=normAccountingName(matched[0]).length,top=matched.filter(name=>normAccountingName(name).length===longest);
   if(top.length!==1){sendLiveOrderReply(event.source,id,'لقيت أكتر من اسم محتمل: '+top.join('، ')+'. حدّد الاسم كاملًا قبل ما أراجع الحساب. مفيش أي حركة اتسجلت.',true);return;}
@@ -1024,7 +1055,10 @@ window.addEventListener('message',function(event){
   const outsideTotal=outside.reduce((sum,x)=>sum+x.amount,0),balanceTotal=balance.reduce((sum,x)=>sum+x.amount,0),net=outsideTotal-balanceTotal;
   const netText=net>0?'صافي الخارج عليه بعد خصم رصيده '+fmt(net)+' جنيه':net<0?'صافي المستحق له بعد خصم الخارج '+fmt(-net)+' جنيه':'حسابه متساوي: مفيش فرق بين الرصيد والخارج';
   const detail=[...balance.map(x=>'الرصيد — '+x.column+': '+fmt(x.amount)+' جنيه'),...outside.map(x=>'الخارج — '+x.column+': '+fmt(x.amount)+' جنيه')];
-  const reply='راجعت الدفتر نفسه، وده حساب '+person+': إجمالي الرصيد له '+fmt(balanceTotal)+' جنيه، وإجمالي الخارج عليه '+fmt(outsideTotal)+' جنيه. '+netText+'. '+(detail.length?detail.join('؛ '):'ملقتش له أي قيود في الرصيد أو الخارج.')+'. دي قراءة فقط؛ لم يتم تعديل أي رقم. لو عايز تسوية، هعرض لك طريقة التسوية وتأثيرها على الفلوس الأساسية قبل التأكيد.';
+  const balanceRows=[],outsideRows=[];
+  cols.forEach((c,ci)=>(c.entries||[]).forEach(e=>{if(normAccountingName(e[0])!==key)return;const row={ci,name:String(e[0]),amount:num(e[1])};if(columnRole(c)==='balance')balanceRows.push(row);if(columnRole(c)==='expenses')outsideRows.push(row);}));
+  dagaLiveActiveOrder={name:person,balanceRows,outsideRows,balanceTotal,outsideTotal,status:'reviewing'};
+  const reply='حساب '+person+': الرصيد '+fmt(balanceTotal)+' جنيه، والخارج '+fmt(outsideTotal)+' جنيه. الصافي '+fmt(Math.abs(net))+' جنيه '+(net>0?'عليه':net<0?'له':'ومتساوي').'. دي قراءة فقط. قول «اعرض التسوية» عشان أجهزها للمراجعة.';
   sendLiveOrderReply(event.source,id,reply,true);return;
  }
  const columnQuestion=/(كام|مجموع|اجمالي|إجمالي|قد ايه|قد إيه|حساب|الموجود|عليه كام|رصيده كام)/u.test(text)&&/(خارج|الرصيد|كاش|اكسسوار|الاكسسوار|الكروت|الفلوس)/u.test(text)&&!/(اكتب|تكتب|عايزك|سجل|ضيف|اضيف|زود|ارفع|حط|نفذ|نفّذ)/u.test(text);
@@ -1043,7 +1077,7 @@ window.addEventListener('message',function(event){
  sendLiveOrderReply(event.source,id,dagaLiveOrderSummary+' هل أؤكد التنفيذ؟ قول «أيوه نفّذ» أو «إلغاء».',true);
 });
 
-let dagaLivePendingOrder=null,dagaLivePendingClarification=null,dagaLivePendingDelete=null,dagaLiveLastPreview='';
+let dagaLivePendingOrder=null,dagaLivePendingClarification=null,dagaLivePendingDelete=null,dagaLiveLastPreview='',dagaLiveActiveOrder=null;
 function withLiveOrderContext(fn){
  const oldCmd=document.getElementById('cmd'),oldPreview=document.getElementById('orderPreview');
  const oldCmdId=oldCmd?.id,oldPreviewId=oldPreview?.id;
