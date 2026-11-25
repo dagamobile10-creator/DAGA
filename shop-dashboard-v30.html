@@ -949,6 +949,8 @@ async function openTeamPermissions(){
   if(back){await showTeam();return;}
   const edit=event.target.closest('[data-edit-team-member]');
   if(edit){await editTeamMemberPermissions(edit.getAttribute('data-edit-team-member'));return;}
+  const remove=event.target.closest('[data-remove-team-member]');
+  if(remove){const memberId=remove.getAttribute('data-remove-team-member');if(!confirm('متأكد إنك عايز تلغي وصول العضو ده فورًا؟ هتنتهي كل جلساته الحالية.'))return;remove.disabled=true;try{const response=await fetch('/api/company/members/'+encodeURIComponent(memberId),{method:'DELETE',headers:{'Content-Type':'application/json',Authorization:'Bearer '+window.DAGA_SESSION_TOKEN},body:JSON.stringify({storeId:window.DAGA_AUTH_USER.storeId}),cache:'no-store',credentials:'omit'});const result=await response.json().catch(()=>({}));if(!response.ok)throw new Error(result.error||'تعذر إلغاء وصول العضو');await openTeamPermissions();alert('تم إلغاء وصول العضو وإنهاء جلساته.');}catch(error){alert(error.message||'تعذر إلغاء وصول العضو');remove.disabled=false;}return;}
  };
  try{
   const response=await fetch('/api/company/members?storeId='+encodeURIComponent(window.DAGA_AUTH_USER.storeId),{headers:{Authorization:'Bearer '+window.DAGA_SESSION_TOKEN},cache:'no-store',credentials:'omit'});
