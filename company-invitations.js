@@ -129,7 +129,7 @@ async function listCompanyMembers(url, env, db, account) {
   return json(env, { ok: true, members });
 }
 
-async function removeCompanyMember(env, db, account, memberAccountId) {
+async function removeCompanyMember(request, env, db, account, memberAccountId) {
   const body = await safeJson(request);
   const storeId = String(body?.storeId || "").trim();
   if (!/^[a-f0-9-]{36}$/i.test(storeId)) return json(env,{error:"store_id_required"},400);
@@ -141,7 +141,6 @@ async function removeCompanyMember(env, db, account, memberAccountId) {
   try {
     const results = await db.batch([
       db.prepare("UPDATE daga_store_memberships SET status='removed',updated_at=? WHERE store_id=? AND account_id=? AND status='active'").bind(now,storeId,memberAccountId),
-      db.prepare("UPDATE daga_accounts SET status='suspended',updated_at=? WHERE id=? AND role IN ('manager','employee')").bind(now,memberAccountId),
       db.prepare("UPDATE daga_auth_sessions SET revoked_at=? WHERE account_id=? AND revoked_at IS NULL").bind(now,memberAccountId),
       db.prepare("INSERT INTO daga_audit_log (id,actor_account_id,action,target_type,target_id,details_json,created_at) VALUES (?,?,?,?,?,?,?)").bind(crypto.randomUUID(),account.id,"company_member_access_revoked","daga_store_memberships",memberAccountId,JSON.stringify({storeId,role:member.role}),now)
     ]);
