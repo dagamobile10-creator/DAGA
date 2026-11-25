@@ -463,7 +463,7 @@ async function readJson(request){try{return await request.json()}catch(_){return
 function normalizeStoreFeatures(value) {
   const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
   const explicitTier = String(source.tier || "").trim().toLowerCase();
-  const smart = explicitTier === "smart" || (!["standard", "smart"].includes(explicitTier) && (source.smartAssistantEnabled === true || source.historyEnabled === true));
+  const smart = explicitTier === "smart" || (source.tier !== "standard" && (source.smartAssistantEnabled === true || source.historyEnabled === true));
   return JSON.stringify({ tier: smart ? "smart" : "standard", smartAssistantEnabled: smart, historyEnabled: smart });
 }
 function safeObjectJson(value){return JSON.stringify(value&&typeof value==="object"&&!Array.isArray(value)?value:{}) .slice(0,10000)}
