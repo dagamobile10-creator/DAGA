@@ -130,15 +130,16 @@ button{cursor:pointer;border:0;border-radius:11px;padding:13px 15px;font:inherit
       const company = memberCompanies.find(c => c.id === $("memberCompany").value);
       if (!company) { memberSay("اختار الشركة الأول.", "error"); return; }
       if (company.ledgerEnabled !== true) { memberSay("الشركة لسه ما اتفعلش لها اشتراك نظام الشركة من مالك التطبيق.", "error"); return; }
-      const shopWindow = window.open("about:blank", "_blank");
-      if (!shopWindow) { memberSay("اسمح بفتح نافذة جديدة علشان نفتح لوحة الشركة بأمان.", "error"); return; }
-      const bridgeListener = event => {
-        if (event.origin !== location.origin || event.source !== shopWindow || event.data !== "DAGA_SHOP_READY") return;
-        shopWindow.postMessage({type:"DAGA_AUTH", token:memberSession, companyId:company.id}, location.origin);
-        window.removeEventListener("message", bridgeListener);
-      };
-      window.addEventListener("message", bridgeListener);
-      shopWindow.location.assign("/shop/");
+      try {
+        sessionStorage.setItem("DAGA_SHOP_AUTH_BRIDGE", JSON.stringify({
+          token: memberSession,
+          companyId: company.id,
+          createdAt: Date.now()
+        }));
+        location.assign("/shop/");
+      } catch (_) {
+        memberSay("تعذر تجهيز جلسة الدخول الآمنة. سجّل الدخول مرة أخرى.", "error");
+      }
     });
     return;
   }
