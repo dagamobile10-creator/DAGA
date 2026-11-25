@@ -210,8 +210,9 @@ class VoiceIdentityGateTests(unittest.TestCase):
     def setUpClass(cls):
         cls.worker = (ROOT / "worker.js").read_text(encoding="utf-8")
 
-    def test_voice_auth_gate_is_opt_in_and_preserves_legacy_client_by_default(self):
-        self.assertIn('env.DAGA_VOICE_REQUIRE_AUTH || ""', self.worker)
+    def test_voice_auth_gate_is_mandatory_for_company_sessions(self):
+        self.assertIn('const voiceIdentityRequired = true;', self.worker)
+        self.assertNotIn('env.DAGA_VOICE_REQUIRE_AUTH || ""', self.worker)
         self.assertIn('voiceIdentityRequired && ["/chat", "/tts", "/liveavatar/token"].includes(url.pathname)', self.worker)
         self.assertIn('if (!voiceAccount || voiceAccount.status !== "approved" || voiceAccount.role === "program_owner")', self.worker)
         self.assertIn('error: "authenticated_account_required"', self.worker)
