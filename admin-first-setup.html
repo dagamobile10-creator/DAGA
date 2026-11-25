@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="referrer" content="no-referrer">
+<title>ضجة — تهيئة الإدارة العليا</title>
+<style>
+:root{color-scheme:dark;--gold:#d5a64b;--gold2:#f2d17b;--bg:#080807;--panel:#14130e;--line:#39301d;--muted:#aaa59a}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at top,#251b09 0,#090908 52%);color:#f7f3e9;font-family:Tahoma,Arial,sans-serif;display:flex;align-items:center;justify-content:center;padding:22px}
+main{width:min(100%,560px);background:linear-gradient(145deg,#17160f,#0d0d0a);border:1px solid #302819;border-radius:28px;padding:28px 24px;box-shadow:0 20px 70px #0008}
+.logo{width:62px;height:62px;border:1px solid var(--gold);border-radius:18px;display:grid;place-items:center;margin:0 auto 16px;color:var(--gold2);font-size:30px}
+h1{text-align:center;font-size:clamp(25px,5vw,34px);margin:0 0 12px}p{line-height:1.9;color:#c3bdb0;text-align:center}.field{margin:18px 0}label{display:block;color:#c7bd9d;margin:0 0 9px;font-size:15px}input{width:100%;padding:18px 16px;border:1px solid #332b1c;border-radius:18px;background:#080807;color:#fff;font-size:17px;outline:none}input:focus{border-color:var(--gold)}button{width:100%;border:0;border-radius:18px;padding:18px;background:linear-gradient(110deg,var(--gold2),#b98229);color:#171006;font-size:18px;font-weight:700;cursor:pointer;margin-top:10px}button:disabled{opacity:.55;cursor:wait}.note,.status{border:1px solid var(--line);background:#1b170d;border-radius:16px;padding:14px;margin-top:18px;line-height:1.8;color:#d2c6a6;font-size:14px;overflow-wrap:anywhere}.status:empty{display:none}.status.error{color:#ffb6a8;border-color:#6d3026}.status.ok{color:#c6f3c8;border-color:#315b34}.hidden{display:none!important}.small{font-size:13px;color:var(--muted)}a{color:var(--gold2)}
+</style>
+</head>
+<body>
+<main>
+<div class="logo" aria-hidden="true">♛</div>
+<h1>تهيئة الإدارة العليا لأول مرة</h1>
+<p>الحساب الوحيد لمؤسس تطبيق ضجة. هذه الصفحة منفصلة عن تسجيل ملاك المحلات، ولا تسمح بإنشاء حساب إدارة عليا ثانٍ.</p>
+<form id="setupForm" autocomplete="off">
+<div id="stageOne">
+<div class="field"><label for="email">البريد الإلكتروني الإداري</label><input id="email" type="email" autocomplete="email" placeholder="البريد الإلكتروني" required maxlength="254"></div>
+<div class="field"><label for="password">إنشاء كلمة مرور قوية</label><input id="password" type="password" autocomplete="new-password" placeholder="14 حرفًا على الأقل، حرف كبير وصغير ورقم" required minlength="14" maxlength="128"></div>
+<div class="field"><label for="recovery">رمز استرداد الإدارة العليا</label><input id="recovery" type="password" autocomplete="off" placeholder="رمز سري من 20 إلى 128 حرفًا" required minlength="20" maxlength="128"></div>
+<div class="field"><label for="bootstrap">رمز التهيئة الآمن من Cloudflare</label><input id="bootstrap" type="password" autocomplete="off" placeholder="رمز التهيئة" required></div>
+<button id="sendBtn" type="button">إرسال رمز التحقق للبريد</button>
+</div>
+<div id="stageTwo" class="hidden">
+<div class="field"><label for="otp">رمز التحقق المكوّن من 6 أرقام</label><input id="otp" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="000000" required></div>
+<button id="verifyBtn" type="submit">تأكيد البريد وإنشاء حساب الإدارة العليا</button>
+</div>
+<div id="status" class="status" role="status" aria-live="polite"></div>
+</form>
+<div class="note">استخدم رمز التهيئة الذي أعدّه مسؤول السيرفر. لا تشاركه مع أي شخص. كلمة المرور ورمز الاسترداد لا يُحفظان في هذه الصفحة. بعد نجاح الإنشاء، احتفظ برمز الاسترداد خارج الجهاز.</div>
+<p class="small">إذا ظهر خطأ اتصال، لا تكرر المحاولة كثيرًا؛ قد تكون إعدادات Worker أو قاعدة البيانات أو البريد غير مكتملة.</p>
+</main>
+<script>
+const API='https://daga-voice.dagamobile10.workers.dev';
+const $=id=>document.getElementById(id);
+let setup=null;
+function status(message,type=''){const el=$('status');el.textContent=message;el.className='status '+type;}
+function validPassword(v){return v.length>=14&&v.length<=128&&/[a-z]/.test(v)&&/[A-Z]/.test(v)&&/[0-9]/.test(v);}
+async function requestCode(){
+ const email=$('email').value.trim().toLowerCase(),password=$('password').value,recoveryCode=$('recovery').value,bootstrapToken=$('bootstrap').value.trim();
+ if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){status('اكتب بريدًا إلكترونيًا صحيحًا.','error');return;}
+ if(!validPassword(password)){status('كلمة المرور يجب أن تكون 14 حرفًا على الأقل، وبها حرف كبير وصغير ورقم.','error');return;}
+ if(recoveryCode.length<20||recoveryCode.length>128){status('رمز الاسترداد يجب أن يكون من 20 إلى 128 حرفًا.','error');return;}
+ if(!bootstrapToken){status('أدخل رمز التهيئة الآمن.','error');return;}
+ setup={email,password,recoveryCode,bootstrapToken};
+ $('sendBtn').disabled=true;status('جاري الاتصال بالسيرفر وطلب رمز التحقق…');
+ try{
+  const res=await fetch(API+'/owner/bootstrap/start',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+bootstrapToken},body:JSON.stringify({email})});
+  const data=await res.json().catch(()=>({}));
+  if(!res.ok)throw new Error(({owner_auth_database_not_configured:'قاعدة بيانات المصادقة غير مربوطة بالـ Worker.',owner_auth_not_configured:'إعدادات البريد أو أسرار المصادقة ناقصة على السيرفر.',unauthorized:'رمز التهيئة غير صحيح.',owner_already_provisioned:'حساب الإدارة العليا موجود بالفعل؛ التهيئة الأولى مقفولة.',verification_delivery_failed:'السيرفر لم يتمكن من إرسال البريد.'})[data.error]||data.error||'تعذر إرسال رمز التحقق.');
+  $('stageOne').classList.add('hidden');$('stageTwo').classList.remove('hidden');$('otp').focus();
+  status('تم طلب إرسال الرمز إلى '+(data.emailMasked||email)+'. افحص البريد الوارد والرسائل غير المرغوب فيها.','ok');
+ }catch(e){status('تعذر بدء التهيئة: '+(e.message||'خطأ اتصال. لو استمر Failed to fetch فتحقق من مصدر الصفحة وإعدادات CORS في Worker.'),'error');setup=null;}
+ finally{$('sendBtn').disabled=false;}
+}
+async function verify(event){
+ event.preventDefault();
+ if(!setup){status('ابدأ بطلب رمز التحقق أولًا.','error');return;}
+ const code=$('otp').value.trim();if(!/^\d{6}$/.test(code)){status('أدخل رمزًا مكوّنًا من 6 أرقام.','error');return;}
+ $('verifyBtn').disabled=true;status('جاري التحقق وإنشاء حساب الإدارة العليا…');
+ try{
+  const res=await fetch(API+'/owner/bootstrap/verify',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+setup.bootstrapToken},body:JSON.stringify({email:setup.email,emailCode:code,password:setup.password,recoveryCode:setup.recoveryCode})});
+  const data=await res.json().catch(()=>({}));
+  if(!res.ok)throw new Error(({owner_auth_not_configured:'إعدادات المصادقة غير مكتملة على السيرفر.',unauthorized:'رمز التهيئة غير صحيح.',owner_already_provisioned:'حساب الإدارة العليا موجود بالفعل؛ تم رفض التهيئة الثانية.',invalid_expired_or_used_verification_code:'رمز التحقق غير صحيح أو انتهت صلاحيته.',owner_provisioning_failed:'تعذر حفظ الحساب في قاعدة البيانات.'})[data.error]||data.error||'تعذر إنشاء الحساب.');
+  if(!data.sessionToken)throw new Error('لم يُرجع السيرفر جلسة دخول.');
+  sessionStorage.setItem('daga_program_admin_session',data.sessionToken);
+  sessionStorage.setItem('daga_program_admin_email',setup.email);
+  $('setupForm').classList.add('hidden');
+  status('تم إنشاء حساب الإدارة العليا بنجاح والتحقق من البريد. احفظ رمز الاسترداد في مكان آمن؛ لن يظهر مرة أخرى.','ok');
+ }catch(e){status('لم تكتمل التهيئة: '+(e.message||'خطأ اتصال.'),'error');}
+ finally{$('verifyBtn').disabled=false;}
+}
+$('sendBtn').addEventListener('click',requestCode);
+$('setupForm').addEventListener('submit',verify);
+</script>
+</body>
+</html>
