@@ -750,7 +750,7 @@ class InvitationSchemaTests(unittest.TestCase):
         source = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
         migrations = "\\n".join(path.read_text(encoding="utf-8") for path in (ROOT / "migrations").glob("*.sql"))
         self.assertNotIn("daga_security_events", source)
-        self.assertNotIn("CREATE TABLE IF NOT EXISTS daga_security_events", migrations)
+        self.assertIn("CREATE TABLE IF NOT EXISTS daga_security_events", migrations)
         self.assertIn('await audit(db,aid,"company_invitation_accepted"', source)
 
     def test_android_invitation_copy_has_clipboard_fallback(self):
