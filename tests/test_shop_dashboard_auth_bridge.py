@@ -15,7 +15,9 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
         self.assertIn("DAGA_SHOP_READY", dashboard)
         self.assertIn("bootAuthenticatedDashboard(event.data.token,event.data.companyId)", dashboard)
-        self.assertNotIn("sessionStorage", dashboard)
+        self.assertIn("DAGA_SHOP_AUTH_BRIDGE", dashboard)
+        self.assertIn("sessionStorage.removeItem", dashboard)
+        self.assertIn("Date.now()-bridge.createdAt>120000", dashboard)
         self.assertIn("fetch('/api/company/auth/me'", dashboard)
         self.assertIn("window.location.replace('/shop-access/')", dashboard)
         self.assertIn("if(window.opener)", dashboard)
@@ -24,11 +26,10 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
 
     def test_portal_passes_session_and_selected_company(self):
         portal = (ROOT / "company" / "portal.html").read_text(encoding="utf-8")
-        self.assertIn('type:"DAGA_AUTH",token:sessionToken,companyId:activeCompany.id', portal)
-        self.assertNotIn("sessionStorage", portal)
-        self.assertIn('window.open("about:blank","_blank")', portal)
-        self.assertIn('shopWindow.location.assign("/shop/")', portal)
-        self.assertIn('event.source!==shopWindow', portal)
+        self.assertIn('sessionStorage.setItem("DAGA_SHOP_AUTH_BRIDGE"', portal)
+        self.assertIn('window.location.assign("/shop/")', portal)
+        self.assertNotIn('window.open("about:blank","_blank")', portal)
+        self.assertIn("createdAt:Date.now()", portal)
 
     def test_role_is_normalized_and_not_used_as_security_boundary(self):
         dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
@@ -72,7 +73,7 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
     def test_smart_entitlement_enables_assistant_and_history_separately_from_live_daga(self):
         auth = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
         dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
-        self.assertIn("storeEntitlement.name ||", auth)
+        self.assertIn("storeEntitlement?.name ||", auth)
         self.assertIn("smartAssistantEnabled: smartEnabled", auth)
         self.assertIn('features.historyEnabled === true || features.tier === "smart"', auth)
         self.assertIn("smartAssistantEnabled:company.smartAssistantEnabled===true&&(role==='store_owner'||company.permissions?.useSmartAssistant===true)", dashboard)
@@ -91,7 +92,7 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
         self.assertIn('const accountPaths = ["/api/company/auth/me", "/api/company/auth/logout"]', auth)
         self.assertIn('return json(env, { ok: true, account:', auth)
-        self.assertIn('ledgerEnabled: Boolean(storeEntitlement)', auth)
+        self.assertIn('ledgerEnabled: storeEnabled', auth)
         self.assertIn('activeCompany.ledgerEnabled===true', portal)
         self.assertIn('لوحة الشركة هتفتح بعد ما مالك التطبيق يأكد الدفع.', portal)
         self.assertIn('company.ledgerEnabled!==true', dashboard)
@@ -106,7 +107,7 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn('if (liveMode) {', worker)
         self.assertIn("live_daga_quota_insufficient", worker)
         self.assertIn("LIVE DAGA generated text characters", worker)
-        self.assertIn('const voiceIdentityRequired = true;', worker)
+        self.assertIn('const voiceIdentityRequired = String(env.DAGA_VOICE_REQUIRE_AUTH || "").toLowerCase() === "true";', worker)
         self.assertIn("liveDagaEligible=company.smartAssistantEnabled===true&&Number(company.liveWordsRemaining||0)>0&&company.liveDagaEnabled===true", live)
     def test_only_smart_store_entitlement_enables_kallim_daga(self):
         auth = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
@@ -179,27 +180,30 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
 
     def test_live_page_uses_shop_owner_login_and_resolves_store_identity(self):
         live = (ROOT / "index.html").read_text(encoding="utf-8")
-        self.assertIn("تسجيل دخول المحل", live)
-        self.assertIn("/api/shop/auth/login", live)
-        self.assertIn("/api/shop/auth/me", live)
-        self.assertNotIn("/api/company/auth/login", live)
-        self.assertIn("sessionStorage.setItem('daga_company_id_v1',shop.id)", live)
+        self.assertIn("تسجيل دخول الشركة", live)
+        self.assertIn("/api/company/auth/login", live)
+        self.assertIn("/api/company/auth/me", live)
+        self.assertNotIn("/api/shop/auth/login", live)
+        self.assertIn("sessionStorage.setItem('daga_company_id_v1',company.id)", live)
 
     def test_smart_plan_detection_supports_plan_name_when_feature_flags_are_legacy(self):
         auth = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
         worker = (ROOT / "worker.js").read_text(encoding="utf-8")
-        self.assertIn("storeEntitlement.name ||", auth)
-        self.assertIn("LIKE '%smart%'", worker)
-        self.assertIn("LIKE '%ذكي%'", worker)
+        self.assertIn("isSmartStoreEntitlement", auth)
+        helper = (ROOT / "company-entitlements.js").read_text(encoding="utf-8")
+        self.assertIn("/smart|ذكي/i", helper)
+        self.assertIn('explicitTier === "standard"', helper)
 
 
     def test_explicit_standard_tier_overrides_legacy_smart_flags(self):
         auth = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
         worker = (ROOT / "worker.js").read_text(encoding="utf-8")
-        self.assertIn('explicitTier === "smart"', auth)
-        self.assertIn('!["standard", "smart"].includes(explicitTier)', auth)
-        self.assertIn("COALESCE(json_extract(p.features_json,'$.tier'),'') NOT IN ('standard','smart')", worker)
-        self.assertIn("json_extract(p.features_json,'$.historyEnabled')=1", worker)
+        admin = (ROOT / "owner-admin.js").read_text(encoding="utf-8")
+        helper = (ROOT / "company-entitlements.js").read_text(encoding="utf-8")
+        self.assertIn('explicitTier === "smart"', admin)
+        self.assertIn('!["standard", "smart"].includes(explicitTier)', admin)
+        self.assertIn('explicitTier === "standard"', helper)
+        self.assertIn("isSmartStoreEntitlement", worker)
 
 if __name__ == "__main__":
     unittest.main()
