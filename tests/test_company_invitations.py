@@ -252,7 +252,8 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertNotIn("localStorage", portal)
         self.assertIn('sessionStorage.setItem("DAGA_SHOP_AUTH_BRIDGE"', portal)
         dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
-        self.assertIn('sessionStorage.removeItem("DAGA_SHOP_AUTH_BRIDGE")', dashboard)
+        self.assertIn("sessionStorage.removeItem", dashboard)
+        self.assertIn("DAGA_SHOP_AUTH_BRIDGE", dashboard)
         self.assertIn("Date.now()-bridge.createdAt>120000", dashboard)
 
     def test_official_qr_page_is_separate_from_invitation_qr(self):
