@@ -24,9 +24,14 @@ assert 'server.url' in config
 assert "daga-app-staging.dagamobile10.workers.dev" in config
 assert "cleartext: false" in config
 assert 'binding = "DAGA_APP_DB"' in deploy
-assert "d1 migrations apply daga-app-live" in deploy
+assert "Reuse the existing production application D1 binding" in deploy
+assert "select(.name==\"DAGA_APP_DB\" and .type==\"d1\")" in deploy
+assert "d1 migrations apply \"$db_name\"" in deploy
+assert "Production deployment blocked: existing DAGA_APP_DB binding was not found" in deploy
+assert "name=\"daga-app-live\"" not in deploy
 assert "DAGA_OWNER_BOOTSTRAP_TOKEN" in deploy
 assert "ELEVENLABS_API_KEY" in deploy
+assert deploy.index("Check production secrets before deploying") < deploy.index("Deploy daga-voice to Cloudflare")
 assert 'DAGA_MEMORY_REQUIRE_AUTH = "true"' in wrangler
 assert 'DAGA_PUBLIC_API_RATE_LIMITS = "true"' in wrangler
 print("DAGA release candidate source checks passed.")
