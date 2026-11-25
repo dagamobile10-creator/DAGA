@@ -959,7 +959,7 @@ async function openTeamPermissions(){
   const rows=data.members||[];
   const host=document.getElementById('teamPermissionMembers');
   if(!host)return;
-  host.innerHTML=rows.length?rows.map(m=>'<div class="reconMini"><div><b>'+esc(m.displayName||m.emailMasked||m.role)+'</b><span class="small"> — '+(m.role==='manager'?'مدير':'موظف')+' — '+esc(m.emailMasked||'')+'</span></div><button type="button" data-edit-team-member="'+esc(m.accountId)+'">تعديل الصلاحيات</button></div>').join(''):'<p class="small">مفيش أعضاء نشطين غير صاحب الشركة. تأكد إن دعوة المدير اتقبلت وإن عضويته نشطة.</p>';
+  host.innerHTML=rows.length?rows.map(m=>'<div class="reconMini"><div><b>'+esc(m.displayName||m.emailMasked||m.role)+'</b><span class="small"> — '+(m.role==='manager'?'مدير':'موظف')+' — '+esc(m.emailMasked||'')+'</span></div><div class="row"><button type="button" data-edit-team-member="'+esc(m.accountId)+'">تعديل الصلاحيات</button><button type="button" class="danger" data-remove-team-member="'+esc(m.accountId)+'">حذف العضو وإلغاء الوصول</button></div></div>').join(''):'<p class="small">مفيش أعضاء نشطين غير صاحب الشركة. تأكد إن دعوة المدير اتقبلت وإن عضويته نشطة.</p>';
  }catch(e){const host=document.getElementById('teamPermissionMembers');if(host)host.textContent=e.message||'تعذر تحميل أعضاء الشركة';}
 }
 async function editTeamMemberPermissions(memberId){
