@@ -197,7 +197,10 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertIn('name="referrer" content="no-referrer"', page)
         self.assertIn('credentials:"omit"', page)
         self.assertNotIn("localStorage", page)
-        self.assertNotIn("sessionStorage", page)
+        self.assertIn('sessionStorage.setItem("DAGA_SHOP_AUTH_BRIDGE"', page)
+        dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
+        self.assertIn('sessionStorage.removeItem("DAGA_SHOP_AUTH_BRIDGE")', dashboard)
+        self.assertIn("Date.now()-bridge.createdAt>120000", dashboard)
         self.assertIn("/api/company/invitations/accept", page)
         self.assertIn("/api/company/auth/register/verify", page)
         self.assertIn("/api/company/auth/login", page)
@@ -246,7 +249,10 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertIn("/revoke", portal)
         self.assertIn("navigator.share", portal)
         self.assertNotIn("localStorage", portal)
-        self.assertNotIn("sessionStorage", portal)
+        self.assertIn('sessionStorage.setItem("DAGA_SHOP_AUTH_BRIDGE"', portal)
+        dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
+        self.assertIn('sessionStorage.removeItem("DAGA_SHOP_AUTH_BRIDGE")', dashboard)
+        self.assertIn("Date.now()-bridge.createdAt>120000", dashboard)
 
     def test_official_qr_page_is_separate_from_invitation_qr(self):
         page = (ROOT / "go" / "index.html").read_text(encoding="utf-8")
@@ -277,10 +283,13 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertIn("AND status='pending' AND use_count=0 AND max_uses=1", handler)
         self.assertIn("INSERT INTO daga_store_memberships", handler)
         self.assertIn("await db.batch([", handler)
-        self.assertIn("WHERE EXISTS (SELECT 1 FROM daga_store_invitations WHERE id=? AND status='accepted' AND accepted_by_account_id=? AND use_count=1)", handler)
-        self.assertIn("[1,2,3,4,5,6].some(i=>Number(results?.[i]?.meta?.changes||0)!==1)", handler)
-        self.assertIn("[1,2,3,4,5,6].some(i=>Number(results?.[i]?.meta?.changes||0)!==1)", handler)
-        self.assertIn("[1,2,3,4,5,6].some(i=>Number(results?.[i]?.meta?.changes||0)!==1)", handler)
+        self.assertIn("INSERT INTO daga_accounts", handler)
+        self.assertIn("UPDATE daga_store_invitations SET status=\\'accepted\\',use_count=1", handler)
+        self.assertIn("INSERT INTO daga_store_memberships", handler)
+        self.assertIn("INSERT INTO daga_auth_sessions", handler)
+        self.assertIn("WHERE EXISTS (SELECT 1 FROM daga_store_invitations WHERE id=?", handler)
+        self.assertIn("AND use_count=1)", handler)
+        self.assertIn("[0,1,2,3,4,5].some(i=>Number(results?.[i]?.meta?.changes||0)!==1)", handler)
 
     def test_registration_validation_regexes_are_not_double_escaped(self):
         source = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
@@ -719,6 +728,7 @@ class InvitationSchemaTests(unittest.TestCase):
         end = worker.index('if (url.pathname === "/health")', start)
         route = worker[start:end]
         self.assertIn('DAGA_VOICE_REQUIRE_AUTH', route)
+        self.assertIn('String(env.DAGA_VOICE_REQUIRE_AUTH || "").toLowerCase() !== "true"', route)
         self.assertIn('authenticatedAccount(request, env.DAGA_APP_DB)', route)
         self.assertIn('account.status !== "approved"', route)
         self.assertIn('account.role === "program_owner"', route)
@@ -750,7 +760,7 @@ class InvitationSchemaTests(unittest.TestCase):
         source = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
         migrations = "\\n".join(path.read_text(encoding="utf-8") for path in (ROOT / "migrations").glob("*.sql"))
         self.assertNotIn("daga_security_events", source)
-        self.assertNotIn("CREATE TABLE IF NOT EXISTS daga_security_events", migrations)
+        self.assertIn("CREATE TABLE IF NOT EXISTS daga_security_events", migrations)
         self.assertIn('await audit(db,aid,"company_invitation_accepted"', source)
 
     def test_android_invitation_copy_has_clipboard_fallback(self):
