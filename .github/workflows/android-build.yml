@@ -110,6 +110,7 @@ jobs:
             echo "Running $test"
             python3 "$test"
           done
+          node tests/test_company_entitlements.mjs
 
       - name: Build debug APK
         run: |
