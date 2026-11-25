@@ -583,9 +583,15 @@ function review(){
    const matching=outsideCols.flatMap(x=>x.c.entries.map((e,ei)=>({ci:x.i,ei,name:String(e[0]||''),amount:num(e[1])}))).filter(r=>normAccountingName(r.name)===normAccountingName(p.name));
    const target=matching.length?outsideCols.find(x=>x.i===matching[0].ci):(outsideCols.find(x=>x.c.entries.length===0)||outsideCols[0]);
    const existingTotal=matching.reduce((sum,r)=>sum+r.amount,0);
-   pendingOrder={...p,mode:'outsideAdd',targetIndex:target?.i,cardsIndex,existingRows:matching.map(r=>({ci:r.ci,name:r.name,amount:r.amount})),existingTotal,expectedAfter:existingTotal+p.amount};
-   const bal=cols[balanceIndex]?.entries.filter(e=>normAccountingName(e[0])===normAccountingName(p.name)).reduce((sum,e)=>sum+num(e[1]),0)||0;
-   out.innerHTML=`<div class="reconMini"><div><span>تاريخ ووقت المراجعة</span><b>${esc(localStamp())}</b></div><div><span>البند</span><b>${esc(p.name)} — أعمدة الخارج</b></div><div>الموجود حاليًا باسم ${esc(p.name)} في الخارج <b>${fmt(existingTotal)} جنيه</b></div><div>المبلغ الجديد المضاف <b>+${fmt(p.amount)} جنيه</b></div><div>الإجمالي بعد الإضافة <b>${fmt(existingTotal+p.amount)} جنيه</b></div><div>الفلوس الأساسية هتتخصم بالمبلغ الجديد فقط <b>${fmt(p.amount)} جنيه</b></div>${bal>0?`<div>رصيد ${esc(p.name)} المنفصل حاليًا <b>${fmt(bal)} جنيه</b></div><p class="small">الرصيد مش هيتخصم تلقائيًا. دي حركة خارج جديدة، ولو عايز تسوية بين الرصيد والخارج لازم تطلبها كعملية منفصلة.</p>`:''}${matching.length>1?'<p class="small">لقيت الاسم مكررًا في أكتر من صف؛ هجمع الصفوف المتطابقة في صف واحد مع الحفاظ على إجماليها، من غير خصم قديم مرة تانية.</p>':''}</div><button class="primary" onclick="executeOrder()">تأكيد وتنفيذ</button><button onclick="pendingOrder=null;document.getElementById('orderPreview').innerHTML='تم إلغاء العملية.'">إلغاء</button>`;return;
+   const order={...p,mode:'outsideAdd',targetIndex:target?.i,cardsIndex,existingRows:matching.map(r=>({ci:r.ci,name:r.name,amount:r.amount})),existingTotal,expectedAfter:existingTotal+p.amount};
+   const balanceRows=(cols[balanceIndex]?.entries||[]).map(e=>({ci:balanceIndex,name:String(e[0]||''),amount:num(e[1])})).filter(r=>normAccountingName(r.name)===normAccountingName(p.name));
+   const balanceTotal=balanceRows.reduce((sum,r)=>sum+r.amount,0);
+   if(balanceTotal>0){
+    pendingOrder=null;pendingClarification={type:'settlementOffer',person:{name:p.name},order,balanceRows,balanceTotal};
+    out.innerHTML=`<div class="reconMini"><div>الحساب <b>${esc(p.name)}</b></div><div>الخارج قبل الإضافة <b>${fmt(existingTotal)} جنيه</b></div><div>الإضافة الجديدة <b>+${fmt(p.amount)} جنيه</b></div><div>إجمالي الخارج بعد الإضافة <b>${fmt(existingTotal+p.amount)} جنيه</b></div><div>رصيده الحالي في عمود الرصيد <b>${fmt(balanceTotal)} جنيه</b></div></div><p class="small">تحب تسوّي من رصيده؟ لو وافقت، هيتخصم من الرصيد والخارج نفس المبلغ المتاح للتسوية، والفلوس الأساسية هتتخصم بقيمة الإضافة الجديدة مرة واحدة فقط.</p><button class="primary" onclick="answerClarificationFromText('أيوه سوي من الرصيد')">أيوه، سوّي من الرصيد</button><button onclick="answerClarificationFromText('لا سيب الرصيد زي ما هو')">لأ، سيب الرصيد زي ما هو</button><button onclick="answerClarificationFromText('إلغاء')">إلغاء الحركة</button>`;return;
+   }
+   pendingOrder=order;
+   out.innerHTML=`<div class="reconMini"><div><span>تاريخ ووقت المراجعة</span><b>${esc(localStamp())}</b></div><div>الموجود حاليًا باسم ${esc(p.name)} في الخارج <b>${fmt(existingTotal)} جنيه</b></div><div>المبلغ الجديد <b>+${fmt(p.amount)} جنيه</b></div><div>الإجمالي بعد الإضافة <b>${fmt(existingTotal+p.amount)} جنيه</b></div><div>خصم الفلوس الأساسية <b>${fmt(p.amount)} جنيه فقط</b></div></div><button class="primary" onclick="executeOrder()">تأكيد وتنفيذ</button><button onclick="pendingOrder=null;document.getElementById('orderPreview').innerHTML='تم إلغاء العملية.'">إلغاء</button>`;return;
  }
  if(p.type==='balanceAdd'){
    const serviceAgent=canonicalServiceAgent(p.name),moneyDelta=serviceAgent?0:p.amount,money=findMoneyEntry();
@@ -615,6 +621,26 @@ function review(){
 }
 function answerClarificationFromText(text){
  const v=String(text||'').toLowerCase().replace(/[إأآ]/g,'ا').replace(/[ىي]/g,'ي').replace(/[ةه]/g,'ه').replace(/[^\u0600-\u06FFa-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
+ if(pendingClarification?.type==='settlementOffer'){
+  const q=pendingClarification,order=q.order,yes=/(ايوه|اه|تمام|ماشي|سوي|سوى|تسويه|خصم|من الرصيد|اعمل التسويه)/.test(v),no=/(^| )(لا|لأ|سيب|خليه|خلي الرصيد|من غير تسويه|مش عايز)( |$)/.test(v);
+  if(/^(الغاء|الغي|وقف|الغى العملية)$/.test(v)){pendingClarification=null;pendingOrder=null;const box=document.getElementById('orderPreview');if(box)box.innerHTML='<p class="status">تم إلغاء الحركة بالكامل. مفيش أي تغيير اتسجل.</p>';return;}
+  if(yes){
+   const settlementAmount=Math.min(order.expectedAfter,q.balanceTotal);
+   pendingOrder={...order,mode:'outsideAddAndSettle',settlementAmount,balanceRows:q.balanceRows,balanceBefore:q.balanceTotal};
+   pendingClarification=null;
+   const box=document.getElementById('orderPreview');
+   if(box)box.innerHTML=`<div class="reconMini"><div>الاسم <b>${esc(order.name)}</b></div><div>الخارج بعد إضافة المبلغ الجديد <b>${fmt(order.expectedAfter)} جنيه</b></div><div>التسوية من الرصيد <b>${fmt(settlementAmount)} جنيه</b></div><div>الخارج بعد التسوية <b>${fmt(order.expectedAfter-settlementAmount)} جنيه</b></div><div>الرصيد بعد التسوية <b>${fmt(q.balanceTotal-settlementAmount)} جنيه</b></div><div>تأثير الفلوس الأساسية <b>خصم ${fmt(order.amount)} جنيه فقط مقابل الإضافة الجديدة</b></div></div><p class="small">راجع الأرقام. التسوية لا تخصم المبلغ القديم مرة ثانية من الفلوس الأساسية.</p><button class="primary" onclick="executeOrder()">تأكيد وتنفيذ</button><button onclick="pendingOrder=null;document.getElementById('orderPreview').innerHTML='تم إلغاء العملية.'">إلغاء</button>`;
+   return;
+  }
+  if(no){
+   pendingOrder=order;pendingClarification=null;
+   const box=document.getElementById('orderPreview');
+   if(box)box.innerHTML=`<div class="reconMini"><div>الاسم <b>${esc(order.name)}</b></div><div>الخارج بعد الإضافة <b>${fmt(order.expectedAfter)} جنيه</b></div><div>الرصيد هيفضل زي ما هو <b>${fmt(q.balanceTotal)} جنيه</b></div><div>خصم الفلوس الأساسية <b>${fmt(order.amount)} جنيه فقط</b></div></div><button class="primary" onclick="executeOrder()">تأكيد إضافة الخارج فقط</button><button onclick="pendingOrder=null;document.getElementById('orderPreview').innerHTML='تم إلغاء العملية.'">إلغاء</button>`;
+   return;
+  }
+  const box=document.getElementById('orderPreview');if(box)box.innerHTML='<p class="small">تقصد أسوّي من الرصيد، ولا أسيب الرصيد زي ما هو؟ مفيش أي تغيير اتسجل لسه.</p><button class="primary" onclick="answerClarificationFromText(\'أيوه سوي من الرصيد\')">تسوية من الرصيد</button><button onclick="answerClarificationFromText(\'لا سيب الرصيد زي ما هو\')">سيب الرصيد زي ما هو</button><button onclick="answerClarificationFromText(\'إلغاء\')">إلغاء</button>';
+  return;
+ }
  // A leading "لا" often corrects the previous suggestion; check the full affirmative intent first.
  if(/^(لا|لا انا|لا عايز|لا قصدي|لأ|لأ انا|لأ عايز) .*(مبلغ جديد|جديد مستقل|عملية جديدة|ضيف جديد|اضيف جديد|سجل جديد)/.test(v)||/(مبلغ جديد|جديد مستقل|عملية جديدة|من بره|مستقل|ضيف جديد|اضيف جديد|سجل جديد|ضيفه جديد)/.test(v)){answerClarification('new');return}
  if(/(سوي|سوى|تسويه|تسويه الحساب|من الرصيد|انقل|نقل|خصم من الرصيد|رصيده|رصيد جمال|سوّي القديم|سوي القديم|اه ايوه سوي|ايوه سوي|أيوه سوي|خصم القديم|سوّي الحساب)/.test(v)){answerClarification('transfer');return}
@@ -688,6 +714,23 @@ function executeOrderCore(){
    const money=changeMoney(-p.amount);if(!money.ok){alert(money.message);return}
    addToNamed(p.targetIndex,p.name,p.amount);const withdrawalRow=target.entries.find(e=>e[0]===p.name);if(withdrawalRow)withdrawalRow[2]={moneyPosted:true};
    addLedger('سحب يومي من الكاش/الأكسسوار',`تم تسجيل سحب ${fmt(p.amount)} جنيه باسم ${p.name} في ${target.name} وخصمه من الفلوس الأساسية فورًا. التسوية تصفّر السحب فقط من غير خصم تاني.`,{column:target.name,entryName:p.name,amount:p.amount,moneyDelta:-p.amount});
+ }else if(p.mode==='outsideAddAndSettle'){
+   const target=cols[p.targetIndex],money=findMoneyEntry();
+   if(!target||columnRole(target)!=='expenses'){alert('مش لاقي عمود خارج مناسب.');return}
+   const currentRows=(p.existingRows||[]).map(r=>({r,idx:cols[r.ci]?.entries.findIndex(e=>normAccountingName(e[0])===normAccountingName(r.name))??-1}));
+   if(currentRows.some(x=>x.idx<0||num(cols[x.r.ci].entries[x.idx][1])!==x.r.amount)){alert('حساب الخارج اتغير من وقت المراجعة. راجع الأمر من جديد.');pendingOrder=null;return}
+   const balanceNow=(p.balanceRows||[]).reduce((sum,r)=>{const idx=cols[r.ci]?.entries.findIndex(e=>normAccountingName(e[0])===normAccountingName(r.name))??-1;return sum+(idx>=0?num(cols[r.ci].entries[idx][1]):0)},0);
+   if(balanceNow!==p.balanceBefore){alert('رصيد الشخص اتغير من وقت المراجعة. راجع التسوية من جديد.');pendingOrder=null;return}
+   if(!money||num(money.entry[1])<p.amount){alert('الفلوس الأساسية مش كفاية للإضافة الجديدة. مفيش أي تغيير اتسجل.');pendingOrder=null;return}
+   const mergedTotal=(p.existingTotal||0)+p.amount,targetKey=normAccountingName(p.name),keep=target.entries.findIndex(e=>normAccountingName(e[0])===targetKey);
+   currentRows.slice().sort((a,b)=>b.idx-a.idx).forEach(x=>{if(x.r.ci!==p.targetIndex||x.idx!==keep)cols[x.r.ci].entries.splice(x.idx,1)});
+   const refreshed=target.entries.findIndex(e=>normAccountingName(e[0])===targetKey);
+   if(refreshed>=0)target.entries[refreshed][1]=String(mergedTotal);else target.entries.push([p.name,String(mergedTotal)]);
+   const outsideLeft=updateRows([{ci:p.targetIndex,name:p.name}],p.settlementAmount),balanceLeft=updateRows(p.balanceRows,p.settlementAmount);
+   if(outsideLeft>0||balanceLeft>0){throw new Error('Settlement amount exceeds current named ledger balance');}
+   const moneyChange=changeMoney(-p.amount);if(!moneyChange.ok)throw new Error(moneyChange.message);
+   const finalOutside=mergedTotal-p.settlementAmount,finalBalance=p.balanceBefore-p.settlementAmount;
+   addLedger('إضافة خارج وتسوية من الرصيد',`تمت إضافة ${fmt(p.amount)} جنيه إلى ${p.name} ثم تسوية ${fmt(p.settlementAmount)} جنيه من الخارج والرصيد؛ الخارج المتبقي ${fmt(finalOutside)} جنيه والرصيد المتبقي ${fmt(finalBalance)} جنيه. الفلوس الأساسية اتخصمت بقيمة الإضافة الجديدة فقط.`,{column:'الخارج والرصيد',entryName:p.name,amount:p.amount,settled:p.settlementAmount,oldOutside:p.existingTotal||0,newOutside:finalOutside,oldBalance:p.balanceBefore,newBalance:finalBalance,moneyDelta:-p.amount});
  }else if(p.mode==='outsideAdd'){
    const target=cols[p.targetIndex],money=findMoneyEntry();
    if(!target||columnRole(target)!=='expenses'){alert('مش لاقي عمود خارج مناسب.');return}
@@ -792,6 +835,7 @@ function liveOrderCancellation(text){
 function describeLiveOrder(p){
  const money=findMoneyEntry(),current=money?num(money.entry[1]):0;
  if(p.mode==='outsideAdd')return 'هسجل '+fmt(p.amount)+' جنيه باسم '+p.name+' في عمود الخارج. الفلوس الأساسية هتقل '+fmt(p.amount)+' جنيه، من '+fmt(current)+' إلى '+fmt(current-p.amount)+' جنيه.';
+ if(p.mode==='outsideAddAndSettle')return 'هضيف '+fmt(p.amount)+' جنيه للخارج باسم '+p.name+'، وبعدها هسوي '+fmt(p.settlementAmount)+' جنيه من الخارج والرصيد. الخارج والرصيد هيتبقى فيهم '+fmt(p.expectedAfter-p.settlementAmount)+' جنيه و'+fmt(p.balanceBefore-p.settlementAmount)+' جنيه، والفلوس الأساسية هتتخصم بقيمة الإضافة الجديدة فقط.';
  if(p.mode==='cashAdd')return 'هسجل '+fmt(p.amount)+' جنيه في '+(cols[p.targetIndex]?.name||'عمود الكاش')+'. الفلوس الأساسية هتزيد '+fmt(p.amount)+' جنيه.';
  if(p.mode==='accessorySale'||p.mode==='accessoryAdd')return 'هسجل '+fmt(p.amount)+' جنيه في عمود الإكسسوار باسم '+(p.product||'مبيعات أكسسوار')+'. الفلوس الأساسية هتزيد '+fmt(p.amount)+' جنيه.';
  if(p.mode==='dailyWithdrawal')return 'هسجل سحب '+fmt(p.amount)+' جنيه من '+p.name+' في عمود الخارج، والفلوس الأساسية هتقل '+fmt(p.amount)+' جنيه.';
