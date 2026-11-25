@@ -1021,11 +1021,11 @@ async function bootAuthenticatedDashboard(token,selectedCompanyId){
   if(role==='owner')role='store_owner';
   if(!['store_owner','manager','employee'].includes(role)){window.location.replace('/shop-access/');return;}
   const storeSubscriptionActive=company.ledgerEnabled===true||company.smartAssistantEnabled===true;window.DAGA_SESSION_TOKEN=token;window.DAGA_AUTH_USER={id:data.account.id,displayName:data.account.displayName||'',role:role,storeId:company.id,storeName:company.displayName||'ضجه',contactPhone:company.contactPhone||'',permissions:company.permissions||{},liveWordsRemaining:Number(company.liveWordsRemaining||0),ledgerEnabled:storeSubscriptionActive,smartAssistantEnabled:company.smartAssistantEnabled===true&&(role==='store_owner'||company.permissions?.useSmartAssistant===true),historyEnabled:company.historyEnabled===true,liveDagaEnabled:company.liveDagaEnabled===true&&(role==='store_owner'||company.permissions?.useLiveDaga===true)};
-  // Keep both premium actions visible on every plan; entitlement controls whether they can run.
+  // Hide premium actions when the authenticated company entitlement or member permission is missing.
   const smartAllowed=window.DAGA_AUTH_USER.smartAssistantEnabled===true;
   const liveAllowed=window.DAGA_AUTH_USER.liveDagaEnabled===true&&(role==='store_owner'||company.permissions?.useLiveDaga===true);
   // Keep premium actions visible and tappable; their handlers and server routes enforce entitlements.
-  document.querySelectorAll('button[onclick="voiceDaga()"]').forEach(b=>{b.hidden=!smartAllowed;b.disabled=!smartAllowed;b.title=smartAllowed?'':'زر كلم ضجة متاح بعد تفعيل اشتراك DAGA للشركة.';b.setAttribute('aria-disabled',String(!smartAllowed));});
+  document.querySelectorAll('button[onclick="voiceDaga()"]').forEach(b=>{b.hidden=!smartAllowed;b.disabled=!smartAllowed;b.title=smartAllowed?'':'زر كلم ضجه متاح في الاشتراك الذكي المؤكد والمدفوع فقط.';b.setAttribute('aria-disabled',String(!smartAllowed));});
   document.querySelectorAll('button.liveBtn').forEach(b=>{b.hidden=!liveAllowed;b.disabled=!liveAllowed;b.title='LIVE DAGA متاحة؛ يلزم وجود رصيد حروف للتحدث.';b.setAttribute('aria-disabled',String(!liveAllowed));});
   document.querySelectorAll('button[onclick="showReports()"]').forEach(b=>{b.hidden=false;b.disabled=false;b.title=window.DAGA_AUTH_USER.historyEnabled?'':'تفاصيل الأيام السابقة متاحة بعد تفعيل اشتراك DAGA للشركة.';});
   loadStoreData(company.id);migrateLegacyDailyAccounting();loadCompanyLayoutLabels(company.id,window.DAGA_SESSION_TOKEN);
