@@ -374,14 +374,14 @@ function parseOrder(t){
  // Named item edits: e.g. "عدل كرت الهوا وخليهم 2000 جنيه".
  const editIntent=/(?:عدل|عدّل|غير|غيّر|خلي|خليهم|خليه|خليها|بدل|بدّل|بقى|اصبح|أصبح)/.test(cleaned);
  if(editIntent){
-   const cards=columnByRole('cards');
-   const entries=(cards?.entries||[]).map((e,i)=>({name:String(e[0]||''),normName:norm(e[0]),index:i,amount:num(e[1])}))
-     .filter(e=>e.normName && cleaned.includes(e.normName) && !/^(الفلوس|فلوس|الفلوس الاساسيه|الرصيد الاساسي)$/.test(e.normName))
+   const requestedRole=/(الخارج|برا)/.test(cleaned)?'expenses':/(الرصيد)/.test(cleaned)?'balance':/(الكروت)/.test(cleaned)?'cards':/(كاش)/.test(cleaned)?'cash':/(اكسسوار|اكسسوارات)/.test(cleaned)?'accessory':null;
+   const entries=cols.flatMap((c,ci)=>(c.entries||[]).map((e,i)=>({column:c.name,ci,name:String(e[0]||''),normName:norm(e[0]),index:i,amount:num(e[1]),role:columnRole(c),entry:e})))
+     .filter(e=>e.normName && cleaned.includes(e.normName) && (!requestedRole||e.role===requestedRole) && !/^(الفلوس|فلوس|الفلوس الاساسيه|الرصيد الاساسي)$/.test(e.normName))
      .sort((a,b)=>b.normName.length-a.normName.length);
    if(entries.length){
      const best=entries[0], tied=entries.filter(e=>e.normName.length===best.normName.length);
-     if(tied.length>1) return {ambiguous:'لقيت أكتر من بند في عمود الكروت اسمه قريب من اللي قلته. اختار اسم البند بالضبط علشان ما أعدّلش بند غلط.'};
-     return {type:'namedEntrySet',column:'الكروت',entryName:best.name,index:best.index,oldAmount:best.amount,newAmount:amount,amount,raw};
+     if(tied.length>1) return {ambiguous:'لقيت أكتر من بند بنفس الاسم أو اسم قريب في أكتر من عمود. حدّد العمود كمان علشان ما أعدّلش بند غلط.'};
+     return {type:'namedEntrySet',column:best.column,entryName:best.name,index:best.index,oldAmount:best.amount,newAmount:amount,amount,raw};
    }
  }
  const isCash=/(كاش|نقدي|نقدا|فلوس كاش)/.test(cleaned);
