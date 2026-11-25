@@ -275,6 +275,12 @@ export default {
       } catch (_) { return json({ error: "liveavatar_token_failed" }, 502); }
     }
 
+    if (url.pathname === "/api/support/contact" && request.method === "GET") {
+      if (!env.DAGA_APP_DB) return json({error:"application_database_not_configured"},503);
+      const row = await env.DAGA_APP_DB.prepare("SELECT setting_value FROM daga_app_settings WHERE setting_key='support_whatsapp'").first();
+      return json({ok:true,whatsapp:row?.setting_value||""});
+    }
+
     if (url.pathname === "/health") {
       return json({ ok: true, voiceConfigured: Boolean(env.ELEVENLABS_API_KEY), chatConfigured: Boolean(env.OPENAI_API_KEY || env.GROQ_API_KEY || env.AI), freeChatConfigured: Boolean(env.GROQ_API_KEY || env.AI), liveAvatarConfigured: Boolean(env.LIVEAVATAR_API_KEY), liveAvatarIdConfigured: Boolean(env.LIVEAVATAR_AVATAR_ID) });
     }

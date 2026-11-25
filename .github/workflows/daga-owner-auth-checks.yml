@@ -2,9 +2,9 @@ name: DAGA V30 owner-auth checks
 
 on:
   push:
-    branches: [daga-v30-implementation, daga-email-only-auth]
+    branches: [daga-v30-implementation, daga-email-only-auth, fix/v31-daga-user-reported-blockers]
   pull_request:
-    branches: [main, daga-v30-implementation, daga-email-only-auth]
+    branches: [main, daga-v30-implementation, daga-email-only-auth, release/v31-staging-android-candidate]
 
 jobs:
   syntax-and-schema:
@@ -20,11 +20,10 @@ jobs:
           workflow = open(".github/workflows/daga-staging-setup.yml", encoding="utf-8").read()
           worker = open("worker.js", encoding="utf-8").read()
           checks = {
-              "LIVE DAGA quota uses one explicit UTC timestamp for entitlement checks":
-                  'const quotaNow = new Date().toISOString();' in worker
-                  and 'starts_at<=? AND expires_at>?' in worker
-                  and 'storeId, quotaNow, quotaNow' in worker
-                  and 'storeId, quotaNow, quotaNow).run()' in worker,
+              "LIVE DAGA quota reads the character ledger before generation":
+                  'if (liveMode)' in worker
+                  and "FROM daga_live_word_ledger WHERE store_id=?" in worker
+                  and 'live_daga_quota_insufficient' in worker,
               "LIVE DAGA refunds quota after provider failures":
                   "const refundQuota = async () =>" in worker
                   and "await refundQuota();" in worker,
@@ -62,9 +61,10 @@ jobs:
                   and 'INSERT INTO daga_live_word_ledger' in worker
                   and '>= ?' in worker
                   and 'requiredCharacters: characters, remainingCharacters: remaining' in worker,
-              "LIVE DAGA worker checks entitlement start and expiry before debit":
-                  'starts_at<=? AND expires_at>?' in worker
-                  and 'error: "live_daga_subscription_required"' in worker,
+              "LIVE DAGA uses its character ledger independently of the company subscription":
+                  "LIVE DAGA is paid and consumed by its own character ledger" in worker
+                  and "service='store'" in worker
+                  and "live_daga_quota_insufficient" in worker,
               "owner console labels LIVE DAGA quota as characters and requires it":
                   "رصيد الحروف (إلزامي لباقة LIVE DAGA)" in open("owner-console.html", encoding="utf-8").read()
                   and "$('planQuota').required=$('planService').value==='live_daga'" in open("owner-console.html", encoding="utf-8").read(),
@@ -126,7 +126,7 @@ jobs:
               "setup token is sent only in Authorization header": "'Authorization':'Bearer '+bootstrapTokenInMemory" in html,
               "setup token is not persisted in browser storage": "localStorage.setItem('bootstrapToken'" not in html and "sessionStorage.setItem('bootstrapToken'" not in html,
               "bootstrap uses email verification only": 'id="bootstrapEmailCode"' in html and 'id="bootstrapPhoneCode"' not in html and "owner_bootstrap_email" in auth,
-              "strong password and recovery code are collected": 'id="bootstrapPassword"' in html and 'id="bootstrapRecoveryCode"' in html,
+              "strong password is collected without a recovery-code field": 'id="bootstrapPassword"' in html and 'id="bootstrapRecoveryCode"' not in html,
               "login is email and password without SMS": 'id="loginVerifyForm"' not in html and 'id="loginPhoneCode"' not in html and "function validPassword" in auth,
               "cancel clears setup fields and in-memory token": "bootstrapTokenInMemory='';$('bootstrapToken').value=''" in html,
           }
