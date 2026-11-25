@@ -71,8 +71,6 @@ const code=String(body.emailCode||"").trim(),password=String(body.newPassword||"
 if(!/^\d{6}$/.test(code)||!validPassword(password))return json(env,{error:"valid_recovery_fields_required"},400);
 const owner=await db.prepare("SELECT a.id,a.email FROM daga_program_owner o JOIN daga_accounts a ON a.id=o.account_id JOIN daga_owner_credentials c ON c.account_id=a.id WHERE o.singleton_id=1 AND a.status='approved'").first();if(!owner)return json(env,{error:"owner_not_provisioned"},409);
 if(!await rateLimit(db,env,"recovery-complete:"+(request.headers.get("CF-Connecting-IP")||"unknown"),5,3600))return json(env,{error:"rate_limited"},429);
-const oldHash=await sha256(oldRecovery+":"+env.DAGA_OTP_PEPPER);
-if(!owner.recovery_code_hash||!constantTimeEqual(oldHash,owner.recovery_code_hash))return json(env,{error:"invalid_expired_or_used_recovery_credentials"},400);
 const verified=await consumeChallenge(db,env,"password_reset",await sha256("email:"+String(owner.email).toLowerCase()),code);
 if(!verified)return json(env,{error:"invalid_expired_or_used_verification_code"},400);
 const salt=randomToken(24),hash=await derivePassword(password,salt,PBKDF2_ITERATIONS),now=new Date().toISOString();
