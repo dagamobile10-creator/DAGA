@@ -106,13 +106,13 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn("LIVE DAGA generated text characters", worker)
         self.assertIn('const voiceIdentityRequired = true;', worker)
         self.assertIn("liveDagaEligible=company.smartAssistantEnabled===true&&Number(company.liveWordsRemaining||0)>0&&company.liveDagaEnabled===true", live)
-    def test_only_smart_store_entitlement_enables_kallim_daga(self):
+    def test_company_subscription_enables_kallim_daga(self):
         auth = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
         dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
-        self.assertIn('smartAssistantEnabled: smartEnabled', auth)
+        self.assertIn('smartAssistantEnabled: storeEnabled', auth)
         self.assertIn('b.hidden=!smartAllowed;b.disabled=!smartAllowed', dashboard)
-        self.assertIn('ميزة كلم ضجه متاحة في الاشتراك الذكي المؤكد والمدفوع فقط.', dashboard)
-        self.assertNotIn('ميزة كلم ضجه متاحة بعد تأكيد الاشتراك العادي أو الذكي للشركة.', dashboard)
+        self.assertIn('زر كلم ضجة متاح بعد تفعيل اشتراك DAGA للشركة.', dashboard)
+        
     def test_company_owner_can_list_members_and_update_individual_permissions(self):
         invitations = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
         dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
