@@ -282,7 +282,7 @@ export default {
 
     // Subscription-controlled voice routes always require the authenticated company session.
     let voiceAccount = null;
-    const voiceIdentityRequired = true;
+    const voiceIdentityRequired = String(env.DAGA_VOICE_REQUIRE_AUTH || "").toLowerCase() === "true";
     if (voiceIdentityRequired && ["/chat", "/tts", "/liveavatar/token"].includes(url.pathname)) {
       if (!env.DAGA_APP_DB) return json({ error: "authenticated_voice_not_configured" }, 503);
       voiceAccount = await authenticatedAccount(request, env.DAGA_APP_DB);
