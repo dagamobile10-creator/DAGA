@@ -126,7 +126,7 @@ jobs:
               "setup token is sent only in Authorization header": "'Authorization':'Bearer '+bootstrapTokenInMemory" in html,
               "setup token is not persisted in browser storage": "localStorage.setItem('bootstrapToken'" not in html and "sessionStorage.setItem('bootstrapToken'" not in html,
               "bootstrap uses email verification only": 'id="bootstrapEmailCode"' in html and 'id="bootstrapPhoneCode"' not in html and "owner_bootstrap_email" in auth,
-              "strong password and recovery code are collected": 'id="bootstrapPassword"' in html and 'id="bootstrapRecoveryCode"' in html,
+              "strong password is collected without a recovery-code field": 'id="bootstrapPassword"' in html and 'id="bootstrapRecoveryCode"' not in html,
               "login is email and password without SMS": 'id="loginVerifyForm"' not in html and 'id="loginPhoneCode"' not in html and "function validPassword" in auth,
               "cancel clears setup fields and in-memory token": "bootstrapTokenInMemory='';$('bootstrapToken').value=''" in html,
           }
