@@ -201,7 +201,7 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         admin = (ROOT / "owner-admin.js").read_text(encoding="utf-8")
         helper = (ROOT / "company-entitlements.js").read_text(encoding="utf-8")
         self.assertIn('explicitTier === "smart"', admin)
-        self.assertIn('!["standard", "smart"].includes(explicitTier)', admin)
+        self.assertIn('source.tier !== "standard" && (source.smartAssistantEnabled === true || source.historyEnabled === true)', admin)
         self.assertIn('explicitTier === "standard"', helper)
         self.assertIn("isSmartStoreEntitlement", worker)
 
