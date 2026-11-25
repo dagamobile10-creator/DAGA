@@ -184,7 +184,8 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn("DAGA_API_BASE+'/chat'", live)
         self.assertIn("sessionStorage.getItem(DAGA_SESSION_KEY)", live)
         self.assertIn("sessionStorage.getItem('daga_company_id_v1')", live)
-        self.assertIn("DAGA_SHOP_AUTH_BRIDGE", portal)\n        self.assertIn("companyId:activeCompany.id", portal)
+        self.assertIn("DAGA_SHOP_AUTH_BRIDGE", portal)
+        self.assertIn("companyId:activeCompany.id", portal)
 
 
     def test_company_subscription_includes_smart_assistant_and_history(self):
