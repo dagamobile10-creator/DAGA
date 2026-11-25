@@ -77,7 +77,7 @@ jobs:
           echo "$applied" | jq -e '.success == true' >/dev/null
           echo "Persistent D1 memory database and table are ready."
 
-      - name: Reuse the existing production application D1 binding and apply migrations
+      - name: Reuse the existing production application D1 database and apply migrations
         env:
           CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -85,14 +85,30 @@ jobs:
           set -euo pipefail
           settings="$(curl -fsS --max-time 20 -H "Authorization: Bearer $CF_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/workers/scripts/daga-voice/settings")"
           binding="$(echo "$settings" | jq -c '.result.bindings[]? | select(.name=="DAGA_APP_DB" and .type=="d1")' | head -n1)"
-          if [ -z "$binding" ]; then
-            echo "::error::Production deployment blocked: existing DAGA_APP_DB binding was not found. Do not create or attach a new database until the intended production data store is confirmed."
-            exit 1
+          if [ -n "$binding" ]; then
+            db_id="$(echo "$binding" | jq -r '.id // .database_id // empty')"
+            db_name="$(echo "$binding" | jq -r '.database_name // empty')"
+          else
+            endpoint="https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/d1/database"
+            listing="$(curl -fsS --max-time 20 -G -H "Authorization: Bearer $CF_API_TOKEN" "$endpoint")"
+            db_id="$(echo "$listing" | jq -r '.result[]? | select(.name=="daga_app_db") | .uuid' | head -n1)"
+            db_name="daga_app_db"
+            if [ -z "$db_id" ] || [ "$db_id" = "null" ]; then
+              echo "::error::No existing production DAGA_APP_DB binding or daga_app_db database was found. Refusing to create a new production database."
+              exit 1
+            fi
+            query_url="$endpoint/$db_id/query"
+            schema="$(curl -fsS --max-time 20 -X POST "$query_url" -H "Authorization: Bearer $CF_API_TOKEN" -H "Content-Type: application/json" --data "$(jq -n --arg sql "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name" '{sql:$sql}')")"
+            table_names="$(echo "$schema" | jq -r '.result[]?.results[]?.name // empty' | sort)"
+            unexpected="$(printf '%s\n' "$table_names" | grep -v '^_cf_KV$' || true)"
+            if [ -n "$unexpected" ] && { ! echo "$table_names" | grep -qx 'daga_accounts' || ! echo "$table_names" | grep -qx 'daga_stores'; }; then
+              echo "::error::Existing daga_app_db contains an unrecognized partial schema. Refusing to modify it."
+              exit 1
+            fi
+            echo "Using the existing daga_app_db database; no database was created."
           fi
-          db_id="$(echo "$binding" | jq -r '.id // .database_id // empty')"
-          db_name="$(echo "$binding" | jq -r '.database_name // empty')"
           if [ -z "$db_id" ] || [ -z "$db_name" ]; then
-            echo "::error::Production D1 binding metadata is incomplete; refusing to guess the database."
+            echo "::error::Production D1 metadata is incomplete; refusing to guess the database."
             exit 1
           fi
           printf '\n[[d1_databases]]\nbinding = "DAGA_APP_DB"\ndatabase_name = "%s"\ndatabase_id = "%s"\nmigrations_dir = "migrations"\n' "$db_name" "$db_id" >> wrangler.toml
