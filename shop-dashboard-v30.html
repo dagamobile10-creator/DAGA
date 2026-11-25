@@ -577,11 +577,13 @@ function review(){
    out.innerHTML=`<div class="reconMini"><div><span>تاريخ ووقت المراجعة</span><b>${esc(localStamp())}</b></div><div><span>الأمر المفهوم</span><b>${p.type==='accessorySale'?'بيع':'إضافة'} ${esc(p.product)} بقيمة ${fmt(p.amount)} جنيه.</b></div><p class="small">المقترح: تسجيل الحركة في عمود الإكسسوار وإضافتها للفلوس الأساسية فورًا. تسوية اليوم هتصفّر عمود الإكسسوار فقط من غير إضافة المبلغ مرة تانية.</p><button class="primary" onclick="executeOrder()">تأكيد وتنفيذ</button><button onclick="pendingOrder=null;document.getElementById('orderPreview').innerHTML='تم إلغاء العملية.'">إلغاء</button></div>`;return;
  }
  if(p.type==='outsideAdd'){
-   const target=outsideCols.find(x=>x.c.entries.some(e=>normAccountingName(e[0])===normAccountingName(p.name)))||outsideCols.find(x=>x.c.entries.length===0)||outsideCols[0];
-   pendingOrder={...p,mode:'outsideAdd',targetIndex:target?.i,cardsIndex};
-   out.innerHTML=`<div class="reconMini"><div><span>تاريخ ووقت المراجعة</span><b>${esc(localStamp())}</b></div><div><span>الأمر المفهوم</span><b>تسجيل ${esc(p.name)} بمبلغ ${fmt(p.amount)} جنيه في الخارج.</b></div><p class="small">المقترح: تسجيل الاسم والمبلغ في ${esc(target?.c.name||'أحد أعمدة الخارج')}، وخصم المبلغ من حركة الفلوس في عمود الكروت.</p><button class="primary" onclick="executeOrder()">تأكيد وتنفيذ</button><button onclick="pendingOrder=null;document.getElementById('orderPreview').innerHTML='تم إلغاء العملية.'">إلغاء</button></div>`;return;
+   const matching=outsideCols.flatMap(x=>x.c.entries.map((e,ei)=>({ci:x.i,ei,name:String(e[0]||''),amount:num(e[1])}))).filter(r=>normAccountingName(r.name)===normAccountingName(p.name));
+   const target=matching.length?outsideCols.find(x=>x.i===matching[0].ci):(outsideCols.find(x=>x.c.entries.length===0)||outsideCols[0]);
+   const existingTotal=matching.reduce((sum,r)=>sum+r.amount,0);
+   pendingOrder={...p,mode:'outsideAdd',targetIndex:target?.i,cardsIndex,existingRows:matching.map(r=>({ci:r.ci,name:r.name,amount:r.amount})),existingTotal,expectedAfter:existingTotal+p.amount};
+   const bal=cols[balanceIndex]?.entries.filter(e=>normAccountingName(e[0])===normAccountingName(p.name)).reduce((sum,e)=>sum+num(e[1]),0)||0;
+   out.innerHTML=`<div class="reconMini"><div><span>تاريخ ووقت المراجعة</span><b>${esc(localStamp())}</b></div><div><span>البند</span><b>${esc(p.name)} — أعمدة الخارج</b></div><div>الموجود حاليًا باسم ${esc(p.name)} في الخارج <b>${fmt(existingTotal)} جنيه</b></div><div>المبلغ الجديد المضاف <b>+${fmt(p.amount)} جنيه</b></div><div>الإجمالي بعد الإضافة <b>${fmt(existingTotal+p.amount)} جنيه</b></div><div>الفلوس الأساسية هتتخصم بالمبلغ الجديد فقط <b>${fmt(p.amount)} جنيه</b></div>${bal>0?`<div>رصيد ${esc(p.name)} المنفصل حاليًا <b>${fmt(bal)} جنيه</b></div><p class="small">الرصيد مش هيتخصم تلقائيًا. دي حركة خارج جديدة، ولو عايز تسوية بين الرصيد والخارج لازم تطلبها كعملية منفصلة.</p>`:''}${matching.length>1?'<p class="small">لقيت الاسم مكررًا في أكتر من صف؛ هجمع الصفوف المتطابقة في صف واحد مع الحفاظ على إجماليها، من غير خصم قديم مرة تانية.</p>':''}</div><button class="primary" onclick="executeOrder()">تأكيد وتنفيذ</button><button onclick="pendingOrder=null;document.getElementById('orderPreview').innerHTML='تم إلغاء العملية.'">إلغاء</button>`;return;
  }
-
  if(p.type==='balanceAdd'){
    const serviceAgent=canonicalServiceAgent(p.name),moneyDelta=serviceAgent?0:p.amount,money=findMoneyEntry();
    if(moneyDelta!==0&&!money){out.innerHTML='<p class="status">مش لاقي بند الفلوس الأساسية؛ لم يتم تجهيز العملية.</p>';return;}
@@ -684,11 +686,21 @@ function executeOrderCore(){
    addToNamed(p.targetIndex,p.name,p.amount);const withdrawalRow=target.entries.find(e=>e[0]===p.name);if(withdrawalRow)withdrawalRow[2]={moneyPosted:true};
    addLedger('سحب يومي من الكاش/الأكسسوار',`تم تسجيل سحب ${fmt(p.amount)} جنيه باسم ${p.name} في ${target.name} وخصمه من الفلوس الأساسية فورًا. التسوية تصفّر السحب فقط من غير خصم تاني.`,{column:target.name,entryName:p.name,amount:p.amount,moneyDelta:-p.amount});
  }else if(p.mode==='outsideAdd'){
-   if(p.targetIndex==null){alert('مش لاقي عمود خارج مناسب.');return}
-   const money=changeMoney(-p.amount); if(!money.ok){alert(money.message);return;}
-   addToNamed(p.targetIndex,p.name,p.amount);const outsideEntry=cols[p.targetIndex].entries.find(e=>normAccountingName(e[0])===normAccountingName(p.name));if(outsideEntry&&isDailyWithdrawalName(p.name))outsideEntry[2]={...(outsideEntry[2]||{}),moneyPosted:true};
-   addLedger('تسجيل خارج',`${p.name} — ${fmt(p.amount)} جنيه في الخارج؛ نقصت الفلوس الموجودة في عمود الكروت بنفس المبلغ.`,{column:cols[p.targetIndex].name,entryName:p.name,amount:p.amount,moneyDelta:-p.amount});
- }else if(p.mode==='balanceAdd'){
+   const target=cols[p.targetIndex],money=findMoneyEntry();
+   if(!target||columnRole(target)!=='expenses'){alert('مش لاقي عمود خارج مناسب.');return}
+   const currentRows=(p.existingRows||[]).map(r=>({r,idx:cols[r.ci]?.entries.findIndex(e=>normAccountingName(e[0])===normAccountingName(r.name))??-1}));
+   if(currentRows.some(x=>x.idx<0||num(cols[x.r.ci].entries[x.idx][1])!==x.r.amount)){alert('حساب الخارج اتغير من وقت المراجعة. راجع الأمر من جديد؛ مفيش أي تغيير اتسجل.');pendingOrder=null;return}
+   if(!money||num(money.entry[1])<p.amount){alert('الفلوس الأساسية مش كفاية لتسجيل الحركة الجديدة. مفيش أي تغيير اتسجل.');pendingOrder=null;return}
+   const mergedTotal=(p.existingTotal||0)+p.amount;
+   const targetKey=normAccountingName(p.name);
+   const keep=target.entries.findIndex(e=>normAccountingName(e[0])===targetKey);
+   currentRows.slice().sort((a,b)=>b.idx-a.idx).forEach(x=>{if(x.r.ci!==p.targetIndex||x.idx!==keep)cols[x.r.ci].entries.splice(x.idx,1)});
+   const refreshed=target.entries.findIndex(e=>normAccountingName(e[0])===targetKey);
+   if(refreshed>=0){target.entries[refreshed][1]=String(mergedTotal);if(isDailyWithdrawalName(p.name))target.entries[refreshed][2]={...(target.entries[refreshed][2]||{}),moneyPosted:true};}
+   else target.entries.push([p.name,String(mergedTotal),isDailyWithdrawalName(p.name)?{moneyPosted:true}:{}]);
+   const moneyChange=changeMoney(-p.amount);if(!moneyChange.ok){alert(moneyChange.message);pendingOrder=null;return}
+   addLedger('إضافة إلى بند خارج موجود',`تمت إضافة ${fmt(p.amount)} جنيه إلى ${p.name}. إجمالي الخارج باسم الشخص أصبح ${fmt(mergedTotal)} جنيه؛ تم خصم المبلغ الجديد فقط من الفلوس الأساسية.`,{column:target.name,entryName:p.name,amount:p.amount,oldValue:p.existingTotal||0,newValue:mergedTotal,moneyDelta:-p.amount,mergedRows:currentRows.length});
+}else if(p.mode==='balanceAdd'){
    const agentName=normalizeServiceAgentLabel(p.name),serviceAgent=canonicalServiceAgent(agentName),money=findMoneyEntry();
    if((p.moneyDelta||0)!==0&&(!money||num(money.entry[1])!==p.moneyBefore)){alert('الفلوس الأساسية اتغيرت من وقت المراجعة. راجع الإضافة من جديد.');pendingOrder=null;return;}
    if(serviceAgent){const applied=applyServiceAgentDelta(serviceAgent,p.amount);if(!applied.ok){alert(applied.message);pendingOrder=null;return;}}
@@ -759,7 +771,11 @@ function sendLiveOrderReply(source,id,reply,handled=true){
 }
 function sendLiveDashboardSnapshot(){
  if(!dagaLiveWindow)return;
- const snapshot={updatedAt:new Date().toISOString(),source:'DAGA Dashboard V30',readOnly:true,columns:(Array.isArray(cols)?cols:[]).map(c=>({name:String(c.name||''),entries:(Array.isArray(c.entries)?c.entries:[]).map(e=>({name:String(e[0]??''),amount:Number(String(e[1]??0).replace(/[^0-9.-]/g,''))||0}))}))};
+ const snapshot={schemaVersion:2,updatedAt:new Date().toISOString(),source:'DAGA Dashboard V30',readOnly:true,
+  columns:(Array.isArray(cols)?cols:[]).map((c,index)=>({index,role:columnRole(c),name:String(c.name||''),label:String(c.adminLabel||c.name||''),total:(Array.isArray(c.entries)?c.entries:[]).reduce((sum,e)=>sum+(Number(String(e[1]??0).replace(/[^0-9.-]/g,''))||0),0),
+   entries:(Array.isArray(c.entries)?c.entries:[]).map((e,entryIndex)=>({entryIndex,name:String(e[2]?.adminLabel||e[0]||''),key:normAccountingName(e[0]||''),amount:Number(String(e[1]??0).replace(/[^0-9.-]/g,''))||0,role:String(e[2]?.role||''),moneyPosted:e[2]?.moneyPosted===true}))})),
+  totals:{balance:0,expenses:0,cards:0,cash:0,accessory:0}};
+ snapshot.columns.forEach(c=>{if(Object.prototype.hasOwnProperty.call(snapshot.totals,c.role))snapshot.totals[c.role]+=c.total;});
  try{dagaLiveWindow.postMessage({type:'DAGA_DASHBOARD_SNAPSHOT',snapshot},'https://daga-app-staging.dagamobile10.workers.dev');}catch(_){}
 }
 function liveOrderConfirmation(text){
