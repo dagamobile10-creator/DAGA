@@ -219,6 +219,7 @@ export default {
 
     if (url.pathname === "/liveavatar/token" && request.method === "POST") {
       // This route exits before the shared chat/TTS gate, so authenticate and enforce LIVE DAGA entitlements here.
+      if (String(env.DAGA_VOICE_REQUIRE_AUTH || "").toLowerCase() !== "true") return json({ error: "authenticated_voice_not_configured" }, 503);
       if (!env.DAGA_APP_DB) return json({ error: "authenticated_voice_not_configured" }, 503);
       const account = await authenticatedAccount(request, env.DAGA_APP_DB);
       if (!account || account.status !== "approved" || account.role === "program_owner") {
