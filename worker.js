@@ -4,6 +4,7 @@ import { handleCompanyInvitations } from "./company-invitations.js";
 import { handleCompanyOrders } from "./company-orders.js";
 import { handleShopAuth } from "./shop-auth.js";
 import { authenticatedAccount } from "./owner-auth.js";
+import { getActiveStoreEntitlement, isSmartStoreEntitlement } from "./company-entitlements.js";
 import inviteHtml from "./invite/index.html";
 import shopPortalHtml from "./company/portal.html";
 import shopDashboardHtml from "./shop-dashboard-v30.html";
@@ -227,6 +228,8 @@ export default {
       }
       const company = await resolveCompanyVoiceContext(env, account, request.headers.get("X-DAGA-Company-ID") || "");
       if (company.error) return company.error;
+      const smartEntitlement = await getActiveStoreEntitlement(env.DAGA_APP_DB, company.storeId);
+      if (!isSmartStoreEntitlement(smartEntitlement)) return json({ error: "smart_store_subscription_required" }, 402);
       if (company.role !== "store_owner" && company.permissions.useLiveDaga !== true) return json({ error: "company_voice_permission_denied", permission: "useLiveDaga" }, 403);
       const words = await env.DAGA_APP_DB.prepare("SELECT COALESCE(SUM(CASE WHEN event_type IN ('credit','adjustment','refund') THEN words ELSE -words END),0) AS remaining FROM daga_live_word_ledger WHERE store_id=?").bind(company.storeId).first();
       if (Number(words?.remaining || 0) <= 0) return json({ error: "live_daga_quota_insufficient", remainingCharacters: 0 }, 402);
@@ -299,20 +302,18 @@ export default {
         if (voiceIdentityRequired) {
           const company = await resolveCompanyVoiceContext(env, voiceAccount, request.headers.get("X-DAGA-Company-ID") || "");
           if (company.error) return company.error;
+          const smartEntitlement = await getActiveStoreEntitlement(env.DAGA_APP_DB, company.storeId);
+          if (!isSmartStoreEntitlement(smartEntitlement)) return json({ error: "smart_store_subscription_required" }, 402);
           const liveMode = body?.mode === "live_daga";
           const permission = liveMode ? "useLiveDaga" : "useSmartAssistant";
           if (company.role !== "store_owner" && company.permissions[permission] !== true) {
             return json({ error: "company_voice_permission_denied", permission }, 403);
           }
-          const now = new Date().toISOString();
           if (liveMode) {
             // LIVE DAGA is paid and consumed by its own character ledger; a separate
             // time-based entitlement must not block a company that still has credits.
             const words = await env.DAGA_APP_DB.prepare("SELECT COALESCE(SUM(CASE WHEN event_type IN ('credit','adjustment','refund') THEN words ELSE -words END),0) AS remaining FROM daga_live_word_ledger WHERE store_id=?").bind(company.storeId).first();
             if (Number(words?.remaining || 0) <= 0) return json({ error: "live_daga_quota_insufficient", remainingCharacters: 0 }, 402);
-          } else {
-            const smartPlan = await env.DAGA_APP_DB.prepare("SELECT id FROM daga_entitlements WHERE store_id=? AND service='store' AND status='active' AND starts_at<=? AND expires_at>? LIMIT 1").bind(company.storeId, now, now).first();
-            if (!smartPlan) return json({ error: "store_or_live_subscription_required" }, 402);
           }
         }
         const userText = String(body?.text || "").trim();
@@ -424,13 +425,10 @@ export default {
       if (voiceIdentityRequired) {
         const permissionDenied = await enforceCompanyVoicePermission(env, voiceAccount, liveMode ? "useLiveDaga" : "useSmartAssistant", request.headers.get("X-DAGA-Company-ID") || "");
         if (permissionDenied) return permissionDenied;
-        if (!liveMode) {
-          const company = await resolveCompanyVoiceContext(env, voiceAccount, request.headers.get("X-DAGA-Company-ID") || "");
-          if (company.error) return company.error;
-          const now = new Date().toISOString();
-          const smartPlan = await env.DAGA_APP_DB.prepare("SELECT id FROM daga_entitlements WHERE store_id=? AND service='store' AND status='active' AND starts_at<=? AND expires_at>? LIMIT 1").bind(company.storeId, now, now).first();
-          if (!smartPlan) return json({ error: "store_or_live_subscription_required" }, 402);
-        }
+        const company = await resolveCompanyVoiceContext(env, voiceAccount, request.headers.get("X-DAGA-Company-ID") || "");
+        if (company.error) return company.error;
+        const smartEntitlement = await getActiveStoreEntitlement(env.DAGA_APP_DB, company.storeId);
+        if (!isSmartStoreEntitlement(smartEntitlement)) return json({ error: "smart_store_subscription_required" }, 402);
       }
       let text = String(body?.text || "").trim();
       if (!text) return json({ error: "text is required" }, 400);
