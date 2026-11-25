@@ -668,6 +668,8 @@ let dagaLiveSnapshotTimer=null;
 let dagaLiveWindow=null;
 let dagaLiveOrderPending=false;
 let dagaLiveOrderSummary='';
+const DAGA_APP_ORIGIN=window.location.origin;
+const DAGA_LIVE_SRC='/live/'+(location.hostname==='daga-app-staging.dagamobile10.workers.dev'?'?api=staging':'');
 function openLiveDagaPanel(){
  const user=window.DAGA_AUTH_USER||{};
  if(user.smartAssistantEnabled!==true||user.liveDagaEnabled!==true)return;
@@ -677,23 +679,23 @@ function openLiveDagaPanel(){
  dagaLiveWindow=frame.contentWindow;
  panel.classList.add('open');panel.setAttribute('aria-hidden','false');
  document.body.style.overflow='hidden';
- if(!frame.src||!frame.src.includes('/live/?api=staging'))frame.src='/live/?api=staging';
- else{try{frame.contentWindow.postMessage('DAGA_LIVE_READY','https://daga-app-staging.dagamobile10.workers.dev')}catch(_){}}
+ if(!frame.src||new URL(frame.src,location.href).href!==new URL(DAGA_LIVE_SRC,location.href).href)frame.src=DAGA_LIVE_SRC;
+ else{try{frame.contentWindow.postMessage('DAGA_LIVE_READY',DAGA_APP_ORIGIN)}catch(_){}}
 }
 function closeLiveDagaPanel(){
  const panel=document.getElementById('dagaLivePanel'),frame=document.getElementById('dagaLiveFrame');
  if(panel){panel.classList.remove('open');panel.setAttribute('aria-hidden','true');}
  document.body.style.overflow='';
  dagaLiveWindow=null;dagaLiveOrderPending=false;dagaLiveOrderSummary='';
- if(frame){try{frame.contentWindow.postMessage({type:'DAGA_LIVE_CLOSE'},'https://daga-app-staging.dagamobile10.workers.dev')}catch(_){}}
+ if(frame){try{frame.contentWindow.postMessage({type:'DAGA_LIVE_CLOSE'},'DAGA_APP_ORIGIN')}catch(_){}}
 }
 function sendLiveOrderReply(source,id,reply,handled=true){
- try{source.postMessage({type:'DAGA_LIVE_ORDER_REPLY',id,reply,handled},'https://daga-app-staging.dagamobile10.workers.dev');}catch(_){}
+ try{source.postMessage({type:'DAGA_LIVE_ORDER_REPLY',id,reply,handled},'DAGA_APP_ORIGIN');}catch(_){}
 }
 function sendLiveDashboardSnapshot(){
  if(!dagaLiveWindow)return;
  const snapshot={updatedAt:new Date().toISOString(),source:'DAGA Dashboard V30',readOnly:true,columns:(Array.isArray(cols)?cols:[]).map(c=>({name:String(c.name||''),entries:(Array.isArray(c.entries)?c.entries:[]).map(e=>({name:String(e[0]??''),amount:Number(String(e[1]??0).replace(/[^0-9.-]/g,''))||0}))}))};
- try{dagaLiveWindow.postMessage({type:'DAGA_DASHBOARD_SNAPSHOT',snapshot},'https://daga-app-staging.dagamobile10.workers.dev');}catch(_){}
+ try{dagaLiveWindow.postMessage({type:'DAGA_DASHBOARD_SNAPSHOT',snapshot},'DAGA_APP_ORIGIN');}catch(_){}
 }
 function liveOrderConfirmation(text){
  const n=normAccountingName(text);
@@ -717,7 +719,7 @@ function describeLiveOrder(p){
  return document.getElementById('orderPreview')?.innerText?.replace(/تأكيد وتنفيذ|إلغاء/g,'').trim()||'راجعت الأمر. راجع تفاصيل العملية على الداشبورد.';
 }
 window.addEventListener('message',function(event){
- const origin='https://daga-app-staging.dagamobile10.workers.dev';
+ const origin=DAGA_APP_ORIGIN;
  if(event.origin!==origin||!dagaLiveWindow||event.source!==dagaLiveWindow)return;
  if(event.data==='DAGA_LIVE_READY'){
   const user=window.DAGA_AUTH_USER||{};
