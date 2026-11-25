@@ -8,8 +8,9 @@ export async function handleCompanyInvitations(request, env, url) {
   const accountPaths = ["/api/company/auth/me", "/api/company/auth/logout", "/api/company/layout-labels"];
   const isInvitationIdPath = /^\/api\/company\/invitations\/[0-9a-f-]{36}(?:\/revoke)?$/i.test(path);
   const isMemberPermissionPath = /^\/api\/company\/members\/[0-9a-f-]{36}\/permissions$/i.test(path);
+  const isMemberRemovalPath = /^\/api\/company\/members\/[0-9a-f-]{36}$/i.test(path);
   const isMembersPath = path === "/api/company/members";
-  if (!publicPaths.includes(path) && !accountPaths.includes(path) && !["/api/company/invitations", "/api/company/invitations/accept"].includes(path) && !isInvitationIdPath && !isMemberPermissionPath && !isMembersPath) return null;
+  if (!publicPaths.includes(path) && !accountPaths.includes(path) && !["/api/company/invitations", "/api/company/invitations/accept"].includes(path) && !isInvitationIdPath && !isMemberPermissionPath && !isMemberRemovalPath && !isMembersPath) return null;
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors(env) });
   const db = env.DAGA_APP_DB;
   if (!db) return json(env, { error: "application_database_not_configured" }, 503);
@@ -66,6 +67,8 @@ export async function handleCompanyInvitations(request, env, url) {
     if (path === "/api/company/invitations" && request.method === "POST") return createInvitation(request, env, db, account);
     const permissionRoute = path.match(/^\/api\/company\/members\/([0-9a-f-]{36})\/permissions$/i);
     if (permissionRoute && request.method === "PATCH") return updateMemberPermissions(request, env, db, account, permissionRoute[1]);
+    const memberRemoval = path.match(/^\/api\/company\/members\/([0-9a-f-]{36})$/i);
+    if (memberRemoval && request.method === "DELETE") return removeCompanyMember(env, db, account, memberRemoval[1]);
     if (path === "/api/company/invitations" && request.method === "GET") return listInvitations(url, db, account);
     if (isMembersPath && request.method === "GET") return listCompanyMembers(url, env, db, account);
     if (path === "/api/company/invitations/accept" && request.method === "POST") return acceptInvitation(request, env, db, account);
@@ -124,6 +127,27 @@ async function listCompanyMembers(url, env, db, account) {
     return { accountId: row.accountId, displayName: row.displayName || "", emailMasked: maskCompanyEmail(row.email), role: row.role, permissions: safeStoredPermissions(stored, row.role) };
   });
   return json(env, { ok: true, members });
+}
+
+async function removeCompanyMember(env, db, account, memberAccountId) {
+  const body = await safeJson(request);
+  const storeId = String(body?.storeId || "").trim();
+  if (!/^[a-f0-9-]{36}$/i.test(storeId)) return json(env,{error:"store_id_required"},400);
+  const store = await db.prepare("SELECT id FROM daga_stores WHERE id=? AND owner_account_id=? AND status='approved'").bind(storeId,account.id).first();
+  if (!store || account.role !== "store_owner") return json(env,{error:"company_owner_required"},403);
+  const member = await db.prepare("SELECT role,status FROM daga_store_memberships WHERE store_id=? AND account_id=?").bind(storeId,memberAccountId).first();
+  if (!member || !["manager","employee"].includes(member.role) || member.status !== "active") return json(env,{error:"active_team_member_not_found"},404);
+  const now = new Date().toISOString();
+  try {
+    const results = await db.batch([
+      db.prepare("UPDATE daga_store_memberships SET status='removed',updated_at=? WHERE store_id=? AND account_id=? AND status='active'").bind(now,storeId,memberAccountId),
+      db.prepare("UPDATE daga_accounts SET status='suspended',updated_at=? WHERE id=? AND role IN ('manager','employee')").bind(now,memberAccountId),
+      db.prepare("UPDATE daga_auth_sessions SET revoked_at=? WHERE account_id=? AND revoked_at IS NULL").bind(now,memberAccountId),
+      db.prepare("INSERT INTO daga_audit_log (id,actor_account_id,action,target_type,target_id,details_json,created_at) VALUES (?,?,?,?,?,?,?)").bind(crypto.randomUUID(),account.id,"company_member_access_revoked","daga_store_memberships",memberAccountId,JSON.stringify({storeId,role:member.role}),now)
+    ]);
+    if (Number(results?.[0]?.meta?.changes||0)!==1) return json(env,{error:"member_removal_conflict"},409);
+  } catch (_) { return json(env,{error:"member_removal_failed"},500); }
+  return json(env,{ok:true,memberAccountId,accessRevoked:true,sessionsRevoked:true});
 }
 
 async function updateMemberPermissions(request, env, db, account, memberAccountId) {
@@ -218,13 +242,13 @@ return json(env,{ok:true,message:"If this account can be activated, a code has b
 }
 async function companySetupVerify(request,env,db){
 if(!env.DAGA_OTP_PEPPER)return json(env,{error:"company_registration_not_configured"},503);const b=await safeJson(request);if(!b)return json(env,{error:"invalid_json"},400);
-const email=String(b.email||"").trim().toLowerCase(),code=String(b.emailCode||"").trim(),password=String(b.password||""),recovery=String(b.recoveryCode||"");
-if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||!/^\d{6}$/.test(code)||!companyValidPassword(password)||recovery.length<20||recovery.length>128)return json(env,{error:"valid_setup_fields_required"},400);
+const email=String(b.email||"").trim().toLowerCase(),code=String(b.emailCode||"").trim(),password=String(b.password||"");
+if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||!/^\d{6}$/.test(code)||!companyValidPassword(password))return json(env,{error:"valid_setup_fields_required"},400);
 const a=await db.prepare("SELECT a.id FROM daga_accounts a LEFT JOIN daga_account_credentials c ON c.account_id=a.id WHERE lower(a.email)=? AND a.status='approved' AND a.role IN ('store_owner','manager','employee') AND c.account_id IS NULL LIMIT 1").bind(email).first();if(!a)return json(env,{error:"invalid_expired_or_used_verification_code"},400);
 const now=new Date().toISOString(),ch=await db.prepare("SELECT id,code_hash FROM daga_company_login_challenges WHERE account_id=? AND channel='email' AND destination_hash=? AND consumed_at IS NULL AND attempts<5 AND expires_at>? ORDER BY created_at DESC LIMIT 1").bind(a.id,await sha256("email:"+email),now).first();if(!ch)return json(env,{error:"invalid_expired_or_used_verification_code"},400);
 const claim=await db.prepare("UPDATE daga_company_login_challenges SET attempts=attempts+1 WHERE id=? AND consumed_at IS NULL AND attempts<5 AND expires_at>? RETURNING attempts").bind(ch.id,now).first();if(!claim||!constantTimeEqualCompany(await sha256(ch.id+":"+code+":"+env.DAGA_OTP_PEPPER),ch.code_hash))return json(env,{error:"invalid_expired_or_used_verification_code"},400);
-const salt=companyRandomToken(24),hash=await companyDerivePassword(password,salt,100000),rh=await sha256(recovery+":"+env.DAGA_OTP_PEPPER),claimId=crypto.randomUUID();
-try{const results=await db.batch([db.prepare("UPDATE daga_company_login_challenges SET consumed_at=?,claim_id=? WHERE id=? AND consumed_at IS NULL AND claim_id IS NULL AND attempts<=5 AND expires_at>?").bind(now,claimId,ch.id,now),db.prepare("INSERT INTO daga_account_credentials (account_id,password_hash,password_salt,password_iterations,recovery_code_hash,created_at,updated_at) SELECT ?,?,?,100000,?,?,? WHERE EXISTS (SELECT 1 FROM daga_company_login_challenges WHERE id=? AND claim_id=?)").bind(a.id,hash,salt,rh,now,now,ch.id,claimId)]);if(Number(results?.[1]?.meta?.changes||0)!==1)return json(env,{error:"setup_race_or_conflict_retry"},409);}catch(_){return json(env,{error:"account_credentials_already_set"},409);}
+const salt=companyRandomToken(24),hash=await companyDerivePassword(password,salt,100000),claimId=crypto.randomUUID();
+try{const results=await db.batch([db.prepare("UPDATE daga_company_login_challenges SET consumed_at=?,claim_id=? WHERE id=? AND consumed_at IS NULL AND claim_id IS NULL AND attempts<=5 AND expires_at>?").bind(now,claimId,ch.id,now),db.prepare("INSERT INTO daga_account_credentials (account_id,password_hash,password_salt,password_iterations,recovery_code_hash,created_at,updated_at) SELECT ?,?,?,100000,NULL,?,? WHERE EXISTS (SELECT 1 FROM daga_company_login_challenges WHERE id=? AND claim_id=?)").bind(a.id,hash,salt,now,now,ch.id,claimId)]);if(Number(results?.[1]?.meta?.changes||0)!==1)return json(env,{error:"setup_race_or_conflict_retry"},409);}catch(_){return json(env,{error:"account_credentials_already_set"},409);}
 return json(env,{ok:true,message:"Password created. You can now sign in with email and password."});
 }
 async function companyRecoveryStart(request,env,db){
@@ -237,31 +261,28 @@ return json(env,{ok:true,message:"If the account exists, a recovery code has bee
 async function companyRecoveryComplete(request,env,db){
   if(!env.DAGA_OTP_PEPPER)return json(env,{error:"company_registration_not_configured"},503);
   const body=await safeJson(request);if(!body)return json(env,{error:"invalid_json"},400);
-  const email=String(body.email||"").trim().toLowerCase(),emailCode=String(body.emailCode||"").trim(),recoveryCode=String(body.recoveryCode||""),newRecoveryCode=String(body.newRecoveryCode||""),newPassword=String(body.newPassword||"");
-  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||!/^\d{6}$/.test(emailCode)||recoveryCode.length<20||recoveryCode.length>128||newRecoveryCode.length<20||newRecoveryCode.length>128||!companyValidPassword(newPassword))return json(env,{error:"valid_recovery_fields_required"},400);
-  const account=await db.prepare("SELECT a.id,c.recovery_code_hash FROM daga_accounts a JOIN daga_account_credentials c ON c.account_id=a.id WHERE lower(a.email)=? AND a.status='approved' AND a.role IN ('store_owner','manager','employee') LIMIT 1").bind(email).first();
-  if(!account)return json(env,{error:"invalid_expired_or_used_recovery_credentials"},400);
+  const email=String(body.email||"").trim().toLowerCase(),emailCode=String(body.emailCode||"").trim(),newPassword=String(body.newPassword||"");
+  if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)||!/^[0-9]{6}$/.test(emailCode)||!companyValidPassword(newPassword))return json(env,{error:"valid_recovery_fields_required"},400);
+  const account=await db.prepare("SELECT a.id FROM daga_accounts a JOIN daga_account_credentials c ON c.account_id=a.id WHERE lower(a.email)=? AND a.status='approved' AND a.role IN ('store_owner','manager','employee') LIMIT 1").bind(email).first();
+  if(!account)return json(env,{error:"invalid_expired_or_used_verification_code"},400);
   if(!await companyRateLimit(db,env,"company-recovery-complete:"+(request.headers.get("CF-Connecting-IP")||"unknown"),5,3600))return json(env,{error:"rate_limited"},429);
   const now=new Date().toISOString(),destinationHash=await sha256("email:"+email);
   const challenge=await db.prepare("SELECT id,code_hash FROM daga_company_login_challenges WHERE account_id=? AND channel='email' AND destination_hash=? AND consumed_at IS NULL AND attempts<5 AND expires_at>? ORDER BY created_at DESC LIMIT 1").bind(account.id,destinationHash,now).first();
-  if(!challenge)return json(env,{error:"invalid_expired_or_used_recovery_credentials"},400);
+  if(!challenge)return json(env,{error:"invalid_expired_or_used_verification_code"},400);
   const attempt=await db.prepare("UPDATE daga_company_login_challenges SET attempts=attempts+1 WHERE id=? AND consumed_at IS NULL AND attempts<5 AND expires_at>? RETURNING attempts").bind(challenge.id,now).first();
-  const [codeValid,recoveryHash]=await Promise.all([Promise.resolve(!!attempt&&constantTimeEqualCompany(await sha256(challenge.id+":"+emailCode+":"+env.DAGA_OTP_PEPPER),challenge.code_hash)),sha256(recoveryCode+":"+env.DAGA_OTP_PEPPER)]);
-  if(!codeValid||!account.recovery_code_hash||!constantTimeEqualCompany(recoveryHash,account.recovery_code_hash))return json(env,{error:"invalid_expired_or_used_recovery_credentials"},400);
-  const salt=companyRandomToken(24),hash=await companyDerivePassword(newPassword,salt,100000),newRecoveryHash=await sha256(newRecoveryCode+":"+env.DAGA_OTP_PEPPER),claimId=crypto.randomUUID();
-  let results;
+  if(!attempt||!constantTimeEqualCompany(await sha256(challenge.id+":"+emailCode+":"+env.DAGA_OTP_PEPPER),challenge.code_hash))return json(env,{error:"invalid_expired_or_used_verification_code"},400);
+  const salt=companyRandomToken(24),hash=await companyDerivePassword(newPassword,salt,100000),claimId=crypto.randomUUID();
   try{
-    results=await db.batch([
+    const results=await db.batch([
       db.prepare("UPDATE daga_company_login_challenges SET consumed_at=?,claim_id=? WHERE id=? AND channel='email' AND destination_hash=? AND consumed_at IS NULL AND attempts<=5 AND expires_at>? AND code_hash=?").bind(now,claimId,challenge.id,destinationHash,now,challenge.code_hash),
-      db.prepare("UPDATE daga_account_credentials SET password_hash=?,password_salt=?,password_iterations=100000,recovery_code_hash=?,updated_at=? WHERE account_id=? AND recovery_code_hash=? AND EXISTS (SELECT 1 FROM daga_company_login_challenges WHERE id=? AND claim_id=? AND consumed_at=?)").bind(hash,salt,newRecoveryHash,now,account.id,account.recovery_code_hash,challenge.id,claimId,now),
-      db.prepare("UPDATE daga_auth_sessions SET revoked_at=? WHERE account_id=? AND revoked_at IS NULL AND EXISTS (SELECT 1 FROM daga_company_login_challenges WHERE id=? AND claim_id=? AND consumed_at=?) AND EXISTS (SELECT 1 FROM daga_account_credentials WHERE account_id=? AND recovery_code_hash=?)").bind(now,account.id,challenge.id,claimId,now,account.id,newRecoveryHash),
-      db.prepare("UPDATE daga_company_login_challenges SET consumed_at=? WHERE account_id=? AND consumed_at IS NULL AND id<>? AND EXISTS (SELECT 1 FROM daga_account_credentials WHERE account_id=? AND recovery_code_hash=?)").bind(now,account.id,challenge.id,account.id,newRecoveryHash)
+      db.prepare("UPDATE daga_account_credentials SET password_hash=?,password_salt=?,password_iterations=100000,updated_at=? WHERE account_id=? AND EXISTS (SELECT 1 FROM daga_company_login_challenges WHERE id=? AND claim_id=? AND consumed_at=?)").bind(hash,salt,now,account.id,challenge.id,claimId,now),
+      db.prepare("UPDATE daga_auth_sessions SET revoked_at=? WHERE account_id=? AND revoked_at IS NULL AND EXISTS (SELECT 1 FROM daga_company_login_challenges WHERE id=? AND claim_id=? AND consumed_at=?)").bind(now,account.id,challenge.id,claimId,now),
+      db.prepare("UPDATE daga_company_login_challenges SET consumed_at=? WHERE account_id=? AND consumed_at IS NULL AND id<>?").bind(now,account.id,challenge.id)
     ]);
+    if(Number(results?.[0]?.meta?.changes||0)!==1||Number(results?.[1]?.meta?.changes||0)!==1)return json(env,{error:"invalid_expired_or_used_verification_code"},400);
   }catch(_){return json(env,{error:"recovery_update_failed_retry"},409);}
-  if(Number(results?.[0]?.meta?.changes||0)!==1||Number(results?.[1]?.meta?.changes||0)!==1)return json(env,{error:"invalid_expired_or_used_recovery_credentials"},400);
-  return json(env,{ok:true,message:"Password reset. Sign in again with your new password."});
+  return json(env,{ok:true,message:"تم تغيير كلمة المرور. سجل الدخول بكلمة المرور الجديدة."});
 }
-
 async function registerStart(request,env,db){
 if(!env.DAGA_OTP_PEPPER||!env.RESEND_API_KEY||!env.DAGA_EMAIL_FROM)return json(env,{error:"company_registration_not_configured"},503);const b=await safeJson(request);if(!b)return json(env,{error:"invalid_json"},400);
 const token=String(b.token||"").trim(),name=String(b.displayName||"").trim().slice(0,100),email=String(b.email||"").trim().toLowerCase();
@@ -276,14 +297,14 @@ return json(env,{ok:true,requiresVerification:true,emailMasked:maskCompanyEmail(
 }
 async function registerVerify(request,env,db){
 if(!env.DAGA_OTP_PEPPER)return json(env,{error:"company_registration_not_configured"},503);const b=await safeJson(request);if(!b)return json(env,{error:"invalid_json"},400);
-const token=String(b.token||"").trim(),name=String(b.displayName||"").trim().slice(0,100),email=String(b.email||"").trim().toLowerCase(),code=String(b.emailCode||"").trim(),password=String(b.password||""),recovery=String(b.recoveryCode||"");
-if(!/^[A-Za-z0-9_-]{40,64}$/.test(token)||name.length<2||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||!/^\d{6}$/.test(code)||!companyValidPassword(password)||recovery.length<20||recovery.length>128)return json(env,{error:"valid_registration_fields_required"},400);
+const token=String(b.token||"").trim(),name=String(b.displayName||"").trim().slice(0,100),email=String(b.email||"").trim().toLowerCase(),code=String(b.emailCode||"").trim(),password=String(b.password||"");
+if(!/^[A-Za-z0-9_-]{40,64}$/.test(token)||name.length<2||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||!/^\d{6}$/.test(code)||!companyValidPassword(password))return json(env,{error:"valid_registration_fields_required"},400);
 const th=await sha256(token),now=new Date().toISOString(),invite=await db.prepare("SELECT i.id,i.store_id,i.inviter_account_id,i.intended_role,i.permissions_json FROM daga_store_invitations i JOIN daga_stores s ON s.id=i.store_id WHERE i.token_hash=? AND i.status='pending' AND i.use_count=0 AND i.max_uses=1 AND i.expires_at>? AND s.status='approved' LIMIT 1").bind(th,now).first();if(!invite)return json(env,{error:"invalid_expired_or_used_invitation"},400);
 if(await db.prepare("SELECT id FROM daga_accounts WHERE lower(email)=? LIMIT 1").bind(email).first())return json(env,{error:"account_exists_use_existing_account"},409);
 const ip=request.headers.get("CF-Connecting-IP")||"unknown";if(!await companyRateLimit(db,env,"company-register-verify-ip:"+ip,10,900)||!await companyRateLimit(db,env,"company-register-verify-destination:"+await sha256(email),6,3600))return json(env,{error:"rate_limited"},429);
 const ch=await db.prepare("SELECT id,code_hash FROM daga_company_registration_challenges WHERE invitation_token_hash=? AND channel='email' AND destination_hash=? AND consumed_at IS NULL AND attempts<5 AND expires_at>? ORDER BY created_at DESC LIMIT 1").bind(th,await sha256("email:"+email),now).first();if(!ch)return json(env,{error:"invalid_expired_or_used_verification_code"},400);
 const att=await db.prepare("UPDATE daga_company_registration_challenges SET attempts=attempts+1 WHERE id=? AND consumed_at IS NULL AND attempts<5 AND expires_at>? RETURNING attempts").bind(ch.id,now).first();if(!att||!constantTimeEqualCompany(await sha256(ch.id+":"+code+":"+env.DAGA_OTP_PEPPER),ch.code_hash))return json(env,{error:"invalid_expired_or_used_verification_code"},400);
-const aid=crypto.randomUUID(),publicId="DAGA-USER-"+aid.replace(/-/g,"").toUpperCase(),mid=crypto.randomUUID(),tokenOut=companyRandomToken(32),sessionHash=await sha256(tokenOut),sid=crypto.randomUUID(),expiry=new Date(Date.now()+8*60*60*1000).toISOString(),salt=companyRandomToken(24),passwordHash=await companyDerivePassword(password,salt,100000),rh=await sha256(recovery+":"+env.DAGA_OTP_PEPPER),claim=crypto.randomUUID();
+const aid=crypto.randomUUID(),publicId="DAGA-USER-"+aid.replace(/-/g,"").toUpperCase(),mid=crypto.randomUUID(),tokenOut=companyRandomToken(32),sessionHash=await sha256(tokenOut),sid=crypto.randomUUID(),expiry=new Date(Date.now()+8*60*60*1000).toISOString(),salt=companyRandomToken(24),passwordHash=await companyDerivePassword(password,salt,100000),claim=crypto.randomUUID();
 let results;try{results=await db.batch([
 /* Claim the one-time email challenge first. */
 db.prepare("UPDATE daga_company_registration_challenges SET consumed_at=?,claim_id=? WHERE id=? AND consumed_at IS NULL AND claim_id IS NULL AND attempts<=5 AND expires_at>?").bind(now,claim,ch.id,now),
@@ -291,7 +312,7 @@ db.prepare("UPDATE daga_company_registration_challenges SET consumed_at=?,claim_
 db.prepare("INSERT INTO daga_accounts (id,public_id,email,display_name,role,status,store_id,email_verified_at,created_at,updated_at) SELECT ?,?,?,?,?, 'approved', ?,?,?,? WHERE EXISTS (SELECT 1 FROM daga_store_invitations WHERE id=? AND status='pending' AND use_count=0) AND EXISTS (SELECT 1 FROM daga_company_registration_challenges WHERE id=? AND claim_id=? AND consumed_at=?)").bind(aid,publicId,email,name,invite.intended_role,invite.store_id,now,now,now,invite.id,ch.id,claim,now),
 /* The account now exists, so the invitation FK can safely reference it. */
 db.prepare("UPDATE daga_store_invitations SET status='accepted',use_count=1,accepted_by_account_id=?,accepted_at=? WHERE id=? AND token_hash=? AND status='pending' AND use_count=0 AND max_uses=1 AND expires_at>? AND EXISTS (SELECT 1 FROM daga_stores WHERE id=daga_store_invitations.store_id AND status='approved') AND EXISTS (SELECT 1 FROM daga_accounts WHERE id=?) AND EXISTS (SELECT 1 FROM daga_company_registration_challenges WHERE id=? AND claim_id=? AND channel='email' AND consumed_at=?) RETURNING id").bind(aid,now,invite.id,th,now,aid,ch.id,claim,now),
-db.prepare("INSERT INTO daga_account_credentials (account_id,password_hash,password_salt,password_iterations,recovery_code_hash,created_at,updated_at) SELECT ?,?,?,100000,?,?,? WHERE EXISTS (SELECT 1 FROM daga_accounts WHERE id=?) AND EXISTS (SELECT 1 FROM daga_store_invitations WHERE id=? AND status='accepted' AND accepted_by_account_id=? AND use_count=1)").bind(aid,passwordHash,salt,rh,now,now,aid,invite.id,aid),
+db.prepare("INSERT INTO daga_account_credentials (account_id,password_hash,password_salt,password_iterations,recovery_code_hash,created_at,updated_at) SELECT ?,?,?,100000,NULL,?,? WHERE EXISTS (SELECT 1 FROM daga_accounts WHERE id=?) AND EXISTS (SELECT 1 FROM daga_store_invitations WHERE id=? AND status='accepted' AND accepted_by_account_id=? AND use_count=1)").bind(aid,passwordHash,salt,now,now,aid,invite.id,aid),
 db.prepare("INSERT INTO daga_store_memberships (id,store_id,account_id,role,status,permissions_json,invited_by_account_id,created_at,updated_at) SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM daga_accounts WHERE id=?) AND EXISTS (SELECT 1 FROM daga_store_invitations WHERE id=? AND status='accepted' AND accepted_by_account_id=? AND use_count=1)").bind(mid,invite.store_id,aid,invite.intended_role,"active",invite.permissions_json||"{}",invite.inviter_account_id,now,now,aid,invite.id,aid),
 db.prepare("INSERT INTO daga_auth_sessions (id,account_id,token_hash,created_at,expires_at,last_seen_at) SELECT ?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM daga_store_memberships WHERE id=? AND account_id=?)").bind(sid,aid,sessionHash,now,expiry,now,mid,aid),
 ]);}catch(error){console.error("company_invitation_registration_batch_failed",error instanceof Error?error.name:"unknown_error",error instanceof Error?error.message.slice(0,240):"unknown");return json(env,{error:"account_registration_conflict_or_failed",...(new URL(request.url).hostname==="daga-app-staging.dagamobile10.workers.dev"?{diagnostic:error instanceof Error?error.message.slice(0,240):"unknown_error"}:{})},409);}
