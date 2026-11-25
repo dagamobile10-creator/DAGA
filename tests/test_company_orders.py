@@ -260,14 +260,16 @@ class LiveClientSessionForwardingTests(unittest.TestCase):
         self.assertIn("DAGA_API_BASE+'/tts'", self.client)
         self.assertNotIn(".avatar.speaking img{animation:", self.client)
         self.assertNotIn("@keyframes avatarTalk", self.client)
-    def test_legacy_client_remains_compatible_without_session(self):
+    def test_live_client_forwards_company_session_and_worker_requires_auth(self):
         helper_start = self.client.index("function dagaAuthHeaders")
         helper_end = self.client.index("\n", helper_start)
         helper = self.client[helper_start:helper_end]
         self.assertIn("const headers={...extra}", helper)
         self.assertIn("if(token&&token.length<=4096)", helper)
         self.assertIn("return headers", helper)
-        self.assertIn('const voiceIdentityRequired = String(env.DAGA_VOICE_REQUIRE_AUTH || "").toLowerCase() === "true"', self.worker)
+        self.assertIn('const voiceIdentityRequired = true;', self.worker)
+        self.assertIn('authenticatedAccount(request, env.DAGA_APP_DB)', self.worker)
+        self.assertIn('resolveCompanyVoiceContext(env, voiceAccount', self.worker)
 
 
 
