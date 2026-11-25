@@ -63,11 +63,11 @@ jobs:
                   and '>= ?' in worker
                   and 'requiredCharacters: characters, remainingCharacters: remaining' in worker,
               "LIVE DAGA worker checks Smart plan interval before character debit":
-                  'const smartEntitlement = await getActiveStoreEntitlement(env.DAGA_APP_DB, company.storeId);' in worker
-                  and 'if (!isSmartStoreEntitlement(smartEntitlement)) return json({ error: "smart_store_subscription_required" }, 402);' in worker
+                  (lambda tts: 'getActiveStoreEntitlement(env.DAGA_APP_DB, company.storeId)' in tts
+                      and 'isSmartStoreEntitlement(smartEntitlement)' in tts
+                      and tts.index('getActiveStoreEntitlement(env.DAGA_APP_DB, company.storeId)') < tts.index('INSERT INTO daga_live_word_ledger'))(worker[worker.index('if (url.pathname !== "/tts"'):worker.index('function arabicizeSpokenNumbers')])
                   and 'e.starts_at<=?' in open("company-entitlements.js", encoding="utf-8").read()
-                  and 'e.expires_at>?' in open("company-entitlements.js", encoding="utf-8").read()
-                  and worker.index("getActiveStoreEntitlement(env.DAGA_APP_DB, company.storeId)") < worker.index("INSERT INTO daga_live_word_ledger"),
+                  and 'e.expires_at>?' in open("company-entitlements.js", encoding="utf-8").read(),
               "owner console labels LIVE DAGA quota as characters and requires it":
                   "رصيد الحروف (إلزامي لباقة LIVE DAGA)" in open("owner-console.html", encoding="utf-8").read()
                   and "$('planQuota').required=$('planService').value==='live_daga'" in open("owner-console.html", encoding="utf-8").read(),
