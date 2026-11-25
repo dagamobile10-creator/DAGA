@@ -150,7 +150,7 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn("body?.mode === \"live_daga\"", chat)
         self.assertIn('permission = liveMode ? "useLiveDaga" : "useSmartAssistant"', chat)
         self.assertIn("live_daga_quota_insufficient", chat)
-        self.assertIn("smart_store_subscription_required", chat)
+        self.assertIn("store_or_live_subscription_required", chat)
         self.assertIn("mode:'live_daga'", live)
         self.assertIn("liveDagaEligible", live)
     def test_voice_routes_enforce_member_permissions_independently(self):
