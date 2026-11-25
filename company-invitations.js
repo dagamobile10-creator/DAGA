@@ -261,7 +261,7 @@ async function companyRecoveryComplete(request,env,db){
   if(!env.DAGA_OTP_PEPPER)return json(env,{error:"company_registration_not_configured"},503);
   const body=await safeJson(request);if(!body)return json(env,{error:"invalid_json"},400);
   const email=String(body.email||"").trim().toLowerCase(),emailCode=String(body.emailCode||"").trim(),newPassword=String(body.newPassword||"");
-  if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)||!/^[0-9]{6}$/.test(emailCode)||!companyValidPassword(newPassword))return json(env,{error:"valid_recovery_fields_required"},400);
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||!/^[0-9]{6}$/.test(emailCode)||!companyValidPassword(newPassword))return json(env,{error:"valid_recovery_fields_required"},400);
   const account=await db.prepare("SELECT a.id FROM daga_accounts a JOIN daga_account_credentials c ON c.account_id=a.id WHERE lower(a.email)=? AND a.status='approved' AND a.role IN ('store_owner','manager','employee') LIMIT 1").bind(email).first();
   if(!account)return json(env,{error:"invalid_expired_or_used_verification_code"},400);
   if(!await companyRateLimit(db,env,"company-recovery-complete:"+(request.headers.get("CF-Connecting-IP")||"unknown"),5,3600))return json(env,{error:"rate_limited"},429);
