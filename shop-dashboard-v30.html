@@ -76,6 +76,11 @@ button{transition:filter .15s,transform .15s;border-radius:14px}button:active{tr
 #dagaLivePanel .livePanelHead{height:54px;flex:0 0 54px;display:flex;align-items:center;justify-content:space-between;padding:0 15px;background:#11110f;border-bottom:1px solid #453923;color:#e8c779;font-weight:700}
 #dagaLivePanel .livePanelHead button{background:#211b10;color:#f0d28f;border:1px solid #59472b;border-radius:12px;padding:8px 15px;font:inherit}
 #dagaLivePanel iframe{width:100%;height:calc(100% - 54px);border:0;background:#070706}
+#dagaLivePanel.docked{inset:auto 12px 86px 12px;width:auto;height:min(48vh,430px);display:flex;border:1px solid #8b6b36;border-radius:18px;overflow:hidden;box-shadow:0 12px 45px #000c;z-index:10050}
+#dagaLivePanel.docked .livePanelHead{height:42px;flex-basis:42px;padding:0 10px;font-size:13px}
+#dagaLivePanel.docked iframe{height:calc(100% - 42px);min-height:0}
+#dagaLivePanel.docked .livePanelHead button{padding:6px 10px;font-size:12px}
+@media(min-width:700px){#dagaLivePanel.docked{right:20px;left:auto;bottom:90px;width:390px;height:460px}}
 </style>
 </head>
 <body>
@@ -96,7 +101,7 @@ button{transition:filter .15s,transform .15s;border-radius:14px}button:active{tr
 </main>
 <nav class="bottom" aria-label="التنقل الرئيسي"><button class="active" onclick="showHome()">الرئيسية</button><button onclick="showTeam()">الفريق</button><button class="liveBtn" onclick="openLiveDagaPanel()">LIVE DAGA</button><button onclick="voiceDaga()">🎙️ كلم ضجه</button><button onclick="showReports()">التقارير</button><button onclick="showSettings()">الإعدادات</button></nav>
 <div class="modal" id="modal"><div class="sheet"><button class="close" onclick="closeModal()">×</button><div id="sheet"></div></div></div>
-<div id="dagaLivePanel" aria-hidden="true"><div class="livePanelHead"><span>LIVE DAGA</span><button type="button" onclick="closeLiveDagaPanel()">رجوع للداشبورد ×</button></div><iframe id="dagaLiveFrame" title="LIVE DAGA" allow="microphone; autoplay" referrerpolicy="no-referrer"></iframe></div>
+<div id="dagaLivePanel" aria-hidden="true"><div class="livePanelHead"><span>LIVE DAGA</span><button type="button" onclick="toggleLiveDagaPanel()">تصغير والرجوع للداشبورد</button></div><iframe id="dagaLiveFrame" title="LIVE DAGA" allow="microphone; autoplay" referrerpolicy="no-referrer"></iframe></div>
 <script>
 const defaultCols=[
 {name:'الكروت',entries:[['رصيد أساسي','0'],['كارت وهوا','0'],['كاش أوت','0'],['سوبر باي','0'],['ممكن','0'],['إنستا ١','0'],['إنستا ٢','0'],['البنك الأهلي','0'],['فلوس','0'],['محفظة ١','0'],['محفظة ٢','0'],['محفظة ٣','0'],['محفظة ٤','0'],['تجار','0']]},
@@ -680,9 +685,21 @@ function openLiveDagaPanel(){
  if(!frame.src||!frame.src.includes('/live/?api=staging'))frame.src='/live/?api=staging';
  else{try{frame.contentWindow.postMessage('DAGA_LIVE_READY','https://daga-app-staging.dagamobile10.workers.dev')}catch(_){}}
 }
+function toggleLiveDagaPanel(){
+ const panel=document.getElementById('dagaLivePanel');
+ if(!panel)return;
+ if(panel.classList.contains('docked')){panel.classList.remove('docked');panel.classList.add('open');panel.setAttribute('aria-hidden','false');document.body.style.overflow='hidden';}
+ else{dockLiveDagaPanel();}
+}
+function dockLiveDagaPanel(){
+ const panel=document.getElementById('dagaLivePanel');
+ if(!panel)return;
+ panel.classList.add('open','docked');panel.setAttribute('aria-hidden','false');document.body.style.overflow='';
+ try{document.getElementById('dagaLiveFrame')?.contentWindow.postMessage({type:'DAGA_LIVE_DOCKED'},'https://daga-app-staging.dagamobile10.workers.dev')}catch(_){}
+}
 function closeLiveDagaPanel(){
  const panel=document.getElementById('dagaLivePanel'),frame=document.getElementById('dagaLiveFrame');
- if(panel){panel.classList.remove('open');panel.setAttribute('aria-hidden','true');}
+ if(panel){panel.classList.remove('open','docked');panel.setAttribute('aria-hidden','true');}
  document.body.style.overflow='';
  dagaLiveWindow=null;dagaLiveOrderPending=false;dagaLiveOrderSummary='';
  if(frame){try{frame.contentWindow.postMessage({type:'DAGA_LIVE_CLOSE'},'https://daga-app-staging.dagamobile10.workers.dev')}catch(_){}}
@@ -719,6 +736,8 @@ function describeLiveOrder(p){
 window.addEventListener('message',function(event){
  const origin='https://daga-app-staging.dagamobile10.workers.dev';
  if(event.origin!==origin||!dagaLiveWindow||event.source!==dagaLiveWindow)return;
+ if(event.data&&event.data.type==='DAGA_LIVE_DOCK'){dockLiveDagaPanel();return;}
+ if(event.data&&event.data.type==='DAGA_LIVE_DISMISS'){closeLiveDagaPanel();return;}
  if(event.data==='DAGA_LIVE_READY'){
   const user=window.DAGA_AUTH_USER||{};
   try{event.source.postMessage({type:'DAGA_AUTH',token:String(window.DAGA_SESSION_TOKEN||''),companyId:String(user.storeId||'')},origin);}catch(_){}
@@ -749,6 +768,17 @@ window.addEventListener('message',function(event){
  }
  if(dagaLiveOrderPending){
   sendLiveOrderReply(event.source,id,'لسه مستني تأكيد أو إلغاء العملية المعروضة. قول «أيوه نفّذ» أو «إلغاء».',true);return;
+ }
+ const deleteIntent=/(احذف|حذف|شيل|ازاله|ازيل|امسح|الغاء بند)/u.test(normAccountingName(text));
+ if(deleteIntent){
+  const q=normAccountingName(text);
+  const targetCol=cols.map((c,ci)=>({c,ci})).find(x=>q.includes(normAccountingName(x.c.adminLabel||x.c.name))||((/الرصيد/u.test(q))&&columnRole(x.c)==='balance'));
+  if(!targetCol){sendLiveOrderReply(event.source,id,'فهمت إنك عايز تحذف بند، لكن محتاج تحدد العمود. مفيش أي تغيير اتسجل.',true);return;}
+  const matches=targetCol.c.entries.map((e,ei)=>({e,ei,n:normAccountingName(e[2]?.adminLabel||e[0])})).filter(x=>x.n&&q.includes(x.n)).sort((a,b)=>b.n.length-a.n.length);
+  if(!matches.length){sendLiveOrderReply(event.source,id,'دورت في عمود '+(targetCol.c.adminLabel||targetCol.c.name)+' وملاقيتش بندًا بالاسم اللي قلته. مفيش أي تغيير اتسجل.',true);return;}
+  if(matches.length>1&&matches[0].n.length===matches[1].n.length){sendLiveOrderReply(event.source,id,'لقيت أكتر من بند محتمل. حدّد اسم البند بالضبط قبل الحذف.',true);return;}
+  voiceDaga();confirmDelete(targetCol.ci,matches[0].ei);
+  sendLiveOrderReply(event.source,id,'لقيت بند '+(matches[0].e[2]?.adminLabel||matches[0].e[0])+' في عمود '+(targetCol.c.adminLabel||targetCol.c.name)+' وقيمته '+fmt(num(matches[0].e[1]))+' جنيه. فتحت مراجعة الحذف وموضح فيها تأثيره على الفلوس. راجعها وأكد الحذف من الداشبورد لو موافق. لم يتم الحذف لسه.',true);return;
  }
  const columnQuestion=/(كام|مجموع|اجمالي|إجمالي|قد ايه|قد إيه|حساب|الموجود|عليه كام|رصيده كام)/u.test(text)&&/(خارج|الرصيد|كاش|اكسسوار|الاكسسوار|الكروت|الفلوس)/u.test(text)&&!/(اكتب|تكتب|عايزك|سجل|ضيف|اضيف|زود|ارفع|حط|نفذ|نفّذ)/u.test(text);
  if(columnQuestion){
