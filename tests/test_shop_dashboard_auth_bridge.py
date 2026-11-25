@@ -63,7 +63,7 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         tts = worker[worker.index('if (url.pathname !== "/tts"'):]
         self.assertIn("smart_store_subscription_required", tts)
         self.assertIn("live_daga_quota_insufficient", tts)
-        self.assertIn('resolveCompanyVoiceContext(env, account, request.headers.get("X-DAGA-Company-ID") || "")', tts)
+        self.assertIn('resolveCompanyVoiceContext(env, voiceAccount, request.headers.get("X-DAGA-Company-ID") || "")', tts)
         self.assertIn("live_daga_quota_insufficient", worker)
 
     def test_standard_plan_overrides_legacy_smart_flags(self):
