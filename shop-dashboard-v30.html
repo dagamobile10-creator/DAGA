@@ -1058,7 +1058,7 @@ window.addEventListener('message',function(event){
   const balanceRows=[],outsideRows=[];
   cols.forEach((c,ci)=>(c.entries||[]).forEach(e=>{if(normAccountingName(e[0])!==key)return;const row={ci,name:String(e[0]),amount:num(e[1])};if(columnRole(c)==='balance')balanceRows.push(row);if(columnRole(c)==='expenses')outsideRows.push(row);}));
   dagaLiveActiveOrder={name:person,balanceRows,outsideRows,balanceTotal,outsideTotal,status:'reviewing'};
-  const reply='حساب '+person+': الرصيد '+fmt(balanceTotal)+' جنيه، والخارج '+fmt(outsideTotal)+' جنيه. الصافي '+fmt(Math.abs(net))+' جنيه '+(net>0?'عليه':net<0?'له':'ومتساوي').'. دي قراءة فقط. قول «اعرض التسوية» عشان أجهزها للمراجعة.';
+  const reply='حساب '+person+': الرصيد '+fmt(balanceTotal)+' جنيه، والخارج '+fmt(outsideTotal)+' جنيه. الصافي '+fmt(Math.abs(net))+' جنيه '+(net>0?'عليه':net<0?'له':'ومتساوي')+'. دي قراءة فقط. قول «اعرض التسوية» عشان أجهزها للمراجعة.';
   sendLiveOrderReply(event.source,id,reply,true);return;
  }
  const columnQuestion=/(كام|مجموع|اجمالي|إجمالي|قد ايه|قد إيه|حساب|الموجود|عليه كام|رصيده كام)/u.test(text)&&/(خارج|الرصيد|كاش|اكسسوار|الاكسسوار|الكروت|الفلوس)/u.test(text)&&!/(اكتب|تكتب|عايزك|سجل|ضيف|اضيف|زود|ارفع|حط|نفذ|نفّذ)/u.test(text);
