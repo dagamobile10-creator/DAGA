@@ -60,8 +60,8 @@ jobs:
             schema="$(curl -fsS --max-time 20 -X POST "$query_url" -H "Authorization: Bearer $CF_API_TOKEN" -H "Content-Type: application/json" --data "$(jq -n --arg sql "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name" '{sql:$sql}')")"
             table_names="$(echo "$schema" | jq -r '.result[]?.results[]?.name // empty' | sort)"
             echo "Existing daga_app_db tables:"
-            printf '%s\\n' "$table_names"
-            unexpected="$(printf '%s\\n' "$table_names" | grep -v '^_cf_KV$' || true)"
+            printf '%s\n' "$table_names"
+            unexpected="$(printf '%s\n' "$table_names" | grep -v '^_cf_KV$' || true)"
             if [ -n "$unexpected" ] && { ! echo "$table_names" | grep -qx 'daga_accounts' || ! echo "$table_names" | grep -qx 'daga_stores'; }; then
               echo "::error::daga_app_db contains an unrecognized partial schema. Refusing to modify it."
               exit 1
