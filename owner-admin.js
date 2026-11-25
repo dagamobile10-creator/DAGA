@@ -11,6 +11,20 @@ export async function handleOwnerAdmin(request, env, url) {
 
   try {
     const path = url.pathname.replace(/\/+$/, "");
+    if (path === "/owner/admin/support-contact" && request.method === "GET") {
+      const row = await db.prepare("SELECT setting_value FROM daga_app_settings WHERE setting_key='support_whatsapp'").first();
+      return json(env,{ok:true,whatsapp:row?.setting_value||""});
+    }
+    if (path === "/owner/admin/support-contact" && request.method === "PUT") {
+      const b = await readJson(request); if (!b) return json(env,{error:"invalid_json"},400);
+      const phone = String(b.whatsapp||"").replace(/[^0-9]/g,"");
+      if (phone.length < 10 || phone.length > 15) return json(env,{error:"valid_support_whatsapp_required"},400);
+      const now = new Date().toISOString();
+      await db.prepare("INSERT INTO daga_app_settings (setting_key,setting_value,updated_by,updated_at) VALUES ('support_whatsapp',?,?,?) ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value,updated_by=excluded.updated_by,updated_at=excluded.updated_at").bind(phone,owner.id,now).run();
+      await audit(db,owner.id,"support_whatsapp_updated","daga_app_settings","support_whatsapp",{configured:true});
+      return json(env,{ok:true,whatsapp:phone});
+    }
+
     if (path === "/owner/admin/overview" && request.method === "GET") {
       const [stores, pendingAccounts, plans, pendingPayments, activeEntitlements, wordBalance] = await Promise.all([
         db.prepare("SELECT status,COUNT(*) AS count FROM daga_stores WHERE owner_list_removed_at IS NULL GROUP BY status").all(),
