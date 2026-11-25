@@ -27,7 +27,7 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
     def test_portal_passes_session_and_selected_company(self):
         portal = (ROOT / "company" / "portal.html").read_text(encoding="utf-8")
         self.assertIn('sessionStorage.setItem("DAGA_SHOP_AUTH_BRIDGE"', portal)
-        self.assertIn('window.location.assign("/shop/")', portal)
+        self.assertIn('location.assign("/shop/")', portal)
         self.assertNotIn('window.open("about:blank","_blank")', portal)
         self.assertIn("createdAt:Date.now()", portal)
 
