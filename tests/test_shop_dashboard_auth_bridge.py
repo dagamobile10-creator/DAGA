@@ -36,13 +36,13 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn("Authorization:'Bearer '+token", dashboard)
         self.assertIn("api/company/auth/logout", dashboard)
 
-    def test_store_plan_tier_is_saved_and_editable(self):
+    def test_store_plan_is_single_tier_with_full_company_features(self):
         admin = (ROOT / "owner-admin.js").read_text(encoding="utf-8")
         console = (ROOT / "owner-console.html").read_text(encoding="utf-8")
-        self.assertIn("normalizeStoreFeatures(b.features)", admin)
+        self.assertIn("normalizeStoreFeatures({})", admin)
         self.assertIn("features_json=?,is_active=?", admin)
-        self.assertIn("features={tier:smart?'smart':'standard',smartAssistantEnabled:smart,historyEnabled:smart}", console)
-        self.assertIn("مستوى اشتراك الشركه:", console)
+        self.assertIn("features={tier:'single',smartAssistantEnabled:true,historyEnabled:true}", console)
+        self.assertNotIn("مستوى اشتراك الشركه:", console)
 
 
     def test_team_invites_use_email_only_and_real_invitation_api(self):
