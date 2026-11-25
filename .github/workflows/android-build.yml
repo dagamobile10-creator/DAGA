@@ -16,6 +16,7 @@ on:
       - "shop-dashboard-v30.html"
       - "index.html"
       - "worker.js"
+      - "company-entitlements.js"
       - "tests/**"
       - ".github/workflows/deploy-worker.yml"
       - "wrangler.toml"
