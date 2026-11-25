@@ -434,7 +434,8 @@ function parseOrder(t){
  if(isCash && !receipt && !take) return {type:'cashAdd',amount,raw};
  if(saysOutside && addIntent && !receipt && !take){
    const name=person?person.name:cleaned.replace(/(?:ارفع|اكتب|تكتب|عايزك|عايز|لي|سجل|ضيف|حط|زود|في|عمود|العمود|الخارج|خارج|جنيه|جنيهات)/g,' ').replace(/\s+/g,' ').trim();
-   if(person && person.balance>0) return {ambiguous:`لقيت ${person.name} مسجل في عمود الرصيد بمبلغ ${fmt(person.balance)} جنيه. قبل ما أضيف ${fmt(amount)} جنيه في الخارج، هل ده مبلغ جديد مستقل، ولا تقصد تسوية/نقل جزء من رصيده؟ مش هغيّر أي رقم قبل ما تحدد.`,clarification:{type:'outsideBalanceChoice',person,amount,raw}};
+   const explicitTransfer=/(انقل|نقل|سوي|تسويه|خصم من الرصيد|حول من الرصيد|حول من الرصيد)/.test(cleaned);
+   if(person && person.balance>0 && explicitTransfer) return {ambiguous:`لقيت ${person.name} مسجل في عمود الرصيد بمبلغ ${fmt(person.balance)} جنيه. حدّد مبلغ التسوية قبل النقل. لم يتم تغيير أي رقم.`,clarification:{type:'outsideBalanceChoice',person,amount,raw}};
    return {type:'outsideAdd',name:name||'مصروف',amount,raw};
  }
  if(isAccessory && saleIntent) return {type:'accessorySale',amount,product:cleaned.replace(/(?:بعت|بيع|اتباعت|باع|بعتها|بعتله|ب|بمبلغ|سعرها|سعره|اكسسوار|اكسسوارات|جنيه|جنيهات)/g,' ').replace(/\s+/g,' ').trim()||'مبيعات أكسسوار',raw};
@@ -466,10 +467,29 @@ function review(){
  // A named-person inquiry has priority over a generic column-total question.
  // This prevents phrases like "مدحت اللي عليه في الخارج واللي ليه في الرصيد كام"
  // from dumping every row in all outside columns.
- const inquiryIntent=/(شوف|شوفلي|شوف لي|عليه كام|عليها كام|حسابه|حسابها|كشف حساب|رصيده كام|عليه قد ايه|عليه اد ايه|كام عليه|اللي عليه|اللي ليه|من اللي عليه|من اللي ليه|فلوس في عمود الرصيد|فلوس في الخارج|عليه فلوس في الخارج|ليه فلوس في الرصيد|الفرق بين)/.test(q);
+ const inquiryIntent=/(شوف|شوفلي|شوف لي|عليه كام|عليها كام|حسابه|حسابها|كشف حساب|رصيده كام|عليه قد ايه|عليه اد ايه|كام عليه|اللي عليه|اللي ليه|من اللي عليه|من اللي ليه|فلوس في عمود الرصيد|فلوس في الخارج|عليه فلوس في الخارج|ليه فلوس في الرصيد|الفرق بين|المفروض يبقوا|الاتنين واحد|اجمعهم|اجمع لي|اجمالي باسم|مجموع باسم)/.test(q);
+ const writeIntent=/(اكتب|تكتب|عايزك|سجل|ضيف|اضيف|زود|ارفع|حط|دخل|نفذ)/.test(q);
+ const asksNamedLedger=/(خارج|برا|الرصيد)/.test(q)&&/(كام|مجموع|اجمالي|حساب|عليه|اللي عليه|اللي ليه|المفروض يبقوا|الاتنين واحد|اجمعهم|اجمع لي)/.test(q)&&!writeIntent;
+ if(asksNamedLedger||(/(المفروض يبقوا|الاتنين واحد|اجمعهم|اجمع لي)/.test(q)&&!writeIntent)){
+  const names=[];
+  cols.forEach(col=>{if(columnRole(col)==='expenses'||columnRole(col)==='balance') (col.entries||[]).forEach(e=>{if(e[0]&&!names.some(x=>qnorm(x)===qnorm(e[0])))names.push(String(e[0]));});});
+  const matched=names.filter(name=>q.includes(qnorm(name))).sort((a,b)=>qnorm(b).length-qnorm(a).length);
+  if(matched.length){
+   const personName=matched[0],key=qnorm(personName);
+   const asksOutside=/(خارج|برا|المفروض يبقوا|الاتنين واحد|اجمعهم|اجمع لي)/.test(q);
+   const asksBalance=/(الرصيد)/.test(q);
+   const rows=[];
+   cols.forEach(col=>{const role=columnRole(col);if((asksOutside&&role==='expenses')||(asksBalance&&role==='balance'))(col.entries||[]).forEach(e=>{if(qnorm(e[0])===key)rows.push({column:col.adminLabel||col.name,amount:num(e[1])});});});
+   const total=rows.reduce((sum,row)=>sum+row.amount,0);
+   pendingOrder=null;pendingClarification=null;
+   const ledgerLabel=asksOutside&&asksBalance?'الخارج والرصيد معًا':asksOutside?'أعمدة الخارج':'عمود الرصيد';
+   out.innerHTML='<div class="reconMini"><div><span>كشف حساب شخصي — قراءة فقط</span><b>'+esc(personName)+'</b></div>'+rows.map(row=>'<div>'+esc(row.column)+' <b>'+fmt(row.amount)+' جنيه</b></div>').join('')+'<div>إجمالي '+ledgerLabel+' باسم '+esc(personName)+' <b>'+fmt(total)+' جنيه</b></div></div><p class="small">جمعت كل الصفوف المطابقة للاسم نفسه من بيانات الداشبورد الحالية. لم يتم دمج الصفوف أو تعديل أي رصيد.</p>';
+   return;
+  }
+ }
  // Read-only service and column inquiries use current dashboard rows, not guessed model values.
  const asksValue=/(كام|قد ايه|مجموع|اجمالي|حساب|رصيد|الموجود)/.test(q);
- if(asksValue&&!inquiryIntent){
+ if(asksValue&&!inquiryIntent&&!writeIntent){
   const agentNames=['فوري','ممكن','سوبر بي'];
   const requestedAgent=agentNames.find(a=>q.includes(qnorm(a)) || (a==='فوري'&&(q.includes('رصيد اساسي')||q.includes('كارت وهوا')||q.includes('كاش اوت'))));
   if(requestedAgent){
@@ -498,7 +518,7 @@ function review(){
   }
  }
  const asksColumnTotal=/(كام|مجموع|اجمالي|قد ايه|قد ايه|حساب)/.test(q);
- if(asksColumnTotal&&!inquiryIntent){
+ if(asksColumnTotal&&!inquiryIntent&&!writeIntent){
   const expenseCols=cols.map((c,i)=>({c,i})).filter(x=>columnRole(x.c)==='expenses');
   const aliases=[['الخارج الاول','الخارج واحد','خارج واحد','خارج 1','الخارج 1'],['الخارج التاني','الخارج الثاني','الخارج اتنين','خارج اتنين','خارج 2','الخارج 2'],['الخارج التالت','الخارج الثالث','الخارج تلاته','الخارج تلاتة','خارج تلاته','خارج 3','الخارج 3']];
   let target=null;
@@ -557,7 +577,7 @@ function review(){
    out.innerHTML=`<div class="reconMini"><div><span>تاريخ ووقت المراجعة</span><b>${esc(localStamp())}</b></div><div><span>الأمر المفهوم</span><b>${p.type==='accessorySale'?'بيع':'إضافة'} ${esc(p.product)} بقيمة ${fmt(p.amount)} جنيه.</b></div><p class="small">المقترح: تسجيل الحركة في عمود الإكسسوار وإضافتها للفلوس الأساسية فورًا. تسوية اليوم هتصفّر عمود الإكسسوار فقط من غير إضافة المبلغ مرة تانية.</p><button class="primary" onclick="executeOrder()">تأكيد وتنفيذ</button><button onclick="pendingOrder=null;document.getElementById('orderPreview').innerHTML='تم إلغاء العملية.'">إلغاء</button></div>`;return;
  }
  if(p.type==='outsideAdd'){
-   const target=outsideCols.find(x=>x.c.entries.length===0)||outsideCols[0];
+   const target=outsideCols.find(x=>x.c.entries.some(e=>normAccountingName(e[0])===normAccountingName(p.name)))||outsideCols.find(x=>x.c.entries.length===0)||outsideCols[0];
    pendingOrder={...p,mode:'outsideAdd',targetIndex:target?.i,cardsIndex};
    out.innerHTML=`<div class="reconMini"><div><span>تاريخ ووقت المراجعة</span><b>${esc(localStamp())}</b></div><div><span>الأمر المفهوم</span><b>تسجيل ${esc(p.name)} بمبلغ ${fmt(p.amount)} جنيه في الخارج.</b></div><p class="small">المقترح: تسجيل الاسم والمبلغ في ${esc(target?.c.name||'أحد أعمدة الخارج')}، وخصم المبلغ من حركة الفلوس في عمود الكروت.</p><button class="primary" onclick="executeOrder()">تأكيد وتنفيذ</button><button onclick="pendingOrder=null;document.getElementById('orderPreview').innerHTML='تم إلغاء العملية.'">إلغاء</button></div>`;return;
  }
@@ -566,8 +586,9 @@ function review(){
    const serviceAgent=canonicalServiceAgent(p.name),moneyDelta=serviceAgent?0:p.amount,money=findMoneyEntry();
    if(moneyDelta!==0&&!money){out.innerHTML='<p class="status">مش لاقي بند الفلوس الأساسية؛ لم يتم تجهيز العملية.</p>';return;}
    if(money&&num(money.entry[1])+moneyDelta<0){out.innerHTML='<p class="status">إضافة الرصيد هتخلي الفلوس الأساسية بالسالب. راجع المبلغ.</p>';return;}
-   pendingOrder={...p,mode:'balanceAdd',balanceIndex,cardsIndex,serviceAgent,moneyDelta,moneyBefore:money?num(money.entry[1]):null};
-   out.innerHTML=`<div class="reconMini"><div><span>تاريخ ووقت المراجعة</span><b>${esc(localStamp())}</b></div><div><span>الأمر المفهوم</span><b>تسجيل ${fmt(p.amount)} جنيه في الرصيد باسم ${esc(p.name)}.</b></div><div>تأثير الفلوس الأساسية <b>${moneyDelta>0?'+':''}${fmt(moneyDelta)} ج.م</b></div>${money?`<div>الفلوس قبل <b>${fmt(num(money.entry[1]))} ج.م</b></div><div>الفلوس بعد <b>${fmt(num(money.entry[1])+moneyDelta)} ج.م</b></div>`:''}<p class="small">${serviceAgent?'ده رصيد مندوب '+esc(serviceAgent)+'؛ مستقل عن الفلوس الأساسية.':'ده بند رصيد عادي؛ إضافته تزود الفلوس الأساسية بنفس المبلغ.'}</p><button class="primary" onclick="executeOrder()">تأكيد وتنفيذ</button><button onclick="pendingOrder=null;document.getElementById('orderPreview').innerHTML='تم إلغاء العملية.'">إلغاء</button></div>`;return;
+   const currentBalance=serviceAgent?getServiceAgentBalance(serviceAgent).value:(cols[balanceIndex]?.entries||[]).filter(e=>normAccountingName(e[0])===normAccountingName(p.name)).reduce((sum,e)=>sum+num(e[1]),0);
+   pendingOrder={...p,mode:'balanceAdd',balanceIndex,cardsIndex,serviceAgent,moneyDelta,moneyBefore:money?num(money.entry[1]):null,currentBalance};
+   out.innerHTML=`<div class="reconMini"><div><span>تاريخ ووقت المراجعة</span><b>${esc(localStamp())}</b></div><div><span>الأمر المفهوم</span><b>إضافة ${fmt(p.amount)} جنيه في الرصيد باسم ${esc(p.name)}.</b></div><div>الرصيد الحالي للشخص <b>${fmt(currentBalance)} ج.م</b></div><div>الرصيد بعد الإضافة <b>${fmt(currentBalance+p.amount)} ج.م</b></div><div>تأثير الفلوس الأساسية <b>${moneyDelta>0?'+':''}${fmt(moneyDelta)} ج.م</b></div>${money?`<div>الفلوس قبل <b>${fmt(num(money.entry[1]))} ج.م</b></div><div>الفلوس بعد <b>${fmt(num(money.entry[1])+moneyDelta)} ج.م</b></div>`:''}<p class="small">${serviceAgent?'ده رصيد مندوب '+esc(serviceAgent)+'؛ مستقل عن الفلوس الأساسية.':'ده بند رصيد عادي؛ إضافته تزود الفلوس الأساسية بنفس المبلغ.'}</p><button class="primary" onclick="executeOrder()">تأكيد وتنفيذ</button><button onclick="pendingOrder=null;document.getElementById('orderPreview').innerHTML='تم إلغاء العملية.'">إلغاء</button></div>`;return;
  }
  if(p.type==='balancePayout'){
    const owed=Math.max(0,p.person.balance),paid=Math.min(p.amount,owed),excess=Math.max(0,p.amount-paid);
@@ -665,7 +686,7 @@ function executeOrderCore(){
  }else if(p.mode==='outsideAdd'){
    if(p.targetIndex==null){alert('مش لاقي عمود خارج مناسب.');return}
    const money=changeMoney(-p.amount); if(!money.ok){alert(money.message);return;}
-   const outsideEntry=[p.name,String(p.amount)];if(isDailyWithdrawalName(p.name))outsideEntry[2]={moneyPosted:true};cols[p.targetIndex].entries.push(outsideEntry);
+   addToNamed(p.targetIndex,p.name,p.amount);const outsideEntry=cols[p.targetIndex].entries.find(e=>normAccountingName(e[0])===normAccountingName(p.name));if(outsideEntry&&isDailyWithdrawalName(p.name))outsideEntry[2]={...(outsideEntry[2]||{}),moneyPosted:true};
    addLedger('تسجيل خارج',`${p.name} — ${fmt(p.amount)} جنيه في الخارج؛ نقصت الفلوس الموجودة في عمود الكروت بنفس المبلغ.`,{column:cols[p.targetIndex].name,entryName:p.name,amount:p.amount,moneyDelta:-p.amount});
  }else if(p.mode==='balanceAdd'){
    const agentName=normalizeServiceAgentLabel(p.name),serviceAgent=canonicalServiceAgent(agentName),money=findMoneyEntry();
