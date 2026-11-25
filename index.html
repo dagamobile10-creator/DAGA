@@ -130,10 +130,15 @@ function handleUser(text){
 }
 function normalizeArabicInput(value){ return String(value||'').replace(/\bplus\b/gi,' زائد ').replace(/\bminus\b/gi,' ناقص ').replace(/\bequals?\b/gi,' يساوي ').replace(/\bmultipl(?:y|ied|ication)\b/gi,' ضرب ').replace(/\bdivid(?:e|ed|ing)\b/gi,' قسمة ').replace(/\bDAGA\b/gi,'ضجه').replace(/\bMH\b/gi,'المساعد').replace(/\s{2,}/g,' ').trim(); }
 // Select the isolated staging Worker only when explicitly launched from the V30 staging dashboard.
-const DAGA_API_BASE = new URLSearchParams(location.search).get('api') === 'staging' ? 'https://daga-app-staging.dagamobile10.workers.dev' : 'https://daga-voice.dagamobile10.workers.dev';
+// Use the Worker that actually served this LIVE page. This keeps every in-app destination
+// on the isolated staging Worker when LIVE is opened from staging, without relying on
+// a query parameter that can be dropped by an iframe, share link, or internal navigation.
+const DAGA_API_BASE = location.hostname === 'daga-app-staging.dagamobile10.workers.dev'
+  ? location.origin
+  : 'https://daga-voice.dagamobile10.workers.dev';
 // Optional authenticated session bridge. Existing LIVE DAGA remains compatible when no session is present.
 const DAGA_SESSION_KEY='daga_account_session_v1';
-try{const links=document.querySelectorAll('.app-nav a');if(links[0])links[0].href=DAGA_API_BASE+'/go/';if(links[1])links[1].href=DAGA_API_BASE+'/company/';if(links[2])links[2].href=DAGA_API_BASE+'/owner-console/';}catch(_){}
+try{const links=document.querySelectorAll('.app-nav a');const destinations=['/','/go/','/company/','/owner-console/'];links.forEach((link,index)=>{if(destinations[index]){link.href=DAGA_API_BASE+destinations[index];link.target='_top';link.rel='noopener';}});}catch(_){}
 function dagaAuthHeaders(extra={}){const headers={...extra};try{const token=sessionStorage.getItem(DAGA_SESSION_KEY);if(token&&token.length<=4096)headers.Authorization='Bearer '+token;const companyId=sessionStorage.getItem('daga_company_id_v1');if(companyId&&companyId.length<=64)headers['X-DAGA-Company-ID']=companyId}catch(e){}return headers}
 const DAGA_MEMORY_KEY='daga_mh_memory_v1';
 const DAGA_PROFILE_KEY='daga_mh_long_memory_v1';
