@@ -846,6 +846,7 @@ function closeLiveDagaPanel(){
  if(panel){panel.classList.remove('open','docked');panel.setAttribute('aria-hidden','true');}
  document.body.style.overflow='';
  dagaLiveWindow=null;dagaLiveOrderPending=false;dagaLiveOrderSummary='';
+ dagaLivePendingOrder=null;dagaLivePendingClarification=null;dagaLivePendingDelete=null;dagaLiveLastPreview='';
  // Discard any unconfirmed LIVE-only command/clarification. It must never leak into
  // the separate "كلم ضجة" modal after LIVE is closed.
  pendingOrder=null;pendingClarification=null;
@@ -912,31 +913,35 @@ window.addEventListener('message',function(event){
  if(typeof id!=='string'||!text)return;
  if(dagaLiveOrderPending&&liveOrderConfirmation(text)){
   const before=ledger[0]?.id;
-  try{executeOrder()}catch(error){console.error('LIVE DAGA order execution failed',error);}
-  const succeeded=ledger[0]?.id!==before&&!pendingOrder&&dagaLastOrderSaved===true;
+  let succeeded=false;
+  try{
+   if(dagaLivePendingDelete)succeeded=executeLiveDelete();
+   else{withLiveOrderContext(()=>executeOrder());succeeded=ledger[0]?.id!==before&&!dagaLivePendingOrder&&dagaLastOrderSaved===true;}
+  }catch(error){console.error('LIVE DAGA order execution failed',error);}
+
+  dagaLiveOrderPending=false;
   if(succeeded){
-   dagaLiveOrderPending=false;
    const reply='تم تسجيل العملية فعلًا في الداشبورد: '+dagaLiveOrderSummary;
-   dagaLiveOrderSummary='';closeModal();sendLiveOrderReply(event.source,id,reply,true);sendLiveDashboardSnapshot();
+   dagaLiveOrderSummary='';dagaLivePendingClarification=null;sendLiveOrderReply(event.source,id,reply,true);sendLiveDashboardSnapshot();
   }else{
-   dagaLiveOrderPending=false;dagaLiveOrderSummary='';
+   dagaLiveOrderSummary='';
    sendLiveOrderReply(event.source,id,'ما تمش التنفيذ. البيانات ممكن تكون اتغيرت أو فيه مشكلة في الحفظ. راجع الداشبورد؛ مفيش تأكيد بنجاح العملية.',true);
   }
   return;
  }
  if(dagaLiveOrderPending&&liveOrderCancellation(text)){
-  pendingOrder=null;dagaLiveOrderPending=false;dagaLiveOrderSummary='';closeModal();
-  sendLiveOrderReply(event.source,id,'تم إلغاء العملية. مفيش أي تغيير اتسجل.',true);return;
+  dagaLivePendingOrder=null;dagaLivePendingClarification=null;dagaLiveOrderPending=false;dagaLiveOrderSummary='';
+  sendLiveOrderReply(event.source,id,'تم إلغاء العملية داخل LIVE. مفيش أي تغيير اتسجل، ومحادثة كلم ضجة فضلت مستقلة.',true);return;
  }
- if(pendingClarification){
-  // Keep the original clarification active: the spoken reply answers it, not a new order.
-  answerClarificationFromText(text);
-  if(pendingOrder&&!pendingClarification){
+ if(dagaLivePendingClarification){
+  // A LIVE answer belongs to LIVE only; it must never answer Klem DAGA's pending question.
+  withLiveOrderContext(()=>answerClarificationFromText(text));
+  if(dagaLivePendingOrder&&!dagaLivePendingClarification){
    dagaLiveOrderPending=true;
-   dagaLiveOrderSummary=describeLiveOrder(pendingOrder);
+   dagaLiveOrderSummary=describeLiveOrder(dagaLivePendingOrder);
    sendLiveOrderReply(event.source,id,dagaLiveOrderSummary+' هل أؤكد التنفيذ؟ قول «أيوه نفّذ» أو «إلغاء».',true);
   }else{
-   const clarificationText=String(document.getElementById('orderPreview')?.innerText||'السؤال الأصلي لسه مفتوح. وضّح إجابتك أو ألغِ العملية.');
+   const clarificationText=String(dagaLiveLastPreview||'السؤال الأصلي لسه مفتوح. وضّح إجابتك أو ألغِ العملية.');
    sendLiveOrderReply(event.source,id,clarificationText,true);
   }
   return;
@@ -952,34 +957,66 @@ window.addEventListener('message',function(event){
   const matches=targetCol.c.entries.map((e,ei)=>({e,ei,n:normAccountingName(e[2]?.adminLabel||e[0])})).filter(x=>x.n&&q.includes(x.n)).sort((a,b)=>b.n.length-a.n.length);
   if(!matches.length){sendLiveOrderReply(event.source,id,'دورت في عمود '+(targetCol.c.adminLabel||targetCol.c.name)+' وملاقيتش بندًا بالاسم اللي قلته. مفيش أي تغيير اتسجل.',true);return;}
   if(matches.length>1&&matches[0].n.length===matches[1].n.length){sendLiveOrderReply(event.source,id,'لقيت أكتر من بند محتمل. حدّد اسم البند بالضبط قبل الحذف.',true);return;}
-  voiceDaga();confirmDelete(targetCol.ci,matches[0].ei);
-  sendLiveOrderReply(event.source,id,'لقيت بند '+(matches[0].e[2]?.adminLabel||matches[0].e[0])+' في عمود '+(targetCol.c.adminLabel||targetCol.c.name)+' وقيمته '+fmt(num(matches[0].e[1]))+' جنيه. فتحت مراجعة الحذف وموضح فيها تأثيره على الفلوس. راجعها وأكد الحذف من الداشبورد لو موافق. لم يتم الحذف لسه.',true);return;
+  const entry=matches[0].e,money=findMoneyEntry();let impact=moneyImpactForManualEdit(targetCol.ci,entry[0],-num(entry[1]),entry);
+  if(targetCol.ci===0&&money&&money.entry===entry)impact={delta:0,description:'لا يمكن حذف بند الفلوس الأساسية.'};
+  if(impact.delta!==0&&!money){sendLiveOrderReply(event.source,id,'مش لاقي بند الفلوس الأساسية لمراجعة أثر الحذف. لم يتم حذف أي شيء.',true);return;}
+  if(money&&num(money.entry[1])+impact.delta<0){sendLiveOrderReply(event.source,id,'الحذف هيخلي الفلوس الأساسية بالسالب. لم يتم حذف أي شيء.',true);return;}
+  dagaLivePendingDelete={ci:targetCol.ci,index:matches[0].ei,name:String(entry[0]),amount:num(entry[1]),impactDelta:impact.delta,moneyBefore:money?num(money.entry[1]):null};
+  dagaLiveOrderPending=true;dagaLiveOrderSummary='حذف '+String(entry[2]?.adminLabel||entry[0])+' من '+(targetCol.c.adminLabel||targetCol.c.name);
+  sendLiveOrderReply(event.source,id,'مراجعة حذف داخل LIVE: البند '+String(entry[2]?.adminLabel||entry[0])+' في عمود '+(targetCol.c.adminLabel||targetCol.c.name)+'. القيمة الحالية '+fmt(num(entry[1]))+' جنيه. تأثير الفلوس الأساسية '+fmt(impact.delta)+' جنيه. هل تؤكد الحذف؟ قول أيوه نفّذ أو إلغاء. لم يتم الحذف بعد.',true);return;
  }
  const columnQuestion=/(كام|مجموع|اجمالي|إجمالي|قد ايه|قد إيه|حساب|الموجود|عليه كام|رصيده كام)/u.test(text)&&/(خارج|الرصيد|كاش|اكسسوار|الاكسسوار|الكروت|الفلوس)/u.test(text)&&!/(اكتب|تكتب|عايزك|سجل|ضيف|اضيف|زود|ارفع|حط|نفذ|نفّذ)/u.test(text);
  if(columnQuestion){
-  voiceDaga();
-  const command=document.getElementById('cmd');
-  if(!command){sendLiveOrderReply(event.source,id,'مش قادر أقرأ الداشبورد دلوقتي.',true);return;}
-  command.value=text;review();
-  const answer=String(document.getElementById('orderPreview')?.innerText||'').trim();
-  sendLiveOrderReply(event.source,id,answer||'مش قادر أطلع إجمالي واضح من البيانات الحالية.',true);
-  return;
+  withLiveOrderContext(()=>{const command=document.getElementById('cmd');if(command){command.value=text;review();}});
+  sendLiveOrderReply(event.source,id,dagaLiveLastPreview||'مش قادر أطلع إجمالي واضح من البيانات الحالية.',true);return;
  }
  const parsed=parseOrder(text);
  if(!parsed){sendLiveOrderReply(event.source,id,'',false);return;}
- voiceDaga();
- const command=document.getElementById('cmd');
- if(!command){sendLiveOrderReply(event.source,id,'مش قادر أفتح شاشة مراجعة الأمر. مفيش أي تغيير اتسجل.',true);return;}
- command.value=text;review();
- if(parsed.ambiguous||!pendingOrder){
-  const preview=document.getElementById('orderPreview')?.innerText||parsed.ambiguous||'محتاج توضيح الأمر قبل التسجيل.';
-  sendLiveOrderReply(event.source,id,preview.replace(/تأكيد وتنفيذ|إلغاء/g,'').trim(),true);return;
+ withLiveOrderContext(()=>{const command=document.getElementById('cmd');if(command){command.value=text;review();}});
+ if(parsed.ambiguous||!dagaLivePendingOrder){
+  sendLiveOrderReply(event.source,id,(dagaLiveLastPreview||parsed.ambiguous||'محتاج توضيح الأمر قبل التسجيل.').replace(/تأكيد وتنفيذ|إلغاء/g,'').trim(),true);return;
  }
  dagaLiveOrderPending=true;
- dagaLiveOrderSummary=describeLiveOrder(pendingOrder);
+ dagaLiveOrderSummary=describeLiveOrder(dagaLivePendingOrder);
  sendLiveOrderReply(event.source,id,dagaLiveOrderSummary+' هل أؤكد التنفيذ؟ قول «أيوه نفّذ» أو «إلغاء».',true);
 });
 
+let dagaLivePendingOrder=null,dagaLivePendingClarification=null,dagaLivePendingDelete=null,dagaLiveLastPreview='';
+function withLiveOrderContext(fn){
+ const oldCmd=document.getElementById('cmd'),oldPreview=document.getElementById('orderPreview');
+ const oldCmdId=oldCmd?.id,oldPreviewId=oldPreview?.id;
+ if(oldCmd)oldCmd.id='dagaKlemCmd';
+ if(oldPreview)oldPreview.id='dagaKlemOrderPreview';
+ const host=document.createElement('div');host.id='dagaLiveReviewHost';host.hidden=true;
+ host.innerHTML='<input id="cmd" type="text"><div id="orderPreview"></div>';document.body.appendChild(host);
+ const savedOrder=pendingOrder,savedClarification=pendingClarification;
+ pendingOrder=dagaLivePendingOrder;pendingClarification=dagaLivePendingClarification;
+ try{
+  const result=fn();
+  dagaLivePendingOrder=pendingOrder;dagaLivePendingClarification=pendingClarification;
+  dagaLiveLastPreview=String(host.querySelector('#orderPreview')?.innerText||'').trim();
+  return result;
+ }finally{
+  pendingOrder=savedOrder;pendingClarification=savedClarification;
+  host.remove();
+  if(oldCmd)oldCmd.id=oldCmdId||'cmd';
+  if(oldPreview)oldPreview.id=oldPreviewId||'orderPreview';
+ }
+}
+function executeLiveDelete(){
+ const p=dagaLivePendingDelete;if(!p)return false;
+ const row=cols[p.ci]?.entries[p.index],money=findMoneyEntry();
+ if(!row||row[0]!==p.name||num(row[1])!==p.amount){dagaLivePendingDelete=null;return false;}
+ if(p.impactDelta!==0&&(!money||num(money.entry[1])!==p.moneyBefore)){dagaLivePendingDelete=null;return false;}
+ const backup={cols:JSON.parse(JSON.stringify(cols)),ledger:JSON.parse(JSON.stringify(ledger)),closedDays:JSON.parse(JSON.stringify(closedDays))};
+ try{
+  if(p.impactDelta!==0)money.entry[1]=String(num(money.entry[1])+p.impactDelta);
+  const removed=cols[p.ci].entries.splice(p.index,1)[0];
+  addLedger('حذف بند بعد مراجعة LIVE',`${removed[0]} — ${fmt(num(removed[1]))} جنيه من ${cols[p.ci].name}; تأثير الفلوس ${p.impactDelta>0?'+':''}${fmt(p.impactDelta)} جنيه.`,{column:cols[p.ci].name,entryName:removed[0],oldValue:num(removed[1]),newValue:null,moneyDelta:p.impactDelta});
+  if(!persist())throw new Error('live_delete_persist_failed');
+  render();dagaLivePendingDelete=null;dagaLivePendingOrder=null;dagaLiveOrderPending=false;dagaLiveOrderSummary='';return true;
+ }catch(error){cols=backup.cols;ledger=backup.ledger;closedDays=backup.closedDays;persist();render();dagaLivePendingDelete=null;return false;}
+}
 function normAccountingName(v){
  return String(v||'').toLowerCase().replace(/[إأآ]/g,'ا').replace(/[ىي]/g,'ي').replace(/[ةه]/g,'ه').replace(/[ؤ]/g,'و').replace(/[ئ]/g,'ي').replace(/[^\u0600-\u06FFa-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
 }
