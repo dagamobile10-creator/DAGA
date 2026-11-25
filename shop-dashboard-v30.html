@@ -1046,7 +1046,7 @@ window.addEventListener('message',function(event){
  if(accountQuestion){
   const q=normAccountingName(text),padded=' '+q+' ',names=[];
   cols.forEach(c=>{if(columnRole(c)==='expenses'||columnRole(c)==='balance')(c.entries||[]).forEach(e=>{const name=String(e[0]||'').trim(),key=normAccountingName(name);if(key&&!names.some(x=>normAccountingName(x)===key))names.push(name);});});
-  const matched=names.filter(name=>{const key=normAccountingName(name);return key&&padded.includes(' '+key+' ')}).sort((a,b)=>normAccountingName(b).length-normAccountingName(a).length);
+  const matched=names.filter(name=>{const key=normAccountingName(name);return key&&(padded.includes(' '+key+' ')||padded.includes(' ل'+key+' ')||padded.includes(' لل'+key+' '))}).sort((a,b)=>normAccountingName(b).length-normAccountingName(a).length);
   if(!matched.length){sendLiveOrderReply(event.source,id,'مش لاقي اسمًا مطابقًا في أعمدة الرصيد أو الخارج. اكتب الاسم زي ما هو ظاهر في الدفتر. مفيش أي حركة اتسجلت.',true);return;}
   const longest=normAccountingName(matched[0]).length,top=matched.filter(name=>normAccountingName(name).length===longest);
   if(top.length!==1){sendLiveOrderReply(event.source,id,'لقيت أكتر من اسم محتمل: '+top.join('، ')+'. حدّد الاسم كاملًا قبل ما أراجع الحساب. مفيش أي حركة اتسجلت.',true);return;}
