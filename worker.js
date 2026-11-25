@@ -450,7 +450,6 @@ export default {
         if (company.error) return company.error;
         if (company.role !== "store_owner" && company.permissions.useLiveDaga !== true) return json({ error: "company_voice_permission_denied", permission: "useLiveDaga" }, 403);
         const storeId = company.storeId;
-        const quotaNow = new Date().toISOString();
         // The live character balance is the entitlement: debit atomically from that
         // balance so an expired time-based add-on cannot block already-paid letters.
         // Count Unicode code points in the exact, pronunciation-adjusted text sent to ElevenLabs.
@@ -461,7 +460,7 @@ export default {
         if (!debit.meta || debit.meta.changes !== 1) {
           const ledger = await env.DAGA_APP_DB.prepare("SELECT COALESCE(SUM(CASE WHEN event_type IN ('credit','adjustment','refund') THEN words ELSE -words END),0) AS remaining FROM daga_live_word_ledger WHERE store_id=?").bind(storeId).first();
           const remaining = Number(ledger && ledger.remaining || 0);
-          return json({ error: remaining < characters ? "live_daga_quota_insufficient" : "live_daga_subscription_required", requiredCharacters: characters, remainingCharacters: remaining }, 402);
+          return json({ error: remaining < characters ? "live_daga_quota_insufficient" : "live_daga_quota_debit_failed", requiredCharacters: characters, remainingCharacters: remaining }, 402);
         }
         quota = { accountId: account.id, storeId: storeId, characters, requestId };
       }
