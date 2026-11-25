@@ -469,7 +469,7 @@ function review(){
  const inquiryIntent=/(شوف|شوفلي|شوف لي|عليه كام|عليها كام|حسابه|حسابها|كشف حساب|رصيده كام|عليه قد ايه|عليه اد ايه|كام عليه|اللي عليه|اللي ليه|من اللي عليه|من اللي ليه|فلوس في عمود الرصيد|فلوس في الخارج|عليه فلوس في الخارج|ليه فلوس في الرصيد|الفرق بين)/.test(q);
  // Read-only service and column inquiries use current dashboard rows, not guessed model values.
  const asksValue=/(كام|قد ايه|مجموع|اجمالي|حساب|رصيد|الموجود)/.test(q);
- if(asksValue){
+ if(asksValue&&!inquiryIntent){
   const agentNames=['فوري','ممكن','سوبر بي'];
   const requestedAgent=agentNames.find(a=>q.includes(qnorm(a)) || (a==='فوري'&&(q.includes('رصيد اساسي')||q.includes('كارت وهوا')||q.includes('كاش اوت'))));
   if(requestedAgent){
