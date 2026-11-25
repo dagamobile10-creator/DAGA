@@ -463,9 +463,13 @@ function review(){
  // Account inquiry is a question, not a transaction. Resolve it from current Outside/Balance rows and wait for the user's next instruction.
  const qnorm=s=>normAccountingName(s);
  const q=qnorm(t);
+ // A named-person inquiry has priority over a generic column-total question.
+ // This prevents phrases like "مدحت اللي عليه في الخارج واللي ليه في الرصيد كام"
+ // from dumping every row in all outside columns.
+ const inquiryIntent=/(شوف|شوفلي|شوف لي|عليه كام|عليها كام|حسابه|حسابها|كشف حساب|رصيده كام|عليه قد ايه|عليه اد ايه|كام عليه|اللي عليه|اللي ليه|من اللي عليه|من اللي ليه|فلوس في عمود الرصيد|فلوس في الخارج|عليه فلوس في الخارج|ليه فلوس في الرصيد|الفرق بين)/.test(q);
  // Read-only service and column inquiries use current dashboard rows, not guessed model values.
  const asksValue=/(كام|قد ايه|مجموع|اجمالي|حساب|رصيد|الموجود)/.test(q);
- if(asksValue){
+ if(asksValue&&!inquiryIntent){
   const agentNames=['فوري','ممكن','سوبر بي'];
   const requestedAgent=agentNames.find(a=>q.includes(qnorm(a)) || (a==='فوري'&&(q.includes('رصيد اساسي')||q.includes('كارت وهوا')||q.includes('كاش اوت'))));
   if(requestedAgent){
@@ -494,7 +498,7 @@ function review(){
   }
  }
  const asksColumnTotal=/(كام|مجموع|اجمالي|قد ايه|قد ايه|حساب)/.test(q);
- if(asksColumnTotal){
+ if(asksColumnTotal&&!inquiryIntent){
   const expenseCols=cols.map((c,i)=>({c,i})).filter(x=>columnRole(x.c)==='expenses');
   const aliases=[['الخارج الاول','الخارج واحد','خارج واحد','خارج 1','الخارج 1'],['الخارج التاني','الخارج الثاني','الخارج اتنين','خارج اتنين','خارج 2','الخارج 2'],['الخارج التالت','الخارج الثالث','الخارج تلاته','الخارج تلاتة','خارج تلاته','خارج 3','الخارج 3']];
   let target=null;
@@ -503,7 +507,6 @@ function review(){
   if(target){const total=target.c.entries.reduce((sum,e)=>sum+num(e[1]),0);pendingOrder=null;pendingClarification=null;out.innerHTML='<div class="reconMini"><div>إجمالي '+esc(target.c.adminLabel||target.c.name)+' <b>'+fmt(total)+' جنيه</b></div>'+target.c.entries.map(e=>'<div>'+esc(e[2]?.adminLabel||e[0])+' <b>'+fmt(num(e[1]))+' جنيه</b></div>').join('')+'</div><p class="small">دي قراءة مباشرة من بيانات الداشبورد الحالية، من غير أي تعديل.</p>';return;}
   if(/الخارج|برا/.test(q)&&/(كل|كله|الكل|الثلاثه|تلاته)/.test(q)){const total=expenseCols.reduce((sum,x)=>sum+x.c.entries.reduce((a,e)=>a+num(e[1]),0),0);pendingOrder=null;pendingClarification=null;out.innerHTML='<div class="reconMini"><div>إجمالي أعمدة الخارج الثلاثة <b>'+fmt(total)+' جنيه</b></div>'+expenseCols.map(x=>'<div>'+esc(x.c.adminLabel||x.c.name)+' <b>'+fmt(x.c.entries.reduce((a,e)=>a+num(e[1]),0))+' جنيه</b></div>').join('')+'</div><p class="small">قراءة فقط؛ لم يتم تعديل أي بيانات.</p>';return;}
  }
- const inquiryIntent=/(شوف|شوفلي|شوف لي|عليه كام|عليها كام|حسابه|حسابها|كشف حساب|رصيده كام|عليه قد ايه|عليه اد ايه|كام عليه)/.test(q);
  if(inquiryIntent){
    const names=[];
    cols.forEach((c,ci)=>{if(columnRole(c)==='expenses'||columnRole(c)==='balance')c.entries.forEach(e=>{if(e[0]&&!names.some(x=>qnorm(x.name)===qnorm(e[0])))names.push({name:e[0]})})});
@@ -513,8 +516,10 @@ function review(){
    const outside=[],balance=[];
    cols.forEach((c,ci)=>c.entries.forEach(e=>{if(qnorm(e[0])===key){if(columnRole(c)==='expenses')outside.push({column:c.name,amount:num(e[1])});if(columnRole(c)==='balance')balance.push({column:c.name,amount:num(e[1])})}}));
    const outSum=outside.reduce((a,x)=>a+x.amount,0),balSum=balance.reduce((a,x)=>a+x.amount,0);
+   const net=outSum-balSum;
+   const netLabel=net>0?'صافي المستحق عليه بعد خصم رصيده':net<0?'صافي المستحق له بعد خصم الخارج':'الحساب متسوي؛ مفيش فرق بين الرصيد والخارج';
    pendingOrder=null;pendingClarification=null;
-   out.innerHTML=`<div class="reconMini"><div><span>استعلام حساب — من غير تسجيل حركة</span><b>${esc(personName)}</b></div><div>إجمالي الخارج / المستحق عليه <b>${fmt(outSum)} جنيه</b></div><div>إجمالي الرصيد المسجل باسمه <b>${fmt(balSum)} جنيه</b></div>${outside.map(x=>`<div>${esc(x.column)} <b>${fmt(x.amount)} جنيه</b></div>`).join('')}${balance.map(x=>`<div>الرصيد <b>${fmt(x.amount)} جنيه</b></div>`).join('')}</div><p class="small">دي قراءة للحساب فقط؛ لم يتم تعديل أي رصيد. قول لي دلوقتي عايز تسجل قبض، أو تسوية، أو تعديل، وهكمل من الأرقام الحالية.</p>`;
+   out.innerHTML=`<div class="reconMini"><div><span>استعلام حساب — من غير تسجيل حركة</span><b>${esc(personName)}</b></div><div>إجمالي الخارج / المستحق عليه <b>${fmt(outSum)} جنيه</b></div><div>إجمالي الرصيد المسجل باسمه <b>${fmt(balSum)} جنيه</b></div><div>${netLabel} <b>${fmt(Math.abs(net))} جنيه</b></div>${outside.map(x=>`<div>${esc(x.column)} <b>${fmt(x.amount)} جنيه</b></div>`).join('')}${balance.map(x=>`<div>الرصيد <b>${fmt(x.amount)} جنيه</b></div>`).join('')}</div><p class="small">دي قراءة للحساب فقط؛ لم يتم تعديل أي رصيد. صافي الحساب محسوب من إجمالي الخارج ناقص الرصيد المسجل باسم نفس الشخص. قول لي لو عايز تسجل قبض أو تسوية، وهعرض معاينة قبل التنفيذ.</p>`;
    return;
  }
  const p=parseOrder(t);
