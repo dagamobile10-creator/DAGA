@@ -46,7 +46,7 @@ button{cursor:pointer;border:0;border-radius:11px;padding:13px 15px;font:inherit
       <div id="registerCodes" class="hidden">
         <label for="emailCode">كود البريد الإلكتروني (6 أرقام)</label><input id="emailCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="٦ أرقام">
         <label for="registerPassword">كلمة المرور (14 حرفًا على الأقل)</label><input id="registerPassword" type="password" autocomplete="new-password" minlength="14" required>
-        <label for="registerRecoveryCode">رمز الاسترداد (20 حرفًا على الأقل)</label><input id="registerRecoveryCode" type="password" autocomplete="off" minlength="20" required>
+        
         <button id="verifyRegister" type="button">تأكيد وإنشاء الحساب وقبول الدعوة</button>
       </div>
     </section>
@@ -205,7 +205,7 @@ button{cursor:pointer;border:0;border-radius:11px;padding:13px 15px;font:inherit
     say("اتبعث كود التحقق على البريد الإلكتروني؛ صلاحيته 10 دقايق.", "ok");
   }));
   $("verifyRegister").addEventListener("click", () => busy($("verifyRegister"), async () => {
-    const data = await call("/api/company/auth/register/verify", {token,displayName:$("name").value.trim(),email:$("email").value.trim(),emailCode:$("emailCode").value.trim(),password:$("registerPassword").value,recoveryCode:$("registerRecoveryCode").value});
+    const data = await call("/api/company/auth/register/verify", {token,displayName:$("name").value.trim(),email:$("email").value.trim(),emailCode:$("emailCode").value.trim(),password:$("registerPassword").value});
     sessionToken = data.sessionToken;
     $("app").classList.add("hidden");
     $("message").classList.remove("hidden");
