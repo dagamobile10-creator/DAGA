@@ -890,7 +890,8 @@ function describeLiveOrder(p){
  if(p.mode==='accessorySale'||p.mode==='accessoryAdd')return 'هسجل '+fmt(p.amount)+' جنيه في عمود الإكسسوار باسم '+(p.product||'مبيعات أكسسوار')+'. الفلوس الأساسية هتزيد '+fmt(p.amount)+' جنيه.';
  if(p.mode==='dailyWithdrawal')return 'هسجل سحب '+fmt(p.amount)+' جنيه من '+p.name+' في عمود الخارج، والفلوس الأساسية هتقل '+fmt(p.amount)+' جنيه.';
  if(p.mode==='namedEntrySet'){const before=Number.isFinite(p.moneyBefore)?p.moneyBefore:(money?current:0),after=before+Number(p.moneyDelta||0);return 'مراجعة تعديل في عمود '+(p.column||cols[p.ci]?.name||'')+'، البند '+p.entryName+'. القيمة القديمة '+fmt(p.oldAmount)+' جنيه، والقيمة الجديدة '+fmt(p.newAmount)+' جنيه، والفرق '+(p.delta>0?'+':'')+fmt(p.delta||0)+' جنيه. '+(p.impactDescription||'')+' الفلوس الأساسية قبل التعديل '+fmt(before)+' جنيه وبعده '+fmt(after)+' جنيه. '+(p.agentName?'رصيد مندوب '+p.agentName+' قبل '+fmt(p.agentBefore||0)+' وبعد '+fmt((p.agentBefore||0)+(p.agentDelta||0))+' جنيه.':'')+' هل أؤكد التنفيذ؟';}
- if(p.mode==='balanceAdd')return 'هضيف '+fmt(p.amount)+' جنيه باسم '+p.name+' في عمود الرصيد؛ لو فوري أو ممكن أو سوبر بي فده يزيد رصيد المندوب فقط من غير تأثير على الفلوس الأساسية.';
+ if(p.mode==='balanceAdd'&&p.balanceChoice==='set')return 'هخلي إجمالي رصيد '+p.name+' يساوي '+fmt(p.balanceTarget)+' جنيه بدل '+fmt(p.currentBalance)+' جنيه. التغيير الصافي '+(p.amount>0?'+':'')+fmt(p.amount)+' جنيه.';
+ if(p.mode==='balanceAdd')return 'هضيف '+fmt(p.amount)+' جنيه فوق الرصيد الحالي باسم '+p.name+' في عمود الرصيد؛ الرصيد بعد الإضافة '+fmt((p.currentBalance||0)+p.amount)+' جنيه. '+(p.serviceAgent?'رصيد المندوب مستقل عن الفلوس الأساسية.':'الفلوس الأساسية هتتغير بنفس الفرق.') ;
  if(p.mode==='balanceToOutsideTransfer')return 'هسوي '+fmt(p.transfer)+' جنيه من رصيد '+p.name+' وأسجل المتبقي في الخارج. تأثير الفلوس الأساسية صفر.';
  if(p.mode==='balancePayout'||p.mode==='outgoing')return 'هسجل صرف '+fmt(p.amount)+' جنيه باسم '+p.name+' حسب رصيده الحالي. راجع تفاصيل العملية.';
  if(p.mode==='receipt')return 'هسجل تحصيل '+fmt(p.amount)+' جنيه من '+p.name+' وأسوي المستحق عليه حسب الحساب الحالي.';
@@ -930,7 +931,7 @@ window.addEventListener('message',function(event){
   return;
  }
  if(dagaLiveOrderPending&&liveOrderCancellation(text)){
-  dagaLivePendingOrder=null;dagaLivePendingClarification=null;dagaLiveOrderPending=false;dagaLiveOrderSummary='';
+  dagaLivePendingOrder=null;dagaLivePendingClarification=null;dagaLivePendingDelete=null;dagaLiveOrderPending=false;dagaLiveOrderSummary='';
   sendLiveOrderReply(event.source,id,'تم إلغاء العملية داخل LIVE. مفيش أي تغيير اتسجل، ومحادثة كلم ضجة فضلت مستقلة.',true);return;
  }
  if(dagaLivePendingClarification){
@@ -994,7 +995,7 @@ function withLiveOrderContext(fn){
  try{
   const result=fn();
   dagaLivePendingOrder=pendingOrder;dagaLivePendingClarification=pendingClarification;
-  dagaLiveLastPreview=String(host.querySelector('#orderPreview')?.innerText||'').trim();
+  dagaLiveLastPreview=String(host.querySelector('#orderPreview')?.textContent||'').trim();
   return result;
  }finally{
   pendingOrder=savedOrder;pendingClarification=savedClarification;
