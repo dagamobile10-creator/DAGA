@@ -37,7 +37,7 @@ assert 'binding = "DAGA_APP_DB"' in deploy
 assert "Reuse the existing production application D1 database" in deploy
 assert "select(.name==\"DAGA_APP_DB\" and .type==\"d1\")" in deploy
 assert "d1 migrations apply \"$db_name\"" in deploy
-assert "Production deployment blocked: existing DAGA_APP_DB binding was not found" in deploy
+assert "No existing production DAGA_APP_DB binding or daga_app_db database was found" in deploy
 assert "name=\"daga-app-live\"" not in deploy
 assert "DAGA_OWNER_BOOTSTRAP_TOKEN" in deploy
 assert "ELEVENLABS_API_KEY" in deploy
