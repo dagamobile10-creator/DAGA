@@ -59,7 +59,7 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
     def test_live_daga_requires_smart_plan_and_word_balance(self):
         worker = (ROOT / "worker.js").read_text(encoding="utf-8")
         self.assertIn("smart_store_subscription_required", worker)
-        self.assertNotIn("store_subscription_required", worker)
+        self.assertNotIn("store_or_live_subscription_required", worker)
         tts = worker[worker.index('if (url.pathname !== "/tts"'):]
         self.assertIn("smart_store_subscription_required", tts)
         self.assertIn("live_daga_quota_insufficient", tts)
