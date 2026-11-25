@@ -380,12 +380,12 @@ export default {
         }
 
         if (env.AI) {
-          const cloudflareModels = ["@cf/openai/gpt-oss-20b", "@cf/zai-org/glm-4.7-flash"];
+          const cloudflareModels = ["@cf/meta/llama-3.1-8b-instruct", "@cf/openai/gpt-oss-20b", "@cf/zai-org/glm-4.7-flash"];
           for (const model of cloudflareModels) {
             try {
               const result = await Promise.race([
                 env.AI.run(model, { messages: [{ role: "system", content: instructions }, ...conversation], max_tokens: 600, reasoning_effort: "low", chat_template_kwargs: { enable_thinking: false } }),
-                new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 8000))
+                new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 12000))
               ]);
               const cloudflareText = extractModelText(result);
               let reply = normalizeArabicReply(cloudflareText, userText);
