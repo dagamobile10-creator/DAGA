@@ -51,25 +51,34 @@ jobs:
           if [ -z "$binding" ]; then
             endpoint="https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/d1/database"
             listing="$(curl -fsS --max-time 20 -G -H "Authorization: Bearer $CF_API_TOKEN" "$endpoint")"
-            echo "Existing D1 database names (IDs are intentionally omitted):"
-            echo "$listing" | jq -r '.result[]?.name // empty' | sort
             candidate_id="$(echo "$listing" | jq -r '.result[]? | select(.name=="daga_app_db") | .uuid' | head -n1)"
-            if [ -n "$candidate_id" ] && [ "$candidate_id" != "null" ]; then
-              query_url="$endpoint/$candidate_id/query"
-              schema="$(curl -fsS --max-time 20 -X POST "$query_url" -H "Authorization: Bearer $CF_API_TOKEN" -H "Content-Type: application/json" --data "$(jq -n --arg sql "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name" '{sql:$sql}')")"
-              echo "Existing daga_app_db table names (no records or private data are read):"
-              echo "$schema" | jq -r '.result[]?.results[]?.name // empty' | sort
-              echo "Existing application row counts:"
-              counts="$(curl -fsS --max-time 20 -X POST "$query_url" -H "Authorization: Bearer $CF_API_TOKEN" -H "Content-Type: application/json" --data "$(jq -n --arg sql "SELECT 'accounts' AS item, COUNT(*) AS count FROM daga_accounts UNION ALL SELECT 'stores', COUNT(*) FROM daga_stores" '{sql:$sql}')")"
-              echo "$counts" | jq -r '.result[]?.results[]? | "\(.item): \(.count)"'
+            if [ -z "$candidate_id" ] || [ "$candidate_id" = "null" ]; then
+              echo "::error::No existing production D1 binding or daga_app_db database was found. Refusing to create a database automatically."
+              exit 1
             fi
-            echo "::error::Production DAGA_APP_DB binding is missing. The existing daga_app_db database was inspected read-only; it has not been attached or changed."
-            exit 1
+            query_url="$endpoint/$candidate_id/query"
+            schema="$(curl -fsS --max-time 20 -X POST "$query_url" -H "Authorization: Bearer $CF_API_TOKEN" -H "Content-Type: application/json" --data "$(jq -n --arg sql "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name" '{sql:$sql}')")"
+            table_names="$(echo "$schema" | jq -r '.result[]?.results[]?.name // empty' | sort)"
+            echo "Existing daga_app_db tables:"
+            printf '%s\\n' "$table_names"
+            unexpected="$(printf '%s\\n' "$table_names" | grep -v '^_cf_KV$' || true)"
+            if [ -n "$unexpected" ] && { ! echo "$table_names" | grep -qx 'daga_accounts' || ! echo "$table_names" | grep -qx 'daga_stores'; }; then
+              echo "::error::daga_app_db contains an unrecognized partial schema. Refusing to modify it."
+              exit 1
+            fi
+            if [ -z "$unexpected" ]; then
+              echo "The existing daga_app_db contains no application tables and is safe to initialize with reviewed migrations."
+            else
+              echo "The existing daga_app_db contains DAGA application tables; only pending migrations may be applied."
+            fi
+            db_id="$candidate_id"
+            db_name="daga_app_db"
+          else
+            db_id="$(echo "$binding" | jq -r '.id // .database_id // empty')"
+            db_name="$(echo "$binding" | jq -r '.database_name // empty')"
           fi
-          db_id="$(echo "$binding" | jq -r '.id // .database_id // empty')"
-          db_name="$(echo "$binding" | jq -r '.database_name // empty')"
           test -n "$db_id" && test -n "$db_name"
-          echo "Production application database binding is present: $db_name."
+          echo "Production application database candidate is confirmed: $db_name."
 
       - name: Verify current production Worker health
         run: |
