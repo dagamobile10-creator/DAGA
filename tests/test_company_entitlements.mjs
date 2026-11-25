@@ -25,8 +25,8 @@ const db = {
 };
 const entitlement = await getActiveStoreEntitlement(db, "store-123", "2026-11-25T12:00:00.000Z");
 assert.equal(entitlement.name, "Smart");
-assert.match(captured.sql, /e\\.service='store'/);
-assert.match(captured.sql, /e\\.status='active'/);
+assert.match(captured.sql, /e\.service='store'/);
+assert.match(captured.sql, /e\.status='active'/);
 assert.deepEqual(captured.args, ["store-123", "2026-11-25T12:00:00.000Z", "2026-11-25T12:00:00.000Z"]);
 
 console.log("Company Smart/Standard entitlement behavior passed.");
