@@ -411,7 +411,8 @@ function parseOrder(t){
    if(!allPeople.has(key))allPeople.set(key,{name:e[0],outside:0,outsideRows:[],balance:0,balanceRows:[]});
    const o=allPeople.get(key);o.balance+=num(e[1]);o.balanceRows.push({ci:cols.indexOf(balanceCol),name:e[0]});
  });
- const matches=[...allPeople.entries()].filter(([k])=>k && (cleaned===k || cleaned.includes(k)));
+ const paddedCommand=' '+cleaned+' ';
+ const matches=[...allPeople.entries()].filter(([k])=>k && paddedCommand.includes(' '+k+' '));
  matches.sort((a,b)=>b[0].length-a[0].length);
  if(matches.length>1 && matches[0][0].length===matches[1][0].length) return {ambiguous:'لقيت أكتر من اسم ممكن في الحسابات. حدّد الشخص المقصود عشان ما نغيّرش حساب غلط.'};
  const person=matches.length?matches[0][1]:null;
@@ -488,7 +489,8 @@ function review(){
  if(asksNamedLedger||(/(المفروض يبقوا|الاتنين واحد|اجمعهم|اجمع لي)/.test(q)&&!writeIntent)){
   const names=[];
   cols.forEach(col=>{if(columnRole(col)==='expenses'||columnRole(col)==='balance') (col.entries||[]).forEach(e=>{if(e[0]&&!names.some(x=>qnorm(x)===qnorm(e[0])))names.push(String(e[0]));});});
-  const matched=names.filter(name=>q.includes(qnorm(name))).sort((a,b)=>qnorm(b).length-qnorm(a).length);
+  const paddedQuery=' '+q+' ';
+  const matched=names.filter(name=>{const key=qnorm(name);return key&&paddedQuery.includes(' '+key+' ')}).sort((a,b)=>qnorm(b).length-qnorm(a).length);
   if(matched.length){
    const personName=matched[0],key=qnorm(personName);
    const asksOutside=/(خارج|برا|المفروض يبقوا|الاتنين واحد|اجمعهم|اجمع لي)/.test(q);
