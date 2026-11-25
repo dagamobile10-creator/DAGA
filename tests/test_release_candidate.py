@@ -29,7 +29,8 @@ assert 'target="_blank"' not in company
 assert "https://daga-app-staging.dagamobile10.workers.dev');" not in dashboard
 for route in ("/go", "/live", "/owner", "/shop", "/company", "/invite"):
     assert route in worker, f"Worker route missing: {route}"
-assert 'server.url' in config
+assert 'server:' in config
+assert 'url: appUrl' in config
 assert "daga-app-staging.dagamobile10.workers.dev" in config
 assert "cleartext: false" in config
 assert 'binding = "DAGA_APP_DB"' in deploy
