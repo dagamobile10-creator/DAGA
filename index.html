@@ -111,6 +111,19 @@ window.addEventListener('message',event=>{
 function handleUser(text){
  stopListening();
  const navText=String(text||'').toLowerCase().replace(/[إأآ]/g,'ا').replace(/[ىي]/g,'ي').replace(/[ةه]/g,'ه').replace(/[^\u0600-\u06FFa-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
+ const prayerIntent=/(?:صلي|صل|الصلاه|الصلاة).*(?:النبي|محمد)|(?:النبي|محمد).*(?:صلي|صل)/u.test(navText);
+ const greetingIntent=/(?:صباح الفل|صباح الخير|صباح النور|مساء الفل|مساء الخير|مساء النور|ازيك|عامل ايه|اخبارك|اهلا|اهلين|تسلم|شكرا|ربنا يخليك)/u.test(navText)||/^(?:يا صاحبي|يا حبيبي|حبيبي|صاحبي)$/u.test(navText);
+ const insultIntent=/(?:يا غبي|يا حمار|يا اهبل|يا فاشل|يا ابن الكلب|يا ابن الجزمه|يلعن|خرا|زباله|غبي|حمار)/u.test(navText);
+ if(prayerIntent||greetingIntent){
+  replying=true;state.textContent='ضجه بيرد عليك يا صاحبي…';
+  const reply=prayerIntent
+   ? (greetingIntent?'صباح النور يا صاحبي، عليه أفضل الصلاة والسلام. يومك كله رزق بإذن الله.':'عليه أفضل الصلاة والسلام.')
+   : (/(مساء)/u.test(navText)?'مساء النور يا صاحبي، نورتني. عامل إيه؟':'صباح النور يا صاحبي، صباحك فل ورزق. عامل إيه؟');
+  const history=[...loadDagaMemory(),{role:'user',content:String(text||'')},{role:'assistant',content:reply}].slice(-100);
+  saveDagaMemory(history.slice(-16));saveServerMemory(loadDagaProfile(),history).catch(()=>{});
+  daga.textContent=reply;speak(reply);return;
+ }
+ if(insultIntent){respond(text);return;}
  if(/(?:رجعني|ارجعني|وديني|افتحلي|عايز اشوف) .*(?:الداشبورد|الدashboard|الشاشه الرئيسيه)|(?:رجعني|ارجعني) للداشبورد|رجعني.*(?:تاني|للداشبورد)|للداشبورد تاني/.test(navText)){
   replying=false;try{window.parent.postMessage({type:'DAGA_LIVE_DOCK'},new URL(DAGA_API_BASE).origin)}catch(_){}
   state.textContent='Live شغال والداشبورد قدامك';daga.textContent='حاضر، رجعتك للداشبورد. هفضل معاك شغال في النافذة الصغيرة.';speak('حاضر، رجعتك للداشبورد. أنا لسه شغال معاك.');return;
