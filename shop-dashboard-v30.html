@@ -76,11 +76,14 @@ button{transition:filter .15s,transform .15s;border-radius:14px}button:active{tr
 #dagaLivePanel .livePanelHead{height:54px;flex:0 0 54px;display:flex;align-items:center;justify-content:space-between;padding:0 15px;background:#11110f;border-bottom:1px solid #453923;color:#e8c779;font-weight:700}
 #dagaLivePanel .livePanelHead button{background:#211b10;color:#f0d28f;border:1px solid #59472b;border-radius:12px;padding:8px 15px;font:inherit}
 #dagaLivePanel iframe{width:100%;height:calc(100% - 54px);border:0;background:#070706}
-#dagaLivePanel.docked{inset:auto 12px 86px 12px;width:auto;height:min(48vh,430px);display:flex;border:1px solid #8b6b36;border-radius:18px;overflow:hidden;box-shadow:0 12px 45px #000c;z-index:10050}
-#dagaLivePanel.docked .livePanelHead{height:42px;flex-basis:42px;padding:0 10px;font-size:13px}
-#dagaLivePanel.docked iframe{height:calc(100% - 42px);min-height:0}
-#dagaLivePanel.docked .livePanelHead button{padding:6px 10px;font-size:12px}
-@media(min-width:700px){#dagaLivePanel.docked{right:20px;left:auto;bottom:90px;width:390px;height:460px}}
+#dagaLivePanel .livePanelActions{display:flex;gap:8px}
+#dagaLivePanel .livePanelRestore{display:none}
+#dagaLivePanel.docked{inset:auto 14px 92px auto;width:60px;height:60px;display:flex;border:1px solid #b9903d;border-radius:50%;overflow:hidden;box-shadow:0 8px 28px #000d;z-index:10050;background:#17130b}
+#dagaLivePanel.docked .livePanelHead{height:58px;flex:0 0 58px;padding:0;justify-content:center;border:0;background:transparent}
+#dagaLivePanel.docked .livePanelHead span,#dagaLivePanel.docked .livePanelActions{display:none}
+#dagaLivePanel.docked .livePanelRestore{display:flex;width:58px;height:58px;align-items:center;justify-content:center;border:0;border-radius:50%;font-size:25px;background:transparent;color:#f0d28f}
+#dagaLivePanel.docked iframe{display:none}
+@media(min-width:700px){#dagaLivePanel.docked{right:20px;left:auto;bottom:90px;width:60px;height:60px}}
 </style>
 </head>
 <body>
@@ -101,7 +104,7 @@ button{transition:filter .15s,transform .15s;border-radius:14px}button:active{tr
 </main>
 <nav class="bottom" aria-label="التنقل الرئيسي"><button class="active" onclick="showHome()">الرئيسية</button><button onclick="showTeam()">الفريق</button><button class="liveBtn" onclick="openLiveDagaPanel()">LIVE DAGA</button><button onclick="voiceDaga()">🎙️ كلم ضجه</button><button onclick="showReports()">التقارير</button><button onclick="showSettings()">الإعدادات</button></nav>
 <div class="modal" id="modal"><div class="sheet"><button class="close" onclick="closeModal()">×</button><div id="sheet"></div></div></div>
-<div id="dagaLivePanel" aria-hidden="true"><div class="livePanelHead"><span>LIVE DAGA</span><button type="button" onclick="toggleLiveDagaPanel()">تصغير والرجوع للداشبورد</button></div><iframe id="dagaLiveFrame" title="LIVE DAGA" allow="microphone; autoplay" referrerpolicy="no-referrer"></iframe></div>
+<div id="dagaLivePanel" aria-hidden="true"><div class="livePanelHead"><span>LIVE DAGA</span><div class="livePanelActions"><button type="button" onclick="dockLiveDagaPanel()">تصغير</button><button type="button" onclick="closeLiveDagaPanel()">إغلاق ×</button></div><button class="livePanelRestore" type="button" onclick="toggleLiveDagaPanel()" aria-label="فتح LIVE DAGA">🎙️</button></div><iframe id="dagaLiveFrame" title="LIVE DAGA" allow="microphone; autoplay" referrerpolicy="no-referrer"></iframe></div>
 <script>
 const defaultCols=[
 {name:'الكروت',entries:[['رصيد أساسي','0'],['كارت وهوا','0'],['كاش أوت','0'],['سوبر باي','0'],['ممكن','0'],['إنستا ١','0'],['إنستا ٢','0'],['البنك الأهلي','0'],['فلوس','0'],['محفظة ١','0'],['محفظة ٢','0'],['محفظة ٣','0'],['محفظة ٤','0'],['تجار','0']]},
@@ -785,6 +788,19 @@ window.addEventListener('message',function(event){
  if(dagaLiveOrderPending&&liveOrderCancellation(text)){
   pendingOrder=null;dagaLiveOrderPending=false;dagaLiveOrderSummary='';closeModal();
   sendLiveOrderReply(event.source,id,'تم إلغاء العملية. مفيش أي تغيير اتسجل.',true);return;
+ }
+ if(pendingClarification){
+  // Keep the original clarification active: the spoken reply answers it, not a new order.
+  answerClarificationFromText(text);
+  if(pendingOrder&&!pendingClarification){
+   dagaLiveOrderPending=true;
+   dagaLiveOrderSummary=describeLiveOrder(pendingOrder);
+   sendLiveOrderReply(event.source,id,dagaLiveOrderSummary+' هل أؤكد التنفيذ؟ قول «أيوه نفّذ» أو «إلغاء».',true);
+  }else{
+   const clarificationText=String(document.getElementById('orderPreview')?.innerText||'السؤال الأصلي لسه مفتوح. وضّح إجابتك أو ألغِ العملية.');
+   sendLiveOrderReply(event.source,id,clarificationText,true);
+  }
+  return;
  }
  if(dagaLiveOrderPending){
   sendLiveOrderReply(event.source,id,'لسه مستني تأكيد أو إلغاء العملية المعروضة. قول «أيوه نفّذ» أو «إلغاء».',true);return;
