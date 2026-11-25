@@ -637,7 +637,7 @@ function answerClarification(choice){
 function executeOrderCore(){
  dagaLastOrderSaved=false;
  if(!pendingOrder)return; const p=pendingOrder;
- const findEntry=(ci,name)=>cols[ci].entries.findIndex(e=>e[0]===name);
+ const findEntry=(ci,name)=>cols[ci].entries.findIndex(e=>normAccountingName(e[0])===normAccountingName(name));
  if(p.mode==='namedEntrySet'){
   const row=cols[p.ci]?.entries[p.index],money=findMoneyEntry();
   if(!row||row[0]!==p.entryName||num(row[1])!==p.oldAmount){alert('البند اتغير من وقت المراجعة. اعمل مراجعة جديدة.');pendingOrder=null;return}
