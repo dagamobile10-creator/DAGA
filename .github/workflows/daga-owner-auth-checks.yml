@@ -20,11 +20,11 @@ jobs:
           workflow = open(".github/workflows/daga-staging-setup.yml", encoding="utf-8").read()
           worker = open("worker.js", encoding="utf-8").read()
           checks = {
-              "LIVE DAGA quota uses one explicit UTC timestamp for entitlement checks":
-                  'const quotaNow = new Date().toISOString();' in worker
-                  and 'starts_at<=? AND expires_at>?' in worker
-                  and 'storeId, quotaNow, quotaNow' in worker
-                  and 'storeId, quotaNow, quotaNow).run()' in worker,
+              "Smart store entitlement lookup uses one explicit UTC timestamp":
+                  'now = new Date().toISOString()' in open("company-entitlements.js", encoding="utf-8").read()
+                  and 'e.starts_at<=?' in open("company-entitlements.js", encoding="utf-8").read()
+                  and 'e.expires_at>?' in open("company-entitlements.js", encoding="utf-8").read()
+                  and '.bind(storeId, now, now)' in open("company-entitlements.js", encoding="utf-8").read(),
               "LIVE DAGA refunds quota after provider failures":
                   "const refundQuota = async () =>" in worker
                   and "await refundQuota();" in worker,
@@ -62,9 +62,12 @@ jobs:
                   and 'INSERT INTO daga_live_word_ledger' in worker
                   and '>= ?' in worker
                   and 'requiredCharacters: characters, remainingCharacters: remaining' in worker,
-              "LIVE DAGA worker checks entitlement start and expiry before debit":
-                  'starts_at<=? AND expires_at>?' in worker
-                  and 'error: "live_daga_subscription_required"' in worker,
+              "LIVE DAGA worker checks Smart plan interval before character debit":
+                  'const smartEntitlement = await getActiveStoreEntitlement(env.DAGA_APP_DB, company.storeId);' in worker
+                  and 'if (!isSmartStoreEntitlement(smartEntitlement)) return json({ error: "smart_store_subscription_required" }, 402);' in worker
+                  and 'e.starts_at<=?' in open("company-entitlements.js", encoding="utf-8").read()
+                  and 'e.expires_at>?' in open("company-entitlements.js", encoding="utf-8").read()
+                  and worker.index("getActiveStoreEntitlement(env.DAGA_APP_DB, company.storeId)") < worker.index("INSERT INTO daga_live_word_ledger"),
               "owner console labels LIVE DAGA quota as characters and requires it":
                   "رصيد الحروف (إلزامي لباقة LIVE DAGA)" in open("owner-console.html", encoding="utf-8").read()
                   and "$('planQuota').required=$('planService').value==='live_daga'" in open("owner-console.html", encoding="utf-8").read(),
@@ -91,6 +94,8 @@ jobs:
         run: node --input-type=module --check < worker.js
       - name: Check owner-auth module syntax
         run: node --input-type=module --check < owner-auth.js
+      - name: Check shared company entitlement module syntax
+        run: node --input-type=module --check < company-entitlements.js
       - name: Check company invitation module syntax
         run: node --input-type=module --check < company-invitations.js
       - name: Check company order module syntax
