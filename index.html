@@ -112,7 +112,7 @@ function handleUser(text){
  stopListening();
  const navText=String(text||'').toLowerCase().replace(/[إأآ]/g,'ا').replace(/[ىي]/g,'ي').replace(/[ةه]/g,'ه').replace(/[^\u0600-\u06FFa-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
  const prayerIntent=/(?:صلي|صل|الصلاه|الصلاة).*(?:النبي|محمد)|(?:النبي|محمد).*(?:صلي|صل)/u.test(navText);
- const greetingIntent=/(?:صباح الفل|صباح الخير|صباح النور|مساء الفل|مساء الخير|مساء النور|ازيك|عامل ايه|اخبارك|اهلا|اهلين|يا صاحبي|يا حبيبي|تسلم|شكرا|ربنا يخليك)/u.test(navText);
+ const greetingIntent=/(?:صباح الفل|صباح الخير|صباح النور|مساء الفل|مساء الخير|مساء النور|ازيك|عامل ايه|اخبارك|اهلا|اهلين|تسلم|شكرا|ربنا يخليك)/u.test(navText)||/^(?:يا صاحبي|يا حبيبي|حبيبي|صاحبي)$/u.test(navText);
  const insultIntent=/(?:يا غبي|يا حمار|يا اهبل|يا فاشل|يا ابن الكلب|يا ابن الجزمه|يلعن|خرا|زباله|غبي|حمار)/u.test(navText);
  if(prayerIntent||greetingIntent){
   replying=true;state.textContent='ضجه بيرد عليك يا صاحبي…';
