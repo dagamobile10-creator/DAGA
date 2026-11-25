@@ -77,24 +77,27 @@ jobs:
           echo "$applied" | jq -e '.success == true' >/dev/null
           echo "Persistent D1 memory database and table are ready."
 
-      - name: Provision production application D1 database and apply schema migrations
+      - name: Reuse the existing production application D1 binding and apply migrations
         env:
           CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
-          endpoint="https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/d1/database"
-          listing="$(curl -fsS -G -H "Authorization: Bearer $CF_API_TOKEN" --data-urlencode "name=daga-app-live" "$endpoint")"
-          db_id="$(echo "$listing" | jq -r '.result[]? | select(.name=="daga-app-live") | .uuid' | head -n1)"
-          if [ -z "$db_id" ] || [ "$db_id" = "null" ]; then
-            created="$(curl -fsS -X POST "$endpoint" -H "Authorization: Bearer $CF_API_TOKEN" -H "Content-Type: application/json" --data '{"name":"daga-app-live"}')"
-            echo "$created" | jq -e '.success == true' >/dev/null
-            db_id="$(echo "$created" | jq -r '.result.uuid')"
+          settings="$(curl -fsS --max-time 20 -H "Authorization: Bearer $CF_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/workers/scripts/daga-voice/settings")"
+          binding="$(echo "$settings" | jq -c '.result.bindings[]? | select(.name=="DAGA_APP_DB" and .type=="d1")' | head -n1)"
+          if [ -z "$binding" ]; then
+            echo "::error::Production deployment blocked: existing DAGA_APP_DB binding was not found. Do not create or attach a new database until the intended production data store is confirmed."
+            exit 1
           fi
-          test -n "$db_id" && test "$db_id" != "null"
-          printf '\n[[d1_databases]]\nbinding = "DAGA_APP_DB"\ndatabase_name = "daga-app-live"\ndatabase_id = "%s"\nmigrations_dir = "migrations"\n' "$db_id" >> wrangler.toml
-          npx --yes wrangler@3.90.0 d1 migrations apply daga-app-live --remote --config wrangler.toml
-          echo "Production application D1 schema migrations are applied."
+          db_id="$(echo "$binding" | jq -r '.id // .database_id // empty')"
+          db_name="$(echo "$binding" | jq -r '.database_name // empty')"
+          if [ -z "$db_id" ] || [ -z "$db_name" ]; then
+            echo "::error::Production D1 binding metadata is incomplete; refusing to guess the database."
+            exit 1
+          fi
+          printf '\n[[d1_databases]]\nbinding = "DAGA_APP_DB"\ndatabase_name = "%s"\ndatabase_id = "%s"\nmigrations_dir = "migrations"\n' "$db_name" "$db_id" >> wrangler.toml
+          npx --yes wrangler@3.90.0 d1 migrations apply "$db_name" --remote --config wrangler.toml
+          echo "Existing production application D1 migrations are applied."
       - name: Inspect LiveAvatar binding metadata without reading values
         env:
           CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
