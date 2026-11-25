@@ -20,11 +20,10 @@ jobs:
           workflow = open(".github/workflows/daga-staging-setup.yml", encoding="utf-8").read()
           worker = open("worker.js", encoding="utf-8").read()
           checks = {
-              "LIVE DAGA quota uses one explicit UTC timestamp for entitlement checks":
-                  'const quotaNow = new Date().toISOString();' in worker
-                  and 'starts_at<=? AND expires_at>?' in worker
-                  and 'storeId, quotaNow, quotaNow' in worker
-                  and 'storeId, quotaNow, quotaNow).run()' in worker,
+              "LIVE DAGA quota reads the character ledger before generation":
+                  'if (liveMode)' in worker
+                  and "FROM daga_live_word_ledger WHERE store_id=?" in worker
+                  and 'live_daga_quota_insufficient' in worker,
               "LIVE DAGA refunds quota after provider failures":
                   "const refundQuota = async () =>" in worker
                   and "await refundQuota();" in worker,
@@ -62,9 +61,10 @@ jobs:
                   and 'INSERT INTO daga_live_word_ledger' in worker
                   and '>= ?' in worker
                   and 'requiredCharacters: characters, remainingCharacters: remaining' in worker,
-              "LIVE DAGA worker checks entitlement start and expiry before debit":
-                  'starts_at<=? AND expires_at>?' in worker
-                  and 'error: "live_daga_subscription_required"' in worker,
+              "LIVE DAGA uses its character ledger independently of the company subscription":
+                  "LIVE DAGA is paid and consumed by its own character ledger" in worker
+                  and "service='store'" in worker
+                  and "live_daga_quota_insufficient" in worker,
               "owner console labels LIVE DAGA quota as characters and requires it":
                   "رصيد الحروف (إلزامي لباقة LIVE DAGA)" in open("owner-console.html", encoding="utf-8").read()
                   and "$('planQuota').required=$('planService').value==='live_daga'" in open("owner-console.html", encoding="utf-8").read(),
