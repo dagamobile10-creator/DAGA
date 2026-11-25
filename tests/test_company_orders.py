@@ -311,7 +311,8 @@ class LiveDagaLoginFlowTests(unittest.TestCase):
         self.assertIn('voiceIdentityRequired && ["/chat", "/tts", "/liveavatar/token"].includes(url.pathname)', self.worker)
         self.assertIn('const account = await authenticatedAccount(request, env.DAGA_APP_DB)', self.worker)
         self.assertIn('DAGA_MEMORY_REQUIRE_AUTH', self.worker)
-        self.assertIn('DAGA_VOICE_REQUIRE_AUTH', self.worker)
+        self.assertIn('const voiceIdentityRequired = true;', self.worker)
+        self.assertNotIn('DAGA_VOICE_REQUIRE_AUTH', self.worker)
 
 
 
