@@ -178,20 +178,13 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         owner = (ROOT / "owner-console.html").read_text(encoding="utf-8")
         self.assertIn("/owner/admin/support-contact", owner)
 
-    def test_live_page_uses_shop_owner_login_and_resolves_store_identity(self):
+    def test_live_page_uses_authenticated_company_session_and_selected_store(self):
         live = (ROOT / "index.html").read_text(encoding="utf-8")
-        self.assertIn("تسجيل دخول المحل", live)
-        self.assertIn("/api/shop/auth/login", live)
-        self.assertIn("/api/shop/auth/me", live)
-        self.assertNotIn("/api/company/auth/login", live)
-        self.assertIn("sessionStorage.setItem('daga_company_id_v1',shop.id)", live)
-
-    def test_smart_plan_detection_supports_plan_name_when_feature_flags_are_legacy(self):
-        auth = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
-        worker = (ROOT / "worker.js").read_text(encoding="utf-8")
-        self.assertIn("storeEntitlement.name ||", auth)
-        self.assertIn("LIKE '%smart%'", worker)
-        self.assertIn("LIKE '%ذكي%'", worker)
+        portal = (ROOT / "company" / "portal.html").read_text(encoding="utf-8")
+        self.assertIn("DAGA_API_BASE+'/chat'", live)
+        self.assertIn("sessionStorage.getItem(DAGA_SESSION_KEY)", live)
+        self.assertIn("sessionStorage.getItem('daga_company_id_v1')", live)
+        self.assertIn("type:\"DAGA_AUTH\",token:sessionToken,companyId:activeCompany.id", portal)
 
 
     def test_company_subscription_includes_smart_assistant_and_history(self):
