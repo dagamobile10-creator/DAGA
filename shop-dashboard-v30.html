@@ -288,12 +288,12 @@ function moneyImpactForManualEdit(ci,entryName,delta,existingEntry=null){
 function saveEntry(i,j){
  const n=document.getElementById('n').value.trim(),a=document.getElementById('a').value.trim();
  if(!n||a===''||num(a)<0)return alert('اكتب الاسم ومبلغًا صحيحًا');
- const old=[...cols[i].entries[j]],newAmount=num(a),delta=newAmount-num(old[1]);
+ const old=[...cols[i].entries[j]],oldDisplayName=String((old[2]&&old[2].adminLabel)||old[0]),newAmount=num(a),delta=newAmount-num(old[1]);
  const isMoneyRow=entryRole(cols[i],cols[i].entries[j])==='money'||(columnRole(cols[i])==='cards'&&findMoneyEntry()?.entry===cols[i].entries[j]);/* Keep the money role in entry metadata when its visible name changes. */
  const impact=moneyImpactForManualEdit(i,old[0],delta,old),money=findMoneyEntry();
  if(impact.delta!==0&&!money){return alert('مش لاقي بند «فلوس» داخل عمود الكروت، فمش هقدر أنفّذ تعديل مرتبط بأمان. لم يتغير أي رقم.')}
  if(money&&num(money.entry[1])+impact.delta<0)return alert('التعديل هيخلي الفلوس الأساسية بالسالب. راجع القيمة قبل المتابعة.');
- pendingManualEdit={i,j,old,n,newAmount,delta,impact,moneyBefore:money?num(money.entry[1]):null,agentBefore:impact.agentName?getServiceAgentBalance(impact.agentName).value:null,moneyLabel:money?.entry[0]||null,requestedAt:new Date().toISOString()};
+ pendingManualEdit={i,j,old,oldDisplayName,n,newAmount,delta,impact,moneyBefore:money?num(money.entry[1]):null,agentBefore:impact.agentName?getServiceAgentBalance(impact.agentName).value:null,moneyLabel:money?.entry[0]||null,requestedAt:new Date().toISOString()};
  const sign=impact.delta>0?'+':'';
  open(`<h2>مراجعة تعديل يدوي</h2><div class="reconMini"><div>وقت المراجعة <b>${esc(localStamp(pendingManualEdit.requestedAt))}</b></div><div>البند <b>${esc(old[0])} — ${esc(cols[i].name)}</b></div><div>القيمة القديمة <b>${fmt(num(old[1]))} ج.م</b></div><div>القيمة الجديدة <b>${fmt(newAmount)} ج.م</b></div><div>الفرق في البند <b>${delta>0?'+':''}${fmt(delta)} ج.م</b></div><div>تأثير الفلوس الأساسية <b>${impact.delta>0?'+':''}${fmt(impact.delta)} ج.م</b></div>${impact.agentName?`<div>المندوب ${esc(impact.agentName)} <b>${impact.agentDelta>0?'+':''}${fmt(impact.agentDelta)} ج.م</b></div>`:''}${money?`<div>الفلوس قبل <b>${fmt(num(money.entry[1]))} ج.م</b></div><div>الفلوس بعد <b>${fmt(num(money.entry[1])+impact.delta)} ج.م</b></div>`:''}</div><p class="small">${esc(impact.description)}</p><p class="small">دي مراجعة فقط. لن يتغير أي رقم قبل التأكيد.</p><div class="grid"><button class="primary" onclick="confirmManualEdit()">تأكيد وتنفيذ</button><button onclick="pendingManualEdit=null;editEntry(${i},${j})">رجوع</button></div>`);
 }
@@ -305,10 +305,10 @@ async function confirmManualEdit(){
  if(p.impact.delta!==0&&(!money||num(money.entry[1])!==p.moneyBefore)){pendingManualEdit=null;alert('الفلوس الأساسية اتغيرت من وقت المراجعة. راجع العملية من جديد.');render();return}
  if(p.impact.agentDelta&&getServiceAgentBalance(p.impact.agentName).value!==p.agentBefore){pendingManualEdit=null;alert('رصيد المندوب اتغير من وقت المراجعة. راجع العملية من جديد.');render();return}
  const updatedMeta={...(p.old[2]||{})};if(!updatedMeta.role)updatedMeta.role=entryRole(cols[p.i],p.old);if(columnRole(cols[p.i])==='expenses'||isDailyMoneyColumn(p.i))updatedMeta.moneyPosted=true;
- if(p.n!==p.old[0]){try{await saveCompanyLayoutLabel('entry:'+String(updatedMeta.id||''),p.n)}catch(error){alert(error.message||'تعذر حفظ اسم البند؛ لم يتم تنفيذ أي تغيير مالي.');return;}updatedMeta.adminLabel=p.n;}
+ const visibleOldName=String(p.oldDisplayName||p.old[2]?.adminLabel||p.old[0]);if(p.n!==visibleOldName){try{await saveCompanyLayoutLabel('entry:'+String(updatedMeta.id||''),p.n)}catch(error){alert(error.message||'تعذر حفظ اسم البند؛ لم يتم تنفيذ أي تغيير مالي.');return;}updatedMeta.adminLabel=p.n;}else if(p.old[2]?.adminLabel)updatedMeta.adminLabel=p.old[2].adminLabel;
  if(p.impact.agentDelta){const a=applyServiceAgentDelta(p.impact.agentName,p.impact.agentDelta,p.impact.agentLabel);if(!a.ok){alert(a.message);return}}
  if(p.impact.delta!==0)money.entry[1]=String(num(money.entry[1])+p.impact.delta);
- cols[p.i].entries[p.j]=[p.n,String(p.newAmount),updatedMeta];
+ const storedEntryName=p.n===visibleOldName?p.old[0]:p.n;cols[p.i].entries[p.j]=[storedEntryName,String(p.newAmount),updatedMeta];
  addLedger('تعديل يدوي مع مراجعة',p.old[0]+' ('+fmt(num(p.old[1]))+') ← '+p.n+' ('+fmt(p.newAmount)+') في '+cols[p.i].name+'؛ فرق البند '+fmt(p.delta)+'؛ تأثير الفلوس '+fmt(p.impact.delta)+(p.impact.agentName?'؛ رصيد '+p.impact.agentName+' '+fmt(p.impact.agentDelta):''),{column:cols[p.i].name,entryName:p.n,previousName:p.old[0],oldValue:num(p.old[1]),newValue:p.newAmount,moneyDelta:p.impact.delta,agentName:p.impact.agentName||null,agentDelta:p.impact.agentDelta||0});
  pendingManualEdit=null;if(!persist()){cols=transactionBackup.cols;ledger=transactionBackup.ledger;closedDays=transactionBackup.closedDays;render();return;}closeModal();render();open('<h2>تم تنفيذ التعديل</h2><p class="status">تم الحفظ بعد تأكيدك.</p><button class="primary" onclick="closeModal()">تمام</button>');
 }
@@ -556,7 +556,7 @@ function review(){
   if(money&&num(money.entry[1])+impact.delta<0){out.innerHTML='<p class="small">التعديل هيخلي الفلوس الأساسية بالسالب.</p>';return}
   const agentState=impact.agentName?getServiceAgentBalance(impact.agentName):null;
   if(impact.agentDelta&&agentState&&agentState.value+impact.agentDelta<0){out.innerHTML='<p class="small">رصيد المندوب '+esc(impact.agentName)+' غير كافٍ للخصم المطلوب. لم يتغير أي رقم.</p>';return}
-  pendingOrder={...p,mode:'namedEntrySet',ci,delta,moneyDelta:impact.delta,agentDelta:impact.agentDelta||0,agentName:impact.agentName||null,agentBefore:agentState?.value??null,moneyBefore:money?num(money.entry[1]):null};
+  pendingOrder={...p,mode:'namedEntrySet',ci,delta,moneyDelta:impact.delta,impactDescription:impact.description,agentDelta:impact.agentDelta||0,agentName:impact.agentName||null,agentBefore:agentState?.value??null,moneyBefore:money?num(money.entry[1]):null};
   out.innerHTML='<div class="reconMini"><div>البند <b>'+esc(p.entryName)+'</b></div><div>القيمة القديمة <b>'+fmt(p.oldAmount)+'</b></div><div>القيمة الجديدة <b>'+fmt(p.newAmount)+'</b></div><div>تأثير الفلوس <b>'+fmt(impact.delta)+'</b></div>'+(impact.agentName?'<div>رصيد '+esc(impact.agentName)+' <b>'+fmt(impact.agentDelta)+'</b></div>':'')+'</div><p class="small">'+esc(impact.description)+'</p><button class="primary" onclick="executeOrder()">تأكيد وتنفيذ</button><button onclick="pendingOrder=null;document.getElementById(\'orderPreview\').innerHTML=\'تم إلغاء العملية.\'">إلغاء</button>';return;
  }
 
@@ -839,7 +839,7 @@ function describeLiveOrder(p){
  if(p.mode==='cashAdd')return 'هسجل '+fmt(p.amount)+' جنيه في '+(cols[p.targetIndex]?.name||'عمود الكاش')+'. الفلوس الأساسية هتزيد '+fmt(p.amount)+' جنيه.';
  if(p.mode==='accessorySale'||p.mode==='accessoryAdd')return 'هسجل '+fmt(p.amount)+' جنيه في عمود الإكسسوار باسم '+(p.product||'مبيعات أكسسوار')+'. الفلوس الأساسية هتزيد '+fmt(p.amount)+' جنيه.';
  if(p.mode==='dailyWithdrawal')return 'هسجل سحب '+fmt(p.amount)+' جنيه من '+p.name+' في عمود الخارج، والفلوس الأساسية هتقل '+fmt(p.amount)+' جنيه.';
- if(p.mode==='namedEntrySet')return 'هعدل بند '+p.entryName+' من '+fmt(p.oldAmount)+' إلى '+fmt(p.newAmount)+' جنيه. تأثير الفلوس الأساسية '+fmt(p.moneyDelta)+' جنيه.';
+ if(p.mode==='namedEntrySet'){const before=Number.isFinite(p.moneyBefore)?p.moneyBefore:(money?current:0),after=before+Number(p.moneyDelta||0);return 'مراجعة تعديل في عمود '+(p.column||cols[p.ci]?.name||'')+'، البند '+p.entryName+'. القيمة القديمة '+fmt(p.oldAmount)+' جنيه، والقيمة الجديدة '+fmt(p.newAmount)+' جنيه، والفرق '+(p.delta>0?'+':'')+fmt(p.delta||0)+' جنيه. '+(p.impactDescription||'')+' الفلوس الأساسية قبل التعديل '+fmt(before)+' جنيه وبعده '+fmt(after)+' جنيه. '+(p.agentName?'رصيد مندوب '+p.agentName+' قبل '+fmt(p.agentBefore||0)+' وبعد '+fmt((p.agentBefore||0)+(p.agentDelta||0))+' جنيه.':'')+' هل أؤكد التنفيذ؟';}
  if(p.mode==='balanceAdd')return 'هضيف '+fmt(p.amount)+' جنيه باسم '+p.name+' في عمود الرصيد؛ لو فوري أو ممكن أو سوبر بي فده يزيد رصيد المندوب فقط من غير تأثير على الفلوس الأساسية.';
  if(p.mode==='balanceToOutsideTransfer')return 'هسوي '+fmt(p.transfer)+' جنيه من رصيد '+p.name+' وأسجل المتبقي في الخارج. تأثير الفلوس الأساسية صفر.';
  if(p.mode==='balancePayout'||p.mode==='outgoing')return 'هسجل صرف '+fmt(p.amount)+' جنيه باسم '+p.name+' حسب رصيده الحالي. راجع تفاصيل العملية.';
