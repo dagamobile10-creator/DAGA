@@ -297,7 +297,7 @@ async function confirmManualEdit(){
  if(p.impact.delta!==0&&(!money||num(money.entry[1])!==p.moneyBefore)){pendingManualEdit=null;alert('الفلوس الأساسية اتغيرت من وقت المراجعة. راجع العملية من جديد.');render();return}
  if(p.impact.agentDelta&&getServiceAgentBalance(p.impact.agentName).value!==p.agentBefore){pendingManualEdit=null;alert('رصيد المندوب اتغير من وقت المراجعة. راجع العملية من جديد.');render();return}
  const updatedMeta={...(p.old[2]||{})};if(!updatedMeta.role)updatedMeta.role=entryRole(cols[p.i],p.old);if(columnRole(cols[p.i])==='expenses'||isDailyMoneyColumn(p.i))updatedMeta.moneyPosted=true;
- if(p.n!==p.old[0]){try{await saveCompanyLayoutLabel('entry:'+String(updatedMeta.id||''),p.n)}catch(error){alert(error.message||'تعذر حفظ اسم البند؛ لم يتم تنفيذ أي تغيير مالي.');return;}updatedMeta.adminLabel=p.n;}
+ const visibleOldName=String(p.old[2]?.adminLabel||p.old[0]);if(p.n!==visibleOldName){try{await saveCompanyLayoutLabel('entry:'+String(updatedMeta.id||''),p.n)}catch(error){alert(error.message||'تعذر حفظ اسم البند؛ لم يتم تنفيذ أي تغيير مالي.');return;}updatedMeta.adminLabel=p.n;}else if(p.old[2]?.adminLabel)updatedMeta.adminLabel=p.old[2].adminLabel;
  if(p.impact.agentDelta){const a=applyServiceAgentDelta(p.impact.agentName,p.impact.agentDelta,p.impact.agentLabel);if(!a.ok){alert(a.message);return}}
  if(p.impact.delta!==0)money.entry[1]=String(num(money.entry[1])+p.impact.delta);
  cols[p.i].entries[p.j]=[p.n,String(p.newAmount),updatedMeta];
@@ -360,17 +360,16 @@ function parseOrder(t){
    return {type:'namedEntrySet',column:'الكروت',entryName:best.name,index:best.index,oldAmount:best.amount,newAmount,amount,raw,serviceAgent:best.agent};
   }
  }
- // Named item edits: e.g. "عدل كرت الهوا وخليهم 2000 جنيه".
- const editIntent=/(?:عدل|عدّل|غير|غيّر|خلي|خليهم|خليه|خليها|بدل|بدّل|بقى|اصبح|أصبح)/.test(cleaned);
+ // Named item edits: resolve the exact entry in any column.
+ const editIntent=/(?:عدل|عدّل|تعديل|غير|غيّر|خلي|خليهم|خليه|خليها|بدل|بدّل|بقى|اصبح|أصبح)/.test(cleaned);
  if(editIntent){
-   const cards=columnByRole('cards');
-   const entries=(cards?.entries||[]).map((e,i)=>({name:String(e[0]||''),normName:norm(e[0]),index:i,amount:num(e[1])}))
-     .filter(e=>e.normName && cleaned.includes(e.normName) && !/^(الفلوس|فلوس|الفلوس الاساسيه|الرصيد الاساسي)$/.test(e.normName))
-     .sort((a,b)=>b.normName.length-a.normName.length);
+   const entries=cols.flatMap((col,ci)=>col.entries.map((e,index)=>({name:String(e[0]||''),displayName:String(e[2]?.adminLabel||e[0]||''),normName:norm(e[2]?.adminLabel||e[0]),index,ci,column:col.name,amount:num(e[1])})))
+     .filter(e=>e.normName&&cleaned.includes(e.normName)&&!['الفلوس','فلوس','الفلوس الاساسيه','الرصيد الاساسي'].includes(e.normName))
+     .sort((x,y)=>y.normName.length-x.normName.length);
    if(entries.length){
-     const best=entries[0], tied=entries.filter(e=>e.normName.length===best.normName.length);
-     if(tied.length>1) return {ambiguous:'لقيت أكتر من بند في عمود الكروت اسمه قريب من اللي قلته. اختار اسم البند بالضبط علشان ما أعدّلش بند غلط.'};
-     return {type:'namedEntrySet',column:'الكروت',entryName:best.name,index:best.index,oldAmount:best.amount,newAmount:amount,amount,raw};
+     const best=entries[0],tied=entries.filter(e=>e.normName.length===best.normName.length);
+     if(tied.length>1)return {ambiguous:'لقيت أكتر من بند اسمه قريب من اللي قلته. حدّد العمود أو الاسم بالضبط علشان ما أعدّلش بند غلط.'};
+     return {type:'namedEntrySet',column:best.column,entryName:best.name,index:best.index,ci:best.ci,oldAmount:best.amount,newAmount:amount,amount,raw};
    }
  }
  const isCash=/(كاش|نقدي|نقدا|فلوس كاش)/.test(cleaned);
@@ -483,15 +482,15 @@ function review(){
  if(!p){out.innerHTML='<p class="small">مش قادر أحدد مبلغ واضح. جرّب تقول المبلغ أو تكتبه بشكل أوضح.</p>';return}
  if(p.ambiguous){if(p.clarification){pendingClarification=p.clarification;out.innerHTML='<p class="small">'+esc(p.ambiguous)+'</p><p class="small">رد بالمايك على نفس السؤال، أو اختار إجابة من هنا. الرد الصوتي هيتربط بالسؤال الحالي ومش هيبدأ أوردر جديد.</p><div class="grid"><button class="primary" onclick="answerClarification(\'new\')">مبلغ جديد مستقل</button><button onclick="answerClarification(\'transfer\')">تسوية من الرصيد</button><button onclick="answerClarification(\'cancel\')">إلغاء</button></div>';}else{out.innerHTML='<p class="small">'+esc(p.ambiguous)+'</p>';}return}
  if(p.type==='namedEntrySet'){
-  const ci=cols.findIndex(c=>c.name===p.column),entry=ci>=0?cols[ci].entries[p.index]:null;
-  if(!entry||entry[0]!==p.entryName){out.innerHTML='<p class="small">البند اتغير من وقت قراءة الأمر. راجع البند وحاول تاني.</p>';return}
+  const ci=Number.isInteger(p.ci)?p.ci:cols.findIndex(c=>c.name===p.column),entry=ci>=0?cols[ci].entries[p.index]:null;
+  if(!entry||entry[0]!==p.entryName||num(entry[1])!==p.oldAmount){out.innerHTML='<p class="small">البند اتغير من وقت قراءة الأمر. راجع البند وحاول تاني.</p>';return}
   const delta=p.newAmount-p.oldAmount,impact=moneyImpactForManualEdit(ci,p.entryName,delta,entry),money=findMoneyEntry();
-  if(impact.delta!==0&&!money){out.innerHTML='<p class="small">مش لاقي بند الفلوس داخل عمود الكروت.</p>';return}
-  if(money&&num(money.entry[1])+impact.delta<0){out.innerHTML='<p class="small">التعديل هيخلي الفلوس الأساسية بالسالب.</p>';return}
+  if(impact.delta!==0&&!money){out.innerHTML='<p class="small">مش لاقي بند الفلوس الأساسية داخل عمود الكروت؛ لم يتغير أي رقم.</p>';return}
+  if(money&&num(money.entry[1])+impact.delta<0){out.innerHTML='<p class="small">التعديل هيخلي الفلوس الأساسية بالسالب؛ لم يتغير أي رقم.</p>';return}
   const agentState=impact.agentName?getServiceAgentBalance(impact.agentName):null;
   if(impact.agentDelta&&agentState&&agentState.value+impact.agentDelta<0){out.innerHTML='<p class="small">رصيد المندوب '+esc(impact.agentName)+' غير كافٍ للخصم المطلوب. لم يتغير أي رقم.</p>';return}
-  pendingOrder={...p,mode:'namedEntrySet',ci,delta,moneyDelta:impact.delta,agentDelta:impact.agentDelta||0,agentName:impact.agentName||null,agentBefore:agentState?.value??null,moneyBefore:money?num(money.entry[1]):null};
-  out.innerHTML='<div class="reconMini"><div>البند <b>'+esc(p.entryName)+'</b></div><div>القيمة القديمة <b>'+fmt(p.oldAmount)+'</b></div><div>القيمة الجديدة <b>'+fmt(p.newAmount)+'</b></div><div>تأثير الفلوس <b>'+fmt(impact.delta)+'</b></div>'+(impact.agentName?'<div>رصيد '+esc(impact.agentName)+' <b>'+fmt(impact.agentDelta)+'</b></div>':'')+'</div><p class="small">'+esc(impact.description)+'</p><button class="primary" onclick="executeOrder()">تأكيد وتنفيذ</button><button onclick="pendingOrder=null;document.getElementById(\'orderPreview\').innerHTML=\'تم إلغاء العملية.\'">إلغاء</button>';return;
+  pendingOrder={...p,mode:'namedEntrySet',ci,delta,moneyDelta:impact.delta,impactDescription:impact.description,agentDelta:impact.agentDelta||0,agentName:impact.agentName||null,agentBefore:agentState?.value??null,moneyBefore:money?num(money.entry[1]):null};
+  out.innerHTML='<div class="reconMini"><div>وقت المراجعة <b>'+esc(localStamp())+'</b></div><div>نوع العملية <b>تعديل بند</b></div><div>العمود <b>'+esc(cols[ci].adminLabel||cols[ci].name)+'</b></div><div>البند <b>'+esc(p.entryName)+'</b></div><div>القيمة القديمة <b>'+fmt(p.oldAmount)+' ج.م</b></div><div>القيمة الجديدة <b>'+fmt(p.newAmount)+' ج.م</b></div><div>الفرق في البند <b>'+(delta>0?'+':'')+fmt(delta)+' ج.م</b></div><div>تأثير الفلوس الأساسية <b>'+(impact.delta>0?'+':'')+fmt(impact.delta)+' ج.م</b></div>'+(money?'<div>الفلوس قبل <b>'+fmt(num(money.entry[1]))+' ج.م</b></div><div>الفلوس بعد <b>'+fmt(num(money.entry[1])+impact.delta)+' ج.م</b></div>':'')+(impact.agentName?'<div>رصيد '+esc(impact.agentName)+' <b>'+fmt(impact.agentDelta)+' ج.م</b></div>':'')+'</div><p class="small">'+esc(impact.description)+'</p><p class="small">لن يتغير أي رقم قبل التأكيد.</p><button class="primary" onclick="executeOrder()">تأكيد وتنفيذ</button><button onclick="pendingOrder=null;document.getElementById(\'orderPreview\').innerHTML=\'تم إلغاء العملية.\'">إلغاء</button>';return;
  }
 
  const cardsIndex=cols.findIndex(c=>columnRole(c)==='cards'), balanceIndex=cols.findIndex(c=>columnRole(c)==='balance');
@@ -574,15 +573,15 @@ function executeOrderCore(){
  if(!pendingOrder)return; const p=pendingOrder;
  const findEntry=(ci,name)=>cols[ci].entries.findIndex(e=>e[0]===name);
  if(p.mode==='namedEntrySet'){
-  const row=cols[p.ci]?.entries[p.index],money=findMoneyEntry();
+  const editCi=Number.isInteger(p.ci)?p.ci:cols.findIndex(c=>c.name===p.column),row=cols[editCi]?.entries[p.index],money=findMoneyEntry();
   if(!row||row[0]!==p.entryName||num(row[1])!==p.oldAmount){alert('البند اتغير من وقت المراجعة. اعمل مراجعة جديدة.');pendingOrder=null;return}
   if(p.moneyDelta!==0&&(!money||num(money.entry[1])!==p.moneyBefore)){alert('الفلوس الأساسية اتغيرت من وقت المراجعة. اعمل مراجعة جديدة.');pendingOrder=null;return}
   if(p.agentDelta&&getServiceAgentBalance(p.agentName).value!==p.agentBefore){alert('رصيد المندوب اتغير من وقت المراجعة. اعمل مراجعة جديدة.');pendingOrder=null;return}
   if(money&&num(money.entry[1])+p.moneyDelta<0){alert('التعديل هيخلي الفلوس الأساسية بالسالب.');return}
   if(p.agentDelta){const a=applyServiceAgentDelta(p.agentName,p.agentDelta);if(!a.ok){alert(a.message);return}}
   row[1]=String(p.newAmount);if(p.moneyDelta!==0)money.entry[1]=String(num(money.entry[1])+p.moneyDelta);
-  addLedger('تعديل بند خدمة داخل الكروت',p.entryName+': '+fmt(p.oldAmount)+' ← '+fmt(p.newAmount)+'؛ تأثير الفلوس '+fmt(p.moneyDelta)+(p.agentName?'؛ رصيد '+p.agentName+' '+fmt(p.agentDelta):''),{column:'الكروت',entryName:p.entryName,oldValue:p.oldAmount,newValue:p.newAmount,moneyDelta:p.moneyDelta,agentName:p.agentName||null,agentDelta:p.agentDelta||0});
-  pendingOrder=null;dagaLastOrderSaved=persist();render();const box=document.getElementById('orderPreview');if(box)box.innerHTML='<p class="status">تم تحديث رصيد الخدمة بعد التأكيد.</p>';return;
+  addLedger('تعديل بند عبر LIVE/الداشبورد',p.entryName+': '+fmt(p.oldAmount)+' ← '+fmt(p.newAmount)+' في '+cols[editCi].name+'؛ تأثير الفلوس '+fmt(p.moneyDelta)+(p.agentName?'؛ رصيد '+p.agentName+' '+fmt(p.agentDelta):''),{column:cols[editCi].name,entryName:p.entryName,oldValue:p.oldAmount,newValue:p.newAmount,moneyDelta:p.moneyDelta,agentName:p.agentName||null,agentDelta:p.agentDelta||0});
+  pendingOrder=null;dagaLastOrderSaved=persist();render();const box=document.getElementById('orderPreview');if(box)box.innerHTML='<p class="status">تم حفظ التعديل وتحديث الرصيد بعد التأكيد.</p>';return;
  }
 
  const setEntry=(ci,idx,val)=>{if(idx>=0)cols[ci].entries[idx][1]=String(val)};
