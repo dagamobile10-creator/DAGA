@@ -380,12 +380,12 @@ export default {
         }
 
         if (env.AI) {
-          const cloudflareModels = ["@cf/openai/gpt-oss-20b", "@cf/zai-org/glm-4.7-flash"];
+          const cloudflareModels = ["@cf/openai/gpt-oss-20b"];
           for (const model of cloudflareModels) {
             try {
               const result = await Promise.race([
                 env.AI.run(model, { messages: [{ role: "system", content: instructions }, ...conversation], max_tokens: 600, reasoning_effort: "low", chat_template_kwargs: { enable_thinking: false } }),
-                new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 8000))
+                new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 12000))
               ]);
               const cloudflareText = extractModelText(result);
               let reply = normalizeArabicReply(cloudflareText, userText);
@@ -415,7 +415,7 @@ export default {
         }
 
         if (!env.OPENAI_API_KEY && !env.GROQ_API_KEY && !env.AI) return json({ error: "No chat provider configured", detail: "Enable the AI binding in Cloudflare Workers, or configure GROQ_API_KEY / OPENAI_API_KEY." }, 503);
-        return json({ error: "All configured chat providers failed" }, 502);
+        return json({ error: "All configured chat providers failed", providerFailures: failures }, 502);
       } catch (_) { return json({ error: "Chat failure" }, 500); }
     }
 
