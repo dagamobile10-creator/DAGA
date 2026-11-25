@@ -8,6 +8,7 @@ on:
       - "package.json"
       - "capacitor.config.ts"
       - "www/**"
+      - "entry/**"
       - ".github/workflows/android-build.yml"
       - "shop-dashboard-v30.html"
       - "index.html"
