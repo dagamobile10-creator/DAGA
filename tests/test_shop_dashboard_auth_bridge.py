@@ -90,7 +90,7 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         auth = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
         portal = (ROOT / "company" / "portal.html").read_text(encoding="utf-8")
         dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
-        self.assertIn('const accountPaths = ["/api/company/auth/me", "/api/company/auth/logout"]', auth)
+        self.assertIn('const accountPaths = ["/api/company/auth/me", "/api/company/auth/logout", "/api/company/layout-labels"]', auth)
         self.assertIn('return json(env, { ok: true, account:', auth)
         self.assertIn('ledgerEnabled: storeEnabled', auth)
         self.assertIn('activeCompany.ledgerEnabled===true', portal)
