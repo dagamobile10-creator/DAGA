@@ -1,4 +1,5 @@
 import { authenticatedAccount } from "./owner-auth.js";
+import { isSmartStoreEntitlement } from "./company-entitlements.js";
 
 const MAX_INVITE_TTL_HOURS = 24 * 14;
 const DEFAULT_INVITE_TTL_HOURS = 72;
@@ -107,7 +108,9 @@ async function companyAccountMe(env, db, account) {
     try { features = JSON.parse(storeEntitlement?.features_json || "{}"); if (!features || typeof features !== "object" || Array.isArray(features)) features = {}; } catch (_) {}
     const remainingWords = Number(liveWordBalance?.remaining || 0);
     const storeEnabled = Boolean(storeEntitlement);
-    return { ...company, ledgerEnabled: storeEnabled, smartAssistantEnabled: storeEnabled, historyEnabled: storeEnabled, liveDagaEnabled: remainingWords > 0, liveWordsRemaining: remainingWords };
+    const smartEnabled = isSmartStoreEntitlement(storeEntitlement);
+    const historyEnabled = smartEnabled && (features.historyEnabled === true || features.tier === "smart" || /smart|ذكي/i.test(String(storeEntitlement?.name || "")));
+    return { ...company, ledgerEnabled: storeEnabled, smartAssistantEnabled: smartEnabled, historyEnabled, liveDagaEnabled: smartEnabled && remainingWords > 0, liveWordsRemaining: remainingWords };
   }));
   return json(env, { ok: true, account: { id: account.id, publicId: account.public_id || null, displayName: account.display_name, role: account.role, status: account.status, emailMasked: maskCompanyEmail(account.email) }, companies });
 }
