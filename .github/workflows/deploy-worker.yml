@@ -127,6 +127,20 @@ jobs:
             fi
           done
           echo "No recoverable plain-text LiveAvatar key exists in Worker version history."
+      - name: Check production secrets before deploying
+        env:
+          DAGA_OTP_PEPPER: ${{ secrets.DAGA_OTP_PEPPER }}
+          DAGA_OWNER_BOOTSTRAP_TOKEN: ${{ secrets.DAGA_OWNER_BOOTSTRAP_TOKEN }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          DAGA_EMAIL_FROM: ${{ secrets.DAGA_EMAIL_FROM }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$DAGA_OTP_PEPPER" ] || [ -z "$DAGA_OWNER_BOOTSTRAP_TOKEN" ] || [ -z "$RESEND_API_KEY" ] || [ -z "$DAGA_EMAIL_FROM" ] || [ -z "$ELEVENLABS_API_KEY" ]; then
+            echo "::error::Production deployment blocked: one or more required GitHub Actions secrets are missing."
+            exit 1
+          fi
+          echo "Required production secrets are present."
       - name: Deploy daga-voice to Cloudflare
         uses: cloudflare/wrangler-action@v3
         with:
