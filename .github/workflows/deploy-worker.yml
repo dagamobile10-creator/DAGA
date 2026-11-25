@@ -7,11 +7,14 @@ on:
       - main
     paths:
       - "worker.js"
+      - "company-entitlements.js"
       - "wrangler.toml"
       - ".github/workflows/deploy-worker.yml"
 
 jobs:
   deploy-worker:
+    # Production Worker may only be deployed from the protected main branch, including manual dispatches.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -75,6 +78,43 @@ jobs:
           echo "$applied" | jq -e '.success == true' >/dev/null
           echo "Persistent D1 memory database and table are ready."
 
+      - name: Reuse the existing production application D1 database and apply migrations
+        env:
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          settings="$(curl -fsS --max-time 20 -H "Authorization: Bearer $CF_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/workers/scripts/daga-voice/settings")"
+          binding="$(echo "$settings" | jq -c '.result.bindings[]? | select(.name=="DAGA_APP_DB" and .type=="d1")' | head -n1)"
+          if [ -n "$binding" ]; then
+            db_id="$(echo "$binding" | jq -r '.id // .database_id // empty')"
+            db_name="$(echo "$binding" | jq -r '.database_name // empty')"
+          else
+            endpoint="https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/d1/database"
+            listing="$(curl -fsS --max-time 20 -G -H "Authorization: Bearer $CF_API_TOKEN" "$endpoint")"
+            db_id="$(echo "$listing" | jq -r '.result[]? | select(.name=="daga_app_db") | .uuid' | head -n1)"
+            db_name="daga_app_db"
+            if [ -z "$db_id" ] || [ "$db_id" = "null" ]; then
+              echo "::error::No existing production DAGA_APP_DB binding or daga_app_db database was found. Refusing to create a new production database."
+              exit 1
+            fi
+            query_url="$endpoint/$db_id/query"
+            schema="$(curl -fsS --max-time 20 -X POST "$query_url" -H "Authorization: Bearer $CF_API_TOKEN" -H "Content-Type: application/json" --data "$(jq -n --arg sql "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name" '{sql:$sql}')")"
+            table_names="$(echo "$schema" | jq -r '.result[]?.results[]?.name // empty' | sort)"
+            unexpected="$(printf '%s\n' "$table_names" | grep -v '^_cf_KV$' || true)"
+            if [ -n "$unexpected" ] && { ! echo "$table_names" | grep -qx 'daga_accounts' || ! echo "$table_names" | grep -qx 'daga_stores'; }; then
+              echo "::error::Existing daga_app_db contains an unrecognized partial schema. Refusing to modify it."
+              exit 1
+            fi
+            echo "Using the existing daga_app_db database; no database was created."
+          fi
+          if [ -z "$db_id" ] || [ -z "$db_name" ]; then
+            echo "::error::Production D1 metadata is incomplete; refusing to guess the database."
+            exit 1
+          fi
+          printf '\n[[d1_databases]]\nbinding = "DAGA_APP_DB"\ndatabase_name = "%s"\ndatabase_id = "%s"\nmigrations_dir = "migrations"\n' "$db_name" "$db_id" >> wrangler.toml
+          npx --yes wrangler@3.90.0 d1 migrations apply "$db_name" --remote --config wrangler.toml
+          echo "Existing production application D1 migrations are applied."
       - name: Inspect LiveAvatar binding metadata without reading values
         env:
           CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -107,6 +147,20 @@ jobs:
             fi
           done
           echo "No recoverable plain-text LiveAvatar key exists in Worker version history."
+      - name: Check production secrets before deploying
+        env:
+          DAGA_OTP_PEPPER: ${{ secrets.DAGA_OTP_PEPPER }}
+          DAGA_OWNER_BOOTSTRAP_TOKEN: ${{ secrets.DAGA_OWNER_BOOTSTRAP_TOKEN }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          DAGA_EMAIL_FROM: ${{ secrets.DAGA_EMAIL_FROM }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$DAGA_OTP_PEPPER" ] || [ -z "$DAGA_OWNER_BOOTSTRAP_TOKEN" ] || [ -z "$RESEND_API_KEY" ] || [ -z "$DAGA_EMAIL_FROM" ] || [ -z "$ELEVENLABS_API_KEY" ]; then
+            echo "::error::Production deployment blocked: one or more required GitHub Actions secrets are missing."
+            exit 1
+          fi
+          echo "Required production secrets are present."
       - name: Deploy daga-voice to Cloudflare
         uses: cloudflare/wrangler-action@v3
         with:
@@ -114,6 +168,29 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: deploy
 
+      - name: Configure required production authentication, email, and voice secrets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          DAGA_OTP_PEPPER: ${{ secrets.DAGA_OTP_PEPPER }}
+          DAGA_OWNER_BOOTSTRAP_TOKEN: ${{ secrets.DAGA_OWNER_BOOTSTRAP_TOKEN }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          DAGA_EMAIL_FROM: ${{ secrets.DAGA_EMAIL_FROM }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+        run: |
+          set -euo pipefail
+          missing=()
+          for name in DAGA_OTP_PEPPER DAGA_OWNER_BOOTSTRAP_TOKEN RESEND_API_KEY DAGA_EMAIL_FROM ELEVENLABS_API_KEY; do
+            if [ -z "${!name:-}" ]; then missing+=("$name"); fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::Missing required production secrets: ${missing[*]}"
+            exit 1
+          fi
+          for name in DAGA_OTP_PEPPER DAGA_OWNER_BOOTSTRAP_TOKEN RESEND_API_KEY DAGA_EMAIL_FROM ELEVENLABS_API_KEY; do
+            printf '%s' "${!name}" | npx --yes wrangler@3.90.0 secret put "$name" --name daga-voice --config wrangler.toml
+          done
+          echo "Required production secrets are configured without exposing their values."
       - name: Restore recovered LiveAvatar key as a Worker secret
         if: env.LIVEAVATAR_RECOVERED_KEY != ''
         env:

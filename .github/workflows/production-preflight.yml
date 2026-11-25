@@ -1,0 +1,90 @@
+name: DAGA production release preflight
+
+on:
+  push:
+    branches:
+      - release/daga-android-candidate
+    paths:
+      - ".github/workflows/production-preflight.yml"
+      - ".github/workflows/deploy-worker.yml"
+      - "worker.js"
+      - "company-entitlements.js"
+      - "wrangler.toml"
+      - "migrations/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  production-preflight:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify required release secrets are present
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          DAGA_OTP_PEPPER: ${{ secrets.DAGA_OTP_PEPPER }}
+          DAGA_OWNER_BOOTSTRAP_TOKEN: ${{ secrets.DAGA_OWNER_BOOTSTRAP_TOKEN }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          DAGA_EMAIL_FROM: ${{ secrets.DAGA_EMAIL_FROM }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+        run: |
+          set -euo pipefail
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID DAGA_OTP_PEPPER DAGA_OWNER_BOOTSTRAP_TOKEN RESEND_API_KEY DAGA_EMAIL_FROM ELEVENLABS_API_KEY; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Missing required production GitHub Actions secret: $name"
+              exit 1
+            fi
+          done
+          echo "Required release secrets are present. Values were not printed."
+
+      - name: Verify Cloudflare token and production app database binding
+        env:
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          verify="$(curl -fsS --max-time 20 -H "Authorization: Bearer $CF_API_TOKEN" https://api.cloudflare.com/client/v4/user/tokens/verify)"
+          echo "$verify" | jq -e '.success == true and .result.status == "active"' >/dev/null
+          settings="$(curl -fsS --max-time 20 -H "Authorization: Bearer $CF_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/workers/scripts/daga-voice/settings")"
+          binding="$(echo "$settings" | jq -c '.result.bindings[]? | select(.name=="DAGA_APP_DB" and .type=="d1")' | head -n1)"
+          if [ -z "$binding" ]; then
+            endpoint="https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/d1/database"
+            listing="$(curl -fsS --max-time 20 -G -H "Authorization: Bearer $CF_API_TOKEN" "$endpoint")"
+            candidate_id="$(echo "$listing" | jq -r '.result[]? | select(.name=="daga_app_db") | .uuid' | head -n1)"
+            if [ -z "$candidate_id" ] || [ "$candidate_id" = "null" ]; then
+              echo "::error::No existing production D1 binding or daga_app_db database was found. Refusing to create a database automatically."
+              exit 1
+            fi
+            query_url="$endpoint/$candidate_id/query"
+            schema="$(curl -fsS --max-time 20 -X POST "$query_url" -H "Authorization: Bearer $CF_API_TOKEN" -H "Content-Type: application/json" --data "$(jq -n --arg sql "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name" '{sql:$sql}')")"
+            table_names="$(echo "$schema" | jq -r '.result[]?.results[]?.name // empty' | sort)"
+            echo "Existing daga_app_db tables:"
+            printf '%s\n' "$table_names"
+            unexpected="$(printf '%s\n' "$table_names" | grep -v '^_cf_KV$' || true)"
+            if [ -n "$unexpected" ] && { ! echo "$table_names" | grep -qx 'daga_accounts' || ! echo "$table_names" | grep -qx 'daga_stores'; }; then
+              echo "::error::daga_app_db contains an unrecognized partial schema. Refusing to modify it."
+              exit 1
+            fi
+            if [ -z "$unexpected" ]; then
+              echo "The existing daga_app_db contains no application tables and is safe to initialize with reviewed migrations."
+            else
+              echo "The existing daga_app_db contains DAGA application tables; only pending migrations may be applied."
+            fi
+            db_id="$candidate_id"
+            db_name="daga_app_db"
+          else
+            db_id="$(echo "$binding" | jq -r '.id // .database_id // empty')"
+            db_name="$(echo "$binding" | jq -r '.database_name // empty')"
+          fi
+          test -n "$db_id" && test -n "$db_name"
+          echo "Production application database candidate is confirmed: $db_name."
+
+      - name: Verify current production Worker health
+        run: |
+          set -euo pipefail
+          curl -fsS --max-time 20 https://daga-voice.dagamobile10.workers.dev/health -o /tmp/daga-health.json
+          jq -e '.ok == true and .voiceConfigured == true and .chatConfigured == true' /tmp/daga-health.json >/dev/null
+          jq '{ok,voiceConfigured,chatConfigured,freeChatConfigured}' /tmp/daga-health.json
+          echo "Preflight is read-only. No Worker deployment, database creation, migration, or production data change was performed."
