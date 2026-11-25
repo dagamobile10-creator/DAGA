@@ -56,12 +56,12 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn("window.DAGA_SESSION_TOKEN=token", dashboard)
         self.assertIn('path === "/api/company/invitations" && request.method === "POST"', invitations)
 
-    def test_live_daga_requires_smart_plan_and_word_balance(self):
+    def test_company_plan_and_live_character_quota_are_distinct_gates(self):
         worker = (ROOT / "worker.js").read_text(encoding="utf-8")
-        self.assertIn("smart_store_subscription_required", worker)
+        self.assertIn("store_or_live_subscription_required", worker)
         self.assertNotIn("store_subscription_required", worker)
         tts = worker[worker.index('if (url.pathname !== "/tts"'):]
-        self.assertIn("smart_store_subscription_required", tts)
+        self.assertIn("live_daga_quota_insufficient", tts)
         self.assertIn("live_daga_quota_insufficient", tts)
         self.assertIn('resolveCompanyVoiceContext(env, account, request.headers.get("X-DAGA-Company-ID") || "")', tts)
         self.assertIn("live_daga_quota_insufficient", worker)
@@ -70,14 +70,12 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         admin = (ROOT / "owner-admin.js").read_text(encoding="utf-8")
         self.assertIn('source.tier !== "standard" && (source.smartAssistantEnabled === true || source.historyEnabled === true)', admin)
 
-    def test_smart_entitlement_enables_assistant_and_history_separately_from_live_daga(self):
+    def test_company_subscription_includes_smart_assistant_history_and_live_is_addon(self):
         auth = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
         dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
-        self.assertIn("storeEntitlement.name ||", auth)
-        self.assertIn("smartAssistantEnabled: smartEnabled", auth)
-        self.assertIn('features.historyEnabled === true || features.tier === "smart"', auth)
-        self.assertIn("smartAssistantEnabled:company.smartAssistantEnabled===true&&(role==='store_owner'||company.permissions?.useSmartAssistant===true)", dashboard)
-        self.assertIn("historyEnabled:company.historyEnabled===true", dashboard)
+        self.assertIn("smartAssistantEnabled: storeEnabled", auth)
+        self.assertIn("historyEnabled: storeEnabled", auth)
+        self.assertIn("liveDagaEnabled: remainingWords > 0", auth)
         self.assertIn("b.hidden=!smartAllowed;b.disabled=!smartAllowed", dashboard)
         self.assertIn("b.hidden=!liveAllowed;b.disabled=!liveAllowed", dashboard)
         self.assertIn("const liveAllowed=window.DAGA_AUTH_USER.smartAssistantEnabled===true&&window.DAGA_AUTH_USER.liveDagaEnabled===true", dashboard)
