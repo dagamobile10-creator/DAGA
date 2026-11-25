@@ -197,13 +197,12 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn("LIKE '%ذكي%'", worker)
 
 
-    def test_explicit_standard_tier_overrides_legacy_smart_flags(self):
+    def test_company_subscription_includes_smart_assistant_and_history(self):
         auth = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
         worker = (ROOT / "worker.js").read_text(encoding="utf-8")
-        self.assertIn('explicitTier === "smart"', auth)
-        self.assertIn('!["standard", "smart"].includes(explicitTier)', auth)
-        self.assertIn("COALESCE(json_extract(p.features_json,'$.tier'),'') NOT IN ('standard','smart')", worker)
-        self.assertIn("json_extract(p.features_json,'$.historyEnabled')=1", worker)
+        self.assertIn("smartAssistantEnabled: storeEnabled", auth)
+        self.assertIn("historyEnabled: storeEnabled", auth)
+        self.assertIn("if (!smartPlan) return json(env, { error: \"store_or_live_subscription_required\" }, 402);", worker)
 
 if __name__ == "__main__":
     unittest.main()
