@@ -750,7 +750,7 @@ window.addEventListener('message',function(event){
  if(dagaLiveOrderPending){
   sendLiveOrderReply(event.source,id,'لسه مستني تأكيد أو إلغاء العملية المعروضة. قول «أيوه نفّذ» أو «إلغاء».',true);return;
  }
- const columnQuestion=/(كام|مجموع|اجمالي|إجمالي|قد ايه|قد إيه|رصيد|حساب|الموجود)/u.test(text)&&/(خارج|الرصيد|كاش|اكسسوار|اكسسوار|الكروت|الفلوس)/u.test(text);
+ const columnQuestion=/(كام|مجموع|اجمالي|إجمالي|قد ايه|قد إيه|حساب|الموجود|عليه كام|رصيده كام)/u.test(text)&&/(خارج|الرصيد|كاش|اكسسوار|الاكسسوار|الكروت|الفلوس)/u.test(text)&&!/(اكتب|تكتب|عايزك|سجل|ضيف|اضيف|زود|ارفع|حط|نفذ|نفّذ)/u.test(text);
  if(columnQuestion){
   voiceDaga();
   const command=document.getElementById('cmd');
