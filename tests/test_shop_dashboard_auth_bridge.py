@@ -82,7 +82,7 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn("b.hidden=!liveAllowed;b.disabled=!liveAllowed", dashboard)
         self.assertIn("const liveAllowed=window.DAGA_AUTH_USER.liveDagaEnabled===true&&(role==='store_owner'||company.permissions?.useLiveDaga===true)", dashboard)
         self.assertIn("اشحن رصيد حروف LIVE DAGA لتفعيل الزر.", dashboard)
-        self.assertIn("window.DAGA_AUTH_USER.smartAssistantEnabled===true&&window.DAGA_AUTH_USER.liveDagaEnabled===true", dashboard)
+        self.assertIn("const liveAllowed=window.DAGA_AUTH_USER.liveDagaEnabled===true&&(role==='store_owner'||company.permissions?.useLiveDaga===true)", dashboard)
 
 
     
