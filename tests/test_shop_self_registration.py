@@ -27,7 +27,7 @@ class ShopSelfRegistrationTests(unittest.TestCase):
         auth = (ROOT / "shop-auth.js").read_text(encoding="utf-8")
         admin = (ROOT / "owner-admin.js").read_text(encoding="utf-8")
         dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
-        self.assertIn("ledgerEnabled:Boolean(entitlement)", auth)
+        self.assertIn("ledgerEnabled: Boolean(storeEntitlement)", (ROOT / "company-invitations.js").read_text(encoding="utf-8"))
         self.assertIn('store.onboarding_status!=="preliminary_approved"', admin)
         self.assertIn('"preliminary_approved"', admin)
         self.assertIn("onboarding_status", admin)
