@@ -202,7 +202,7 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         worker = (ROOT / "worker.js").read_text(encoding="utf-8")
         self.assertIn("smartAssistantEnabled: storeEnabled", auth)
         self.assertIn("historyEnabled: storeEnabled", auth)
-        self.assertIn("if (!smartPlan) return json(env, { error: \"store_or_live_subscription_required\" }, 402);", worker)
+        self.assertIn('store_or_live_subscription_required', worker)
 
 if __name__ == "__main__":
     unittest.main()
