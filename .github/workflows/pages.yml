@@ -24,8 +24,9 @@ jobs:
       - name: Validate live app source
         run: |
           test -s index.html
-          grep -q 'workers.dev/chat' index.html
-          grep -q 'workers.dev/tts' index.html
+          grep -q 'DAGA_API_BASE' index.html
+          grep -q "DAGA_API_BASE+'/chat'" index.html
+          grep -q "DAGA_API_BASE+'/tts'" index.html
           grep -q 'daga_mh_memory_v1' index.html
           grep -q 'playVoiceTest' index.html
           test -s daga_user_voice_reference.m4a
