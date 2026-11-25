@@ -455,6 +455,36 @@ function review(){
  // Account inquiry is a question, not a transaction. Resolve it from current Outside/Balance rows and wait for the user's next instruction.
  const qnorm=s=>normAccountingName(s);
  const q=qnorm(t);
+ // Read-only service and column inquiries use current dashboard rows, not guessed model values.
+ const asksValue=/(كام|قد ايه|مجموع|اجمالي|حساب|رصيد|الموجود)/.test(q);
+ if(asksValue){
+  const agentNames=['فوري','ممكن','سوبر بي'];
+  const requestedAgent=agentNames.find(a=>q.includes(qnorm(a)) || (a==='فوري'&&(q.includes('رصيد اساسي')||q.includes('كارت وهوا')||q.includes('كاش اوت'))));
+  if(requestedAgent){
+   const cardRows=[],balanceRows=[];
+   cols.forEach(c=>(c.entries||[]).forEach(e=>{
+    if(columnRole(c)==='cards'&&serviceAgentForCardEntry(e[0])===requestedAgent)cardRows.push({column:c.adminLabel||c.name,name:e[2]?.adminLabel||e[0],amount:num(e[1])});
+    if(columnRole(c)==='balance'&&canonicalServiceAgent(e[0])===requestedAgent)balanceRows.push({column:c.adminLabel||c.name,name:e[2]?.adminLabel||e[0],amount:num(e[1])});
+   }));
+   const wantedCard=cardRows.filter(x=>q.includes(qnorm(x.name)));
+   const shownCards=wantedCard.length?wantedCard:cardRows;
+   const total=balanceRows.reduce((a,x)=>a+x.amount,0);
+   pendingOrder=null;pendingClarification=null;
+   out.innerHTML='<div class="reconMini"><div>حساب المندوب <b>'+esc(requestedAgent)+'</b></div><div>رصيده في عمود الرصيد <b>'+fmt(total)+' جنيه</b></div>'+balanceRows.map(x=>'<div>'+esc(x.name)+' — '+esc(x.column)+' <b>'+fmt(x.amount)+' جنيه</b></div>').join('')+shownCards.map(x=>'<div>'+esc(x.name)+' — '+esc(x.column)+' <b>'+fmt(x.amount)+' جنيه</b></div>').join('')+'</div><p class="small">قراءة مباشرة من الداشبورد الحالي. شحن بنود خدمات فوري يزيد رصيد المندوب في عمود الرصيد فقط، ولا يغيّر الفلوس الأساسية.</p>';
+   return;
+  }
+  const asksBalance=/(عمود الرصيد|الرصيد كام|اجمالي الرصيد|مجموع الرصيد|رصيد المحل|الرصيد الموجود)/.test(q);
+  const asksOutside=/(عمود الخارج|الخارج كام|اجمالي الخارج|مجموع الخارج|الخارج الاول|الخارج واحد|الخارج التاني|الخارج الثاني|الخارج اتنين|الخارج التالت|الخارج الثالث|الخارج تلاته)/.test(q);
+  const asksCards=/(عمود الكروت|الكروت كام|اجمالي الكروت|مجموع الكروت)/.test(q);
+  const role=asksBalance?'balance':asksOutside?'expenses':asksCards?'cards':null;
+  if(role){
+   const targets=cols.filter(c=>columnRole(c)===role);
+   const total=targets.reduce((sum,c)=>sum+(c.entries||[]).reduce((a,e)=>a+num(e[1]),0),0);
+   pendingOrder=null;pendingClarification=null;
+   out.innerHTML='<div class="reconMini"><div>إجمالي '+(role==='balance'?'عمود الرصيد':role==='expenses'?'أعمدة الخارج':'عمود الكروت')+' <b>'+fmt(total)+' جنيه</b></div>'+targets.flatMap(c=>(c.entries||[]).map(e=>'<div>'+esc(c.adminLabel||c.name)+' — '+esc(e[2]?.adminLabel||e[0])+' <b>'+fmt(num(e[1]))+' جنيه</b></div>')).join('')+'</div><p class="small">قراءة فقط من بيانات الداشبورد الحالية، من غير تسجيل أي حركة.</p>';
+   return;
+  }
+ }
  const asksColumnTotal=/(كام|مجموع|اجمالي|قد ايه|قد ايه|حساب)/.test(q);
  if(asksColumnTotal){
   const expenseCols=cols.map((c,i)=>({c,i})).filter(x=>columnRole(x.c)==='expenses');
