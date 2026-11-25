@@ -246,7 +246,7 @@ class InvitationSchemaTests(unittest.TestCase):
         self.assertIn("/revoke", portal)
         self.assertIn("navigator.share", portal)
         self.assertNotIn("localStorage", portal)
-        self.assertNotIn("sessionStorage", portal)
+        self.assertIn("sessionStorage.setItem(\"DAGA_SHOP_AUTH_BRIDGE\"", portal)
 
     def test_official_qr_page_is_separate_from_invitation_qr(self):
         page = (ROOT / "go" / "index.html").read_text(encoding="utf-8")
