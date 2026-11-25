@@ -204,12 +204,23 @@ saveDagaMemory(nextHistory);
 try{
 const r=await fetch(DAGA_API_BASE+'/chat',{
 method:'POST',
-signal:AbortSignal.timeout(16000),
+signal:AbortSignal.timeout(28000),
 headers:dagaAuthHeaders({'Content-Type':'application/json'}),
 body:JSON.stringify({mode:'live_daga',text:spokenText,history:workingHistory.slice(-16),memory:longMemory,businessContext:"ذاكرة المستخدم وتفضيلاته المحفوظة على هذا الجهاز (استخدم المرتبط بالسؤال فقط، وصحّحها لو المستخدم صحّحك): "+JSON.stringify(longMemory)+"\n\nسياق العمل الثابت: صاحب التطبيق يدير شركة إكسسوارات موبايل ويستخدم ضجه كمساعد إداري ومحاسبي صوتي. اتكلم بالمصري فقط. استخدم زائد وناقص ويساوي بدل المصطلحات الإنجليزية. اسم التطبيق والمساعد بالعربية: ضجه. هذه معلومات عن طبيعة الشركة وليست بيانات حية. أعمدة الشركة: خارج واحد وخارج اتنين وخارج تلاتة، أربعة أعمدة لمكسب فودافون كاش، بند الكاش، بند فودافون كاش، الرصيد، الكروت، والإكسسوارات. أعمدة مكسب فودافون كاش ليست نقدية. قواعد المحاسبة الملزمة: عمود الخارج يمثل فلوس خرجت من الشركة، وإضافة مبلغ إليه تخصم المبلغ من الفلوس الأساسية فورًا؛ لا تصفه أبدًا كفلوس دخلت. عمود الرصيد يمثل مبالغ دخلت أو مستحقات مسجلة للشركة؛ الإضافة العادية إليه تزود الفلوس الأساسية. الاستثناءات: أرصدة مندوبي الخدمات فوري وممكن وسوبر بي تُسجل في عمود الرصيد باسم المندوب فقط ولا تؤثر على الفلوس الأساسية عند الشحن أو الزيادة. بنود الكروت رصيد أساسي وكارت وهوا وكاش أوت تتبع مندوب فوري؛ وممكن تتبع مندوب ممكن؛ وسوبر باي/سوبر بي يتبع مندوب سوبر بي. إذا قال المستخدم إن مندوب فوري بعت مبلغًا على الماكينة، أو إن رصيدًا زاد في أي من هذه الخدمات، فالمقصود زيادة رصيد المندوب في عمود الرصيد فقط، وليس زيادة الفلوس الرئيسية. تقليل/استهلاك بنود الخدمات في عمود الكروت له قواعد مستقلة ويُحسب بالفرق وفق منطق الداشبورد؛ لا تخلطه بالشحن. أي حركة عادية في الخارج تخصم من الفلوس، وأي حركة عادية في الرصيد تزودها. اسأل للتوضيح إذا لم يتضح اسم المندوب أو اتجاه الحركة. لا تخترع بيانات، ولا تنفذ حركة قبل معاينتها وتأكيدها. لا تخترع أرقامًا ولا تدّعِ رؤية الداشبورد أو تعديل بيانات فعلية ما لم تصلك البيانات أو تنفذ أداة فعلية ذلك. بيانات الداشبورد المرسلة حاليًا (قد تكون غير موجودة أو قديمة؛ تعامل معها كمرجع للقراءة فقط ولا تنفذ أي تعديل من خلالها): "+JSON.stringify(dashboardSnapshot||{connected:false})})
 });
-const data=await r.json();
-if(!r.ok||!data.reply)throw new Error(data.detail||data.error||'Chat request failed');
+const data=await r.json().catch(()=>({}));
+if(!r.ok||!data.reply){
+ const code=String(data.error||data.detail||'chat_request_failed');
+ const safeMessages={
+  authenticated_account_required:'جلسة الشركة مش واصلة للايف أو انتهت. ارجع للوحة الشركة وسجّل دخولك، وبعدها افتح اللايف من جديد.',
+  authenticated_voice_not_configured:'ربط جلسة الشركة بخدمة الصوت غير مكتمل على السيرفر.',
+  company_voice_permission_denied:'حسابك مش واخد صلاحية استخدام لايف ضجّة.',
+  live_daga_quota_insufficient:'رصيد حروف لايف ضجّة غير كافٍ حسب سجل الشركة.',
+  No chat provider configured:'مزود الذكاء الاصطناعي غير مفعّل على السيرفر.',
+  'All configured chat providers failed':'إعداد مزود الذكاء الاصطناعي موجود، لكن كل محاولات الرد فشلت. ده عطل اتصال بالمزوّد، مش نقص حروف.'
+ };
+ throw new Error(safeMessages[code]||('تعذر الرد من خدمة ضجّة: '+code));
+}
 if(!live&&!singleMode){replying=false;return}
 const finalHistory=[...nextHistory,{role:'assistant',content:data.reply}].slice(-100);
 saveDagaMemory(finalHistory.slice(-16));
@@ -220,7 +231,7 @@ speak(data.reply);
 console.error(e);
 replying=false;
 state.textContent='تعذر الرد من ضجه';
-daga.textContent=(e.name==='TimeoutError'?'الرد اتأخر أكتر من اللازم. جرّب تقول سؤالك تاني.':'خدمة المحادثة مش متاحة دلوقتي. محتاجين نراجع اتصال مزود الذكاء الاصطناعي على السيرفر.');
+daga.textContent=(e.name==='TimeoutError'?'الرد اتأخر أكتر من المهلة. جرّب تاني؛ لو اتكررت هنراجع زمن استجابة المزوّد.':(e.message||'حصل خطأ غير معروف في خدمة المحادثة.'));
 if(live&&!muted)setTimeout(()=>{if(live&&!muted&&!replying&&!rec)startListening()},450);
 }
 }
