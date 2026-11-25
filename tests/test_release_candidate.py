@@ -34,7 +34,7 @@ assert 'url: appUrl' in config
 assert "daga-app-staging.dagamobile10.workers.dev" in config
 assert "cleartext: false" in config
 assert 'binding = "DAGA_APP_DB"' in deploy
-assert "Reuse the existing production application D1 binding" in deploy
+assert "Reuse the existing production application D1 database" in deploy
 assert "select(.name==\"DAGA_APP_DB\" and .type==\"d1\")" in deploy
 assert "d1 migrations apply \"$db_name\"" in deploy
 assert "Production deployment blocked: existing DAGA_APP_DB binding was not found" in deploy
