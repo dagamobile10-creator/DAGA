@@ -696,6 +696,10 @@ function review(){
    const target=matching.length?outsideCols.find(x=>x.i===matching[0].ci):(outsideCols.find(x=>x.c.entries.length===0)||outsideCols[0]);
    const existingTotal=matching.reduce((sum,r)=>sum+r.amount,0);
    const order={...p,mode:'outsideAdd',targetIndex:target?.i,cardsIndex,existingRows:matching.map(r=>({ci:r.ci,name:r.name,amount:r.amount})),existingTotal,expectedAfter:existingTotal+p.amount};
+   if(matching.length){
+    pendingOrder=null;pendingClarification={type:'outsideAddDuplicate',order};
+    out.innerHTML=`<div class="reconMini"><div>الاسم <b>${esc(p.name)}</b></div><div>الموجود في الخارج <b>${fmt(existingTotal)} جنيه</b></div><div>المبلغ الجديد <b>${fmt(p.amount)} جنيه</b></div></div><p class="small">الاسم موجود في الخارج. تحب تضيفه كبند مستقل ولا تدمجه مع الموجود؟</p><button class="primary" onclick="answerClarificationFromText('بند مستقل')">إضافة مستقلة</button><button onclick="answerClarificationFromText('ادمج على الموجود')">دمج مع الموجود</button><button onclick="answerClarificationFromText('إلغاء')">إلغاء</button>`;return;
+   }
    const balanceRows=(cols[balanceIndex]?.entries||[]).map(e=>({ci:balanceIndex,name:String(e[0]||''),amount:num(e[1])})).filter(r=>normAccountingName(r.name)===normAccountingName(p.name));
    const balanceTotal=balanceRows.reduce((sum,r)=>sum+r.amount,0);
    if(balanceTotal>0){
@@ -736,6 +740,14 @@ function review(){
  out.innerHTML='<p class="small">نوع الحركة لسه مش مدعوم بثقة. لم يتم تنفيذ أي تغيير.</p>';
 }
 function answerClarificationFromText(text){
+ if(pendingClarification?.type==='outsideAddDuplicate'){
+  const q=pendingClarification,makeSeparate=/(بند مستقل|اضافه مستقله|لوحده|منفصل)/.test(String(text||'')),merge=/(ادمج|دمج|على الموجود)/.test(String(text||''));
+  if(/^(الغاء|الغي|وقف)$/i.test(String(text||'').trim())){pendingClarification=null;pendingOrder=null;const box=document.getElementById('orderPreview');if(box)box.innerHTML='<p class="status">تم إلغاء العملية؛ لم يتغير أي رصيد.</p>';return;}
+  if(!makeSeparate&&!merge){const box=document.getElementById('orderPreview');if(box)box.innerHTML='<p class="small">اختار: بند مستقل ولا دمج مع الموجود؟</p><button class="primary" onclick="answerClarificationFromText(\\'بند مستقل\\')">إضافة مستقلة</button><button onclick="answerClarificationFromText(\\'ادمج على الموجود\\')">دمج مع الموجود</button><button onclick="answerClarificationFromText(\\'إلغاء\\')">إلغاء</button>';return;}
+  pendingOrder={...q.order,duplicateMode:makeSeparate?'separate':'merge'};pendingClarification=null;
+  const box=document.getElementById('orderPreview');if(box)box.innerHTML=`<div class="reconMini"><div>الاسم <b>${esc(q.order.name)}</b></div><div>طريقة التسجيل <b>${makeSeparate?'بند مستقل':'دمج مع الموجود'}</b></div><div>الموجود قبل <b>${fmt(q.order.existingTotal)} جنيه</b></div><div>الإضافة <b>${fmt(q.order.amount)} جنيه</b></div><div>الإجمالي بعد <b>${fmt(q.order.expectedAfter)} جنيه</b></div><div>خصم الفلوس الأساسية <b>${fmt(q.order.amount)} جنيه</b></div></div><p class="small">راجع ثم أكد التنفيذ. لم يتم تسجيل أي تغيير بعد.</p><button class="primary" onclick="executeOrder()">تأكيد وتنفيذ</button><button onclick="pendingOrder=null;document.getElementById('orderPreview').innerHTML='تم إلغاء العملية.'">إلغاء</button>`;return;
+ }
+
  const v=String(text||'').toLowerCase().replace(/[إأآ]/g,'ا').replace(/[ىي]/g,'ي').replace(/[ةه]/g,'ه').replace(/[^\u0600-\u06FFa-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
  if(pendingClarification?.type==='balanceAddOutsideSettlement'){
   const q=pendingClarification,yes=/(ايوه|اه|تمام|ماشي|سوي|سوى|تسويه|خصم|اشطب|شطب|اخصم|اخصمهم)/.test(v),no=/(لا|لأ|سيب|خلي الخارج|اكتب كامل|كامل وسيب|من غير تسويه)/.test(v);
@@ -887,12 +899,15 @@ function executeOrderCore(){
    if(currentRows.some(x=>x.idx<0||num(cols[x.r.ci].entries[x.idx][1])!==x.r.amount)){alert('حساب الخارج اتغير من وقت المراجعة. راجع الأمر من جديد؛ مفيش أي تغيير اتسجل.');pendingOrder=null;return}
    if(!money||num(money.entry[1])<p.amount){alert('الفلوس الأساسية مش كفاية لتسجيل الحركة الجديدة. مفيش أي تغيير اتسجل.');pendingOrder=null;return}
    const mergedTotal=(p.existingTotal||0)+p.amount;
-   const targetKey=normAccountingName(p.name);
-   const keep=target.entries.findIndex(e=>normAccountingName(e[0])===targetKey);
-   currentRows.slice().sort((a,b)=>b.idx-a.idx).forEach(x=>{if(x.r.ci!==p.targetIndex||x.idx!==keep)cols[x.r.ci].entries.splice(x.idx,1)});
-   const refreshed=target.entries.findIndex(e=>normAccountingName(e[0])===targetKey);
-   if(refreshed>=0){target.entries[refreshed][1]=String(mergedTotal);if(isDailyWithdrawalName(p.name))target.entries[refreshed][2]={...(target.entries[refreshed][2]||{}),moneyPosted:true};}
-   else target.entries.push([p.name,String(mergedTotal),isDailyWithdrawalName(p.name)?{moneyPosted:true}:{}]);
+   if(p.duplicateMode==='separate')target.entries.push([p.name,String(p.amount),isDailyWithdrawalName(p.name)?{moneyPosted:true}:{}]);
+   else{
+    const targetKey=normAccountingName(p.name);
+    const keep=target.entries.findIndex(e=>normAccountingName(e[0])===targetKey);
+    currentRows.slice().sort((a,b)=>b.idx-a.idx).forEach(x=>{if(x.r.ci!==p.targetIndex||x.idx!==keep)cols[x.r.ci].entries.splice(x.idx,1)});
+    const refreshed=target.entries.findIndex(e=>normAccountingName(e[0])===targetKey);
+    if(refreshed>=0){target.entries[refreshed][1]=String(mergedTotal);if(isDailyWithdrawalName(p.name))target.entries[refreshed][2]={...(target.entries[refreshed][2]||{}),moneyPosted:true};}
+    else target.entries.push([p.name,String(mergedTotal),isDailyWithdrawalName(p.name)?{moneyPosted:true}:{}]);
+   }
    const moneyChange=changeMoney(-p.amount);if(!moneyChange.ok){alert(moneyChange.message);pendingOrder=null;return}
    addLedger('إضافة إلى بند خارج موجود',`تمت إضافة ${fmt(p.amount)} جنيه إلى ${p.name}. إجمالي الخارج باسم الشخص أصبح ${fmt(mergedTotal)} جنيه؛ تم خصم المبلغ الجديد فقط من الفلوس الأساسية.`,{column:target.name,entryName:p.name,amount:p.amount,oldValue:p.existingTotal||0,newValue:mergedTotal,moneyDelta:-p.amount,mergedRows:currentRows.length});
 }else if(p.mode==='balanceAddAndSettle'){
@@ -1120,7 +1135,10 @@ window.addEventListener('message',function(event){
   if(targetCol.ci===0&&money&&money.entry===entry)impact={delta:0,description:'لا يمكن حذف بند الفلوس الأساسية.'};
   if(impact.delta!==0&&!money){sendLiveOrderReply(event.source,id,'مش لاقي بند الفلوس الأساسية لمراجعة أثر الحذف. لم يتم حذف أي شيء.',true);return;}
   if(money&&num(money.entry[1])+impact.delta<0){sendLiveOrderReply(event.source,id,'الحذف هيخلي الفلوس الأساسية بالسالب. لم يتم حذف أي شيء.',true);return;}
-  dagaLivePendingDelete={ci:targetCol.ci,index:matches[0].ei,name:String(entry[0]),amount:num(entry[1]),impactDelta:impact.delta,moneyBefore:money?num(money.entry[1]):null};
+  if(impact.agentDelta&&!columnByRole('balance')){sendLiveOrderReply(event.source,id,'مش لاقي عمود الرصيد لتسوية الحساب المرتبط. لم يتم حذف أي شيء.',true);return;}
+  const linkedBefore=impact.agentName?getCardAgentBalance(impact.agentName).value:null;
+  if(impact.agentDelta&&linkedBefore+impact.agentDelta<0){sendLiveOrderReply(event.source,id,'الحذف هيخلي رصيد '+impact.agentName+' بالسالب. لم يتم حذف أي شيء.',true);return;}
+  dagaLivePendingDelete={ci:targetCol.ci,index:matches[0].ei,name:String(entry[0]),amount:num(entry[1]),impactDelta:impact.delta,moneyBefore:money?num(money.entry[1]):null,agentName:impact.agentName||null,agentDelta:impact.agentDelta||0,agentBefore:linkedBefore};
   dagaLiveOrderPending=true;dagaLiveOrderSummary='حذف '+String(entry[2]?.adminLabel||entry[0])+' من '+(targetCol.c.adminLabel||targetCol.c.name);
   sendLiveOrderReply(event.source,id,'مراجعة حذف داخل LIVE: البند '+String(entry[2]?.adminLabel||entry[0])+' في عمود '+(targetCol.c.adminLabel||targetCol.c.name)+'. القيمة الحالية '+fmt(num(entry[1]))+' جنيه. تأثير الفلوس الأساسية '+fmt(impact.delta)+' جنيه. هل تؤكد الحذف؟ قول أيوه نفّذ أو إلغاء. لم يتم الحذف بعد.',true);return;
  }
@@ -1203,8 +1221,10 @@ function executeLiveDelete(){
  const row=cols[p.ci]?.entries[p.index],money=findMoneyEntry();
  if(!row||row[0]!==p.name||num(row[1])!==p.amount){dagaLivePendingDelete=null;return false;}
  if(p.impactDelta!==0&&(!money||num(money.entry[1])!==p.moneyBefore)){dagaLivePendingDelete=null;return false;}
+ if(p.agentDelta&&(!p.agentName||getCardAgentBalance(p.agentName).value!==p.agentBefore)){dagaLivePendingDelete=null;return false;}
  const backup={cols:JSON.parse(JSON.stringify(cols)),ledger:JSON.parse(JSON.stringify(ledger)),closedDays:JSON.parse(JSON.stringify(closedDays))};
  try{
+  if(p.agentDelta){const applied=applyCardAgentDelta(p.agentName,p.agentDelta,'حذف '+p.name);if(!applied.ok)throw new Error(applied.message);}
   if(p.impactDelta!==0)money.entry[1]=String(num(money.entry[1])+p.impactDelta);
   const removed=cols[p.ci].entries.splice(p.index,1)[0];
   addLedger('حذف بند بعد مراجعة LIVE',`${removed[0]} — ${fmt(num(removed[1]))} جنيه من ${cols[p.ci].name}; تأثير الفلوس ${p.impactDelta>0?'+':''}${fmt(p.impactDelta)} جنيه.`,{column:cols[p.ci].name,entryName:removed[0],oldValue:num(removed[1]),newValue:null,moneyDelta:p.impactDelta});
