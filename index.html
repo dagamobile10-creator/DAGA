@@ -82,7 +82,12 @@ function dagaAuthHeaders(extra={}){const headers={...extra};try{const token=sess
 if(window.opener){
   window.addEventListener('message',event=>{
     if(event.origin!==location.origin||event.source!==window.opener||!event.data||event.data.type!=='DAGA_AUTH'||typeof event.data.token!=='string'||!event.data.token||typeof event.data.companyId!=='string')return;
-    try{sessionStorage.setItem(DAGA_SESSION_KEY,event.data.token);window.DAGA_STORE_ID=event.data.companyId;loadLiveBalance();}catch(_){}
+    try{
+      sessionStorage.setItem(DAGA_SESSION_KEY,event.data.token);
+      window.DAGA_STORE_ID=event.data.companyId;
+      loadLiveBalance();
+      window.opener.postMessage({type:'DAGA_AUTH_ACCEPTED',companyId:event.data.companyId},location.origin);
+    }catch(error){console.error('DAGA_AUTH_BRIDGE_FAILED',error);}
   });
   window.opener.postMessage('DAGA_ASSISTANT_READY',location.origin);
 }

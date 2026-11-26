@@ -496,15 +496,27 @@ function showLiveComingSoon(){
   if(!token){alert('انتهت جلسة الشركة. سجّل الدخول من جديد.');return;}
   // Register the handshake listener BEFORE opening the assistant. Otherwise a fast
   // assistant load can post DAGA_ASSISTANT_READY before the parent starts listening.
-  let assistant=null;
+  let assistant=null,authSent=false,handshakeTimeout=null;
+  const cleanup=()=>{window.removeEventListener('message',bridge);if(handshakeTimeout)clearTimeout(handshakeTimeout);};
   const bridge=event=>{
-    if(!assistant||event.origin!==location.origin||event.source!==assistant||event.data!=='DAGA_ASSISTANT_READY')return;
-    assistant.postMessage({type:'DAGA_AUTH',token,companyId:String(user.storeId||'')},location.origin);
-    window.removeEventListener('message',bridge);
+    if(!assistant||event.origin!==location.origin||event.source!==assistant)return;
+    if(event.data==='DAGA_ASSISTANT_READY'){
+      authSent=true;
+      assistant.postMessage({type:'DAGA_AUTH',token,companyId:String(user.storeId||'')},location.origin);
+      return;
+    }
+    if(event.data&&event.data.type==='DAGA_AUTH_ACCEPTED'&&String(event.data.companyId)===String(user.storeId||'')){
+      cleanup();
+      return;
+    }
   };
   window.addEventListener('message',bridge);
   assistant=window.open('/assistant/','_blank');
-  if(!assistant){window.removeEventListener('message',bridge);alert('اسمح بفتح نافذة LIVE DAGA علشان نربط حساب الشركة بأمان.');return;}
+  if(!assistant){cleanup();alert('اسمح بفتح نافذة LIVE DAGA علشان نربط حساب الشركة بأمان.');return;}
+  handshakeTimeout=setTimeout(()=>{
+    if(!authSent){cleanup();try{assistant.close()}catch(_){}alert('تعذر بدء ربط جلسة الشركة. ارجع للداشبورد وافتح LIVE DAGA مرة أخرى.');}
+    else{cleanup();alert('LIVE DAGA لم يؤكد استلام جلسة الشركة. ارجع للداشبورد وافتحه مرة أخرى.');}
+  },12000);
 }
 function closeDagaLiveFullscreen(){
  const screen=document.getElementById('dagaLiveFullscreen');
