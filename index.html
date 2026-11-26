@@ -205,14 +205,14 @@ function compactLiveDashboardSnapshot(userText){
  const columns=source.columns.map(col=>{
   const entries=Array.isArray(col.entries)?col.entries:[];
   const ranked=entries.map((e,index)=>({e,index,score:words.reduce((n,w)=>n+((String(e.name||'')+' '+String(e.key||'')+' '+String(e.serviceAgent||'')).toLowerCase().includes(w)?1:0),0)}))
-   .sort((a,b)=>b.score-a.score||a.index-b.index).slice(0,24);
+   .sort((a,b)=>b.score-a.score||a.index-b.index).slice(0,16);
   return {role:col.role,name:col.name,label:col.label,total:col.total,entries:ranked.map(({e})=>({
    name:e.name,amount:e.amount,role:e.role,serviceAgent:e.serviceAgent||null,
    increaseImpact:{moneyDelta:e.increaseImpact?.moneyDelta||0,agentDelta:e.increaseImpact?.agentDelta||0,agentName:e.increaseImpact?.agentName||null},
    decreaseImpact:{moneyDelta:e.decreaseImpact?.moneyDelta||0,agentDelta:e.decreaseImpact?.agentDelta||0,agentName:e.decreaseImpact?.agentName||null}
   }))};
  });
- return {connected:true,updatedAt:source.updatedAt,columns,totals:source.totals||{},accountingModel:source.accountingModel?{moneyEntry:source.accountingModel.moneyEntry||null}:null,recentLedger:(source.recentLedger||[]).slice(0,8).map(e=>({at:e.at,action:e.action,details:String(e.details||'').slice(0,180),column:e.column,entryName:e.entryName,amount:e.amount,moneyDelta:e.moneyDelta}))};
+ return {connected:true,updatedAt:source.updatedAt,columns,totals:source.totals||{},accountingModel:source.accountingModel?{moneyEntry:source.accountingModel.moneyEntry||null}:null,recentLedger:(source.recentLedger||[]).slice(0,6).map(e=>({at:e.at,action:e.action,details:String(e.details||'').slice(0,180),column:e.column,entryName:e.entryName,amount:e.amount,moneyDelta:e.moneyDelta}))};
 }
 async function respond(text){
 if(!requireLiveDaga()){replying=false;return;}
