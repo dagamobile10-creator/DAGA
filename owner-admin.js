@@ -227,9 +227,12 @@ export async function handleOwnerAdmin(request, env, url) {
       if(pendingReview)return json(env,{error:"payment_review_must_be_resolved_before_removal"},409);
       await db.batch([
         db.prepare("UPDATE daga_plan_orders SET status='cancelled',updated_at=? WHERE store_id=? AND status='awaiting_payment'").bind(now,store.id),
-        db.prepare("UPDATE daga_stores SET owner_list_removed_at=?,updated_at=? WHERE id=?").bind(now,now,store.id)
+        db.prepare("UPDATE daga_entitlements SET status='revoked' WHERE store_id=? AND service='store' AND status='active'").bind(store.id),
+        db.prepare("UPDATE daga_auth_sessions SET revoked_at=? WHERE account_id=(SELECT owner_account_id FROM daga_stores WHERE id=?) AND revoked_at IS NULL").bind(now,store.id),
+        db.prepare("UPDATE daga_accounts SET status='disabled',updated_at=? WHERE id=(SELECT owner_account_id FROM daga_stores WHERE id=?) AND role='store_owner'").bind(now,store.id),
+        db.prepare("UPDATE daga_stores SET owner_list_removed_at=?,status='archived',updated_at=? WHERE id=?").bind(now,now,store.id)
       ]);
-      await audit(db,owner.id,"store_removed_from_owner_list","daga_stores",store.id,{archived:true,cancelledUnpaidOrders:true});
+      await audit(db,owner.id,"store_access_revoked_and_archived","daga_stores",store.id,{archived:true,ownerAccountDisabled:true,sessionsRevoked:true,cancelledUnpaidOrders:true});
       return json(env,{ok:true,status:"archived"});
     }
 
