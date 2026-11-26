@@ -130,10 +130,15 @@ export default {
         if (!membership) return json({ error: "company_membership_required" }, 403);
         storeId = membership.store_id;
       } else return json({ error: "company_membership_required" }, 403);
-      const row = await db.prepare("SELECT id,layout_json,version,updated_at FROM daga_dashboard_layouts WHERE scope='store' AND store_id=?").bind(storeId).first();
+      let row = await db.prepare("SELECT id,layout_json,version,updated_at FROM daga_dashboard_layouts WHERE scope='store' AND store_id=?").bind(storeId).first();
+      let effectiveScope = "store";
+      if (!row) {
+        row = await db.prepare("SELECT id,layout_json,version,updated_at FROM daga_dashboard_layouts WHERE scope='global' AND store_id IS NULL").first();
+        effectiveScope = "global";
+      }
       let layout = null;
       if (row) { try { layout = JSON.parse(row.layout_json); } catch (_) { return json({ error: "stored_layout_invalid" }, 500); } }
-      return json({ ok: true, storeId, layout, version: Number(row?.version || 0), updatedAt: row?.updated_at || null });
+      return json({ ok: true, storeId, scope: effectiveScope, layout, version: Number(row?.version || 0), updatedAt: row?.updated_at || null });
     }
     const shopAuthResponse = await handleShopAuth(request, env, url);
     if (shopAuthResponse) return shopAuthResponse;
