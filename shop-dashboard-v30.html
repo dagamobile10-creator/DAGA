@@ -1102,12 +1102,13 @@ function sendLiveDashboardSnapshot(){
  try{dagaLiveWindow.postMessage({type:'DAGA_DASHBOARD_SNAPSHOT',snapshot},'https://daga-app-staging.dagamobile10.workers.dev');}catch(_){}
 }
 function liveOrderConfirmation(text){
- const n=normAccountingName(text);
- return /^(ايوه|اه|تمام|ماشي|موافق|اكد|اعتمد|خلاص|اتفضل|اوكي|ok|okay|yes|نفذ|نفذها)(\\s+(يا\\s*)?(صاحبي|حبيبي|عم|يلا|نفذ|نفذها|اعتمد|تمام|خلاص|اتفضل|ماشي|موافق|كمل|توكل))*$/.test(n);
+ const n=normAccountingName(text).replace(/\\s+/g,' ').trim();
+ // A short, explicit affirmative confirms only the currently displayed LIVE preview.
+ return /^(ايوه|اه|تمام|ماشي|موافق|اكد|اعتمد|خلاص|اتفضل|اوكي|ok|okay|yes|نفذ|نفذها)(\\s+(يا|يا صاحبي|يا حبيبي|صاحبي|حبيبي|عم|يلا|نفذ|نفذها|اعتمد|تمام|خلاص|اتفضل|ماشي|موافق|كمل|توكل))*$/.test(n);
 }
 function liveOrderCancellation(text){
- const n=normAccountingName(text);
- return /^(لا|لاا|الغ|الغاء|مش موافق|مش عايز|مش عاوز|بلاش|وقف|استنى|استني|cancel|no)(\\s+(يا\\s*)?(صاحبي|حبيبي|عم))?$/.test(n);
+ const n=normAccountingName(text).replace(/\\s+/g,' ').trim();
+ return /^(لا|لاا|الغ|الغاء|مش موافق|مش عايز|مش عاوز|بلاش|وقف|استنى|استني|cancel|no)(\\s+(يا|صاحبي|حبيبي|عم))?$/.test(n);
 }
 function describeLiveOrder(p){
  const money=findMoneyEntry(),current=money?num(money.entry[1]):0;
@@ -1128,11 +1129,23 @@ function describeLiveOrder(p){
 
 function answerLiveAccountingScenario(text){
  const raw=String(text||''),q=normAccountingName(raw);
- const hypothetical=/(لو|اذا|ايه اللي يحصل|ايه اللي هيحصل|هيحصل ايه|يتاثر|تاثير|هتاثر)/u.test(q);
- const deleting=/(حذف|حذفت|احذف|امسح|امسحلي|شيل|اشيل)/u.test(q);
- const decreasing=/(نقص|نقصت|قلل|قللت|خصم|خصمت|انقص)/u.test(q);
- const increasing=/(زود|زودت|اضف|ضيف|اضيف|ارفع|رفعت|حط|اشحن|شحن)/u.test(q);
- if(!hypothetical||(!deleting&&!decreasing&&!increasing))return null;
+ const asksOutcome=/(ايه اللي يحصل|ايه اللي هيحصل|هيحصل ايه|ايه اللي ح يحصل|ايه اللي حصل|ايه اللي اتغير|ايه اللي هيتغير|تاثير|اثر|اتاثر|هياثر)/u.test(q);
+ const hypothetical=/(لو|اذا|ايه اللي يحصل|ايه اللي هيحصل|هيحصل ايه|يتاثر|تاثير|هتاثر)/u.test(q)||asksOutcome;
+ const deleting=/(حذف|حذفت|احذف|امسح|امسحلي|شيل|اشيل|شيلنا|نشيل|حذفنا|الغينا|نلغي)/u.test(q);
+ const decreasing=/(نقص|نقصت|قلل|قللت|خصم|خصمت|انقص|نقصنا|قللنا|خصمنا)/u.test(q);
+ const increasing=/(زود|زودت|اضف|ضيف|اضيف|ارفع|رفعت|حط|اشحن|شحن|زودنا|ضفنا|رفعنا|شحننا)/u.test(q);
+ if(!hypothetical)return null;
+ if(!deleting&&!decreasing&&!increasing){
+  if(/عملنا|نعمل|هنعمل|حصل|سجلنا|اتعمل/u.test(q)){
+   const historyMatch=(Array.isArray(ledger)?ledger:[]).find(item=>{
+    const label=normAccountingName([item.entryName,item.column,item.details].filter(Boolean).join(' '));
+    const words=q.split(' ').filter(x=>x.length>2&&!['عملنا','نعمل','هنعمل','ايه','اللي','حصل','حساب','تاثير'].includes(x));
+    return words.some(word=>label.includes(word));
+   });
+   if(historyMatch)return 'آخر حركة مطابقة في سجل الداشبورد: '+String(historyMatch.action||'حركة مسجلة')+'. '+String(historyMatch.details||'')+' دي حركة فعلية مسجلة بالفعل، مش توقع افتراضي.';
+  }
+  return asksOutcome?'أقدر أوضح التأثير، بس كلمة «عملنا» لوحدها مش بتحدد نوع الحركة. تقصد زوّدنا البند، نقصناه، ولا حذفناه؟ مفيش أي تعديل هيتسجل من السؤال.':null;
+ }
  const arabicDigits={'٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9'};
  const numericText=raw.replace(/[٠-٩]/g,ch=>arabicDigits[ch]).replace(/[٬،]/g,',');
  const numberMatch=numericText.match(/(\d[\d,]*(?:\.\d+)?)\s*(ألف|الف|آلاف|الاف|مليون)?/u);
