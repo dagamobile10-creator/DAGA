@@ -144,6 +144,8 @@ jobs:
           open("/tmp/company-portal.js", "w", encoding="utf-8").write("\n".join(scripts))
           PY
           node --check /tmp/company-portal.js
+      - name: Check ten-day local dashboard backup and recovery guards
+        run: python3 tests/test_dashboard_local_backup.py
       - name: Check original V30 shop dashboard JavaScript syntax
         run: |
           python3 - <<'PY'
