@@ -139,6 +139,8 @@ jobs:
           ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          LIVEAVATAR_API_KEY: ${{ secrets.LIVEAVATAR_API_KEY }}
+          LIVEAVATAR_AVATAR_ID: ${{ secrets.LIVEAVATAR_AVATAR_ID }}
         run: |
           set -euo pipefail
           # Use the same pinned Wrangler version and staging config as the deployment.
@@ -158,11 +160,15 @@ jobs:
           }
           voice_missing=()
           for name in ELEVENLABS_API_KEY OPENAI_API_KEY GROQ_API_KEY; do
+            # LiveAvatar is optional until the approved MH avatar and credentials are provisioned.
             if [ -n "${!name:-}" ]; then
               put_staging_secret "$name"
             else
               voice_missing+=("$name")
             fi
+          done
+          for name in LIVEAVATAR_API_KEY LIVEAVATAR_AVATAR_ID; do
+            if [ -n "${!name:-}" ]; then put_staging_secret "$name"; fi
           done
           missing=()
           for name in DAGA_OTP_PEPPER DAGA_OWNER_BOOTSTRAP_TOKEN RESEND_API_KEY DAGA_EMAIL_FROM; do
@@ -181,6 +187,9 @@ jobs:
               echo "- Missing GitHub Actions repository secrets: $missing_csv."
               echo "- Add the missing secrets under Settings → Secrets and variables → Actions, then rerun this workflow. Staging bootstrap uses the separate DAGA_STAGING_OWNER_BOOTSTRAP_TOKEN secret; it does not reuse the production bootstrap token."
               echo "- Optional voice secrets missing: ${voice_missing[*]:-none}."
+            if [ -n "${LIVEAVATAR_API_KEY:-}" ]; then liveavatar_key_state="configured"; else liveavatar_key_state="not configured"; fi
+            if [ -n "${LIVEAVATAR_AVATAR_ID:-}" ]; then liveavatar_id_state="configured"; else liveavatar_id_state="not configured"; fi
+            echo "- Optional LiveAvatar credentials: API key ${liveavatar_key_state}; MH avatar ID ${liveavatar_id_state}."
               echo "- Production Worker and main branch were not targeted."
             } >> "$GITHUB_STEP_SUMMARY"
             echo "auth_ready=false" >> "$GITHUB_OUTPUT"
@@ -197,6 +206,7 @@ jobs:
             echo "- Email-only owner authentication and email OTP delivery secrets: present and configured on the isolated staging Worker. The staging bootstrap token is sourced from the dedicated DAGA_STAGING_OWNER_BOOTSTRAP_TOKEN GitHub secret, separate from production."
             echo "- Owner bootstrap and real email delivery still require end-to-end verification with the designated owner."
             echo "- LIVE DAGA client now passes the approved company session and selected company ID; chat/avatar access checks the separate LIVE DAGA entitlement and TTS enforces the character ledger. Full interactive session/audio still requires an approved test company."
+            echo "- Optional LiveAvatar API key and MH avatar ID are applied to the isolated staging Worker when their dedicated GitHub secrets are present; live animation still requires the matching approved avatar to be configured in the provider."
             echo "- Production Worker and main branch were not targeted."
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Verify staging health without printing secrets
@@ -207,7 +217,7 @@ jobs:
             sleep 5
           done
           jq -e '.ok == true' /tmp/health.json >/dev/null || { echo "::error::Staging health endpoint did not report ok=true"; cat /tmp/health.json; exit 1; }
-          jq '{ok,voiceConfigured,chatConfigured,freeChatConfigured}' /tmp/health.json
+          jq '{ok,voiceConfigured,chatConfigured,freeChatConfigured,liveAvatarConfigured,liveAvatarIdConfigured}' /tmp/health.json
           voice_ready="$(jq -r '.voiceConfigured == true' /tmp/health.json)"
           if [ "$voice_ready" != "true" ]; then
             echo "::warning::ElevenLabs is not configured; continuing security smoke tests. Voice/TTS readiness remains blocked."
