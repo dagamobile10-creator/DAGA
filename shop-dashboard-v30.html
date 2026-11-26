@@ -359,10 +359,9 @@ function prepareNewEntry(i,n,amount,treatment,agent){
   impact={delta:0,agentDelta:0,agentName:null,description:'ده بند الفلوس الأساسية نفسه؛ إضافته تنشئ نقطة الربط التي تعتمد عليها الحركات الأخرى.'};
  }
  if(impact.delta!==0&&!money){pendingCreate=null;return alert('مش لاقي بند «فلوس» داخل عمود الكروت، فمش هقدر أضيف بند مرتبط بأمان. لم يتغير أي رقم.');}
- if(money&&num(money.entry[1])+impact.delta<0){pendingCreate=null;return alert('إضافة البند هتخلي الفلوس الأساسية بالسالب. راجع القيمة.');}
- const duplicateState=pendingCreate&&pendingCreate.i===i&&pendingCreate.n===n?{mergeTarget:pendingCreate.mergeTarget,duplicateMode:pendingCreate.duplicateMode}:{};pendingCreate={i,n,amount,impact,entryMeta,moneyBefore:money?num(money.entry[1]):null,agentBefore:impact.agentName?getCardAgentBalance(impact.agentName).value:null,requestedAt:new Date().toISOString(),...duplicateState};
+  const duplicateState=pendingCreate&&pendingCreate.i===i&&pendingCreate.n===n?{mergeTarget:pendingCreate.mergeTarget,duplicateMode:pendingCreate.duplicateMode}:{};pendingCreate={i,n,amount,impact,entryMeta,moneyBefore:money?num(money.entry[1]):null,agentBefore:impact.agentName?getCardAgentBalance(impact.agentName).value:null,requestedAt:new Date().toISOString(),...duplicateState};
  const treatmentLabel=treatment==='service'?'رصيد خدمة مرتبط بـ '+agent:treatment==='asset'?'أصل — مرتبط عكسيًا بالفلوس الأساسية':'شركة أخرى — حساب الشركة '+agent;
- open(`<h2>مراجعة إضافة بند</h2><div class="reconMini"><div>وقت المراجعة <b>${esc(localStamp(pendingCreate.requestedAt))}</b></div><div>العمود <b>${esc(cols[i].name)}</b></div><div>اسم البند <b>${esc(n)}</b></div><div>نوع المعاملة <b>${esc(treatmentLabel)}</b></div><div>المبلغ <b>${fmt(amount)} ج.م</b></div><div>تأثير الفلوس الأساسية <b>${impact.delta>0?'+':''}${fmt(impact.delta)} ج.م</b></div>${impact.agentName?`<div>الشركة المرتبطة ${esc(impact.agentName)} <b>+${fmt(impact.agentDelta)} ج.م</b></div>`:''}${money?`<div>الفلوس قبل <b>${fmt(num(money.entry[1]))} ج.م</b></div><div>الفلوس بعد <b>${fmt(num(money.entry[1])+impact.delta)} ج.م</b></div>`:''}</div><p class="small">${esc(impact.description)} لن يتم الحفظ قبل التأكيد.</p><div class="grid"><button class="primary" onclick="confirmCreateEntry()">تأكيد الإضافة</button><button onclick="pendingCreate=null;addEntry(${i})">رجوع</button></div>`);
+ open(`<h2>مراجعة إضافة بند</h2><div class="reconMini"><div>وقت المراجعة <b>${esc(localStamp(pendingCreate.requestedAt))}</b></div><div>العمود <b>${esc(cols[i].name)}</b></div><div>اسم البند <b>${esc(n)}</b></div><div>نوع المعاملة <b>${esc(treatmentLabel)}</b></div><div>المبلغ <b>${fmt(amount)} ج.م</b></div><div>ترحيل الفرق للفلوس الأساسية <b>لا يوجد — تعديل مباشر فقط</b></div>${impact.agentName?`<div>الشركة المرتبطة ${esc(impact.agentName)} <b>+${fmt(impact.agentDelta)} ج.م</b></div>`:''}</div><p class="small">${esc(impact.description)} لن يتم الحفظ قبل التأكيد.</p><div class="grid"><button class="primary" onclick="confirmCreateEntry()">تأكيد الإضافة</button><button onclick="pendingCreate=null;addEntry(${i})">رجوع</button></div>`);
 }
 function confirmCreateEntry(){
  const p=pendingCreate;if(!p)return;const money=findMoneyEntry();
@@ -436,8 +435,8 @@ function saveEntry(i,j){
  if(!n||a===''||num(a)<0)return alert('اكتب الاسم ومبلغًا صحيحًا');
  const old=[...cols[i].entries[j]],oldDisplayName=String((old[2]&&old[2].adminLabel)||old[0]),newAmount=num(a),delta=newAmount-num(old[1]);
  const isMoneyRow=entryRole(cols[i],cols[i].entries[j])==='money'||(columnRole(cols[i])==='cards'&&findMoneyEntry()?.entry===cols[i].entries[j]);/* Keep the money role in entry metadata when its visible name changes. */
- const impact=moneyImpactForManualEdit(i,old[0],delta,old),money=findMoneyEntry();
- if(impact.delta!==0&&!money){return alert('مش لاقي بند «فلوس» داخل عمود الكروت، فمش هقدر أنفّذ تعديل مرتبط بأمان. لم يتغير أي رقم.')}
+ const impact={delta:0,agentDelta:0,agentName:null,description:'التعديل اليدوي هنا تصحيح مباشر للقيمة أو للبيانات، وليس حركة مالية جديدة؛ لذلك لن يغيّر الفلوس الأساسية أو أي حساب مرتبط تلقائيًا. استخدم كلم ضجة أو تسجيل الحركة اليومية لترحيل معاملة مالية فعلية.'},money=findMoneyEntry();
+ // Direct manual correction: no automatic posting to linked balances.
  if(money&&num(money.entry[1])+impact.delta<0)return alert('التعديل هيخلي الفلوس الأساسية بالسالب. راجع القيمة قبل المتابعة.');
  pendingManualEdit={i,j,old,oldDisplayName,n,newAmount,delta,impact,moneyBefore:money?num(money.entry[1]):null,agentBefore:impact.agentName?getCardAgentBalance(impact.agentName).value:null,moneyLabel:money?.entry[0]||null,requestedAt:new Date().toISOString()};
  const sign=impact.delta>0?'+':'';
