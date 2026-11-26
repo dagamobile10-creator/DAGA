@@ -887,14 +887,24 @@ function executeOrderCore(){
    const balanceNow=(p.balanceRows||[]).reduce((sum,r)=>{const idx=cols[r.ci]?.entries.findIndex(e=>normAccountingName(e[0])===normAccountingName(r.name))??-1;return sum+(idx>=0?num(cols[r.ci].entries[idx][1]):0)},0);
    if(balanceNow!==p.balanceBefore){alert('رصيد الشخص اتغير من وقت المراجعة. راجع التسوية من جديد.');pendingOrder=null;return}
    if(!money||num(money.entry[1])<p.amount){alert('الفلوس الأساسية مش كفاية للإضافة الجديدة. مفيش أي تغيير اتسجل.');pendingOrder=null;return}
-   const mergedTotal=(p.existingTotal||0)+p.amount,targetKey=normAccountingName(p.name),keep=target.entries.findIndex(e=>normAccountingName(e[0])===targetKey);
-   currentRows.slice().sort((a,b)=>b.idx-a.idx).forEach(x=>{if(x.r.ci!==p.targetIndex||x.idx!==keep)cols[x.r.ci].entries.splice(x.idx,1)});
-   const refreshed=target.entries.findIndex(e=>normAccountingName(e[0])===targetKey);
-   if(refreshed>=0)target.entries[refreshed][1]=String(mergedTotal);else target.entries.push([p.name,String(mergedTotal)]);
-   const outsideLeft=updateRows([{ci:p.targetIndex,name:p.name}],p.settlementAmount),balanceLeft=updateRows(p.balanceRows,p.settlementAmount);
-   if(outsideLeft>0||balanceLeft>0){throw new Error('Settlement amount exceeds current named ledger balance');}
+   const mergedTotal=(p.existingTotal||0)+p.amount,targetKey=normAccountingName(p.name);
+   let finalOutside;
+   if(p.duplicateMode==='separate'){
+    finalOutside=p.amount-p.settlementAmount;
+    if(finalOutside>0)target.entries.push([p.name,String(finalOutside)]);
+    const balanceLeft=updateRows(p.balanceRows,p.settlementAmount);
+    if(balanceLeft>0)throw new Error('Settlement amount exceeds current named balance');
+   }else{
+    const keep=target.entries.findIndex(e=>normAccountingName(e[0])===targetKey);
+    currentRows.slice().sort((a,b)=>b.idx-a.idx).forEach(x=>{if(x.r.ci!==p.targetIndex||x.idx!==keep)cols[x.r.ci].entries.splice(x.idx,1)});
+    const refreshed=target.entries.findIndex(e=>normAccountingName(e[0])===targetKey);
+    if(refreshed>=0)target.entries[refreshed][1]=String(mergedTotal);else target.entries.push([p.name,String(mergedTotal)]);
+    const outsideLeft=updateRows([{ci:p.targetIndex,name:p.name}],p.settlementAmount),balanceLeft=updateRows(p.balanceRows,p.settlementAmount);
+    if(outsideLeft>0||balanceLeft>0)throw new Error('Settlement amount exceeds current named ledger balance');
+    finalOutside=mergedTotal-p.settlementAmount;
+   }
    const moneyChange=changeMoney(-p.amount);if(!moneyChange.ok)throw new Error(moneyChange.message);
-   const finalOutside=mergedTotal-p.settlementAmount,finalBalance=p.balanceBefore-p.settlementAmount;
+   const finalBalance=p.balanceBefore-p.settlementAmount;
    addLedger('إضافة خارج وتسوية من الرصيد',`تمت إضافة ${fmt(p.amount)} جنيه إلى ${p.name} ثم تسوية ${fmt(p.settlementAmount)} جنيه من الخارج والرصيد؛ الخارج المتبقي ${fmt(finalOutside)} جنيه والرصيد المتبقي ${fmt(finalBalance)} جنيه. الفلوس الأساسية اتخصمت بقيمة الإضافة الجديدة فقط.`,{column:'الخارج والرصيد',entryName:p.name,amount:p.amount,settled:p.settlementAmount,oldOutside:p.existingTotal||0,newOutside:finalOutside,oldBalance:p.balanceBefore,newBalance:finalBalance,moneyDelta:-p.amount});
  }else if(p.mode==='outsideAdd'){
    const target=cols[p.targetIndex],money=findMoneyEntry();
@@ -928,7 +938,7 @@ function executeOrderCore(){
     if(left===0)cols[r.ci].entries.splice(r.index,1);else row[1]=String(left);
    }
    if(remaining>0)throw new Error('outside settlement amount exceeds rows');
-   if(p.netBalanceAdd>0)addToNamed(p.balanceIndex,p.name,p.netBalanceAdd);
+   if(p.netBalanceAdd>0){if(p.balanceChoice==='separate')balanceCol.entries.push([p.name,String(p.netBalanceAdd),{role:'custom',id:'balance-'+Date.now()+'-'+Math.random().toString(36).slice(2)}]);else addToNamed(p.balanceIndex,p.name,p.netBalanceAdd);}
    money.entry[1]=String(num(money.entry[1])+p.netBalanceAdd+p.settlementAmount);
    addLedger('إضافة رصيد وتسوية خارج باسم شخص',`${p.name}: طلب إضافة ${fmt(p.amount)} جنيه؛ تم تسجيل ${fmt(p.netBalanceAdd)} جنيه في الرصيد، وشطب ${fmt(p.settlementAmount)} جنيه من الخارج وإعادتها للفلوس الأساسية. الرصيد النهائي ${fmt((p.currentBalance||0)+p.netBalanceAdd)} جنيه، والخارج المتبقي ${fmt(p.outsideBefore-p.settlementAmount)} جنيه. إجمالي زيادة الفلوس الأساسية ${fmt(p.amount)} جنيه.`,{column:'الرصيد والخارج',entryName:p.name,requested:p.amount,balanceAdded:p.netBalanceAdd,outsideSettled:p.settlementAmount,oldBalance:p.balanceBefore,newBalance:(p.currentBalance||0)+p.netBalanceAdd,oldOutside:p.outsideBefore,newOutside:p.outsideBefore-p.settlementAmount,moneyDelta:p.amount});
  }else if(p.mode==='balanceAdd'){
