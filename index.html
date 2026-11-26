@@ -205,14 +205,14 @@ function compactLiveDashboardSnapshot(userText){
  const columns=source.columns.map(col=>{
   const entries=Array.isArray(col.entries)?col.entries:[];
   const ranked=entries.map((e,index)=>({e,index,score:words.reduce((n,w)=>n+((String(e.name||'')+' '+String(e.key||'')+' '+String(e.serviceAgent||'')).toLowerCase().includes(w)?1:0),0)}))
-   .sort((a,b)=>b.score-a.score||a.index-b.index).slice(0,16);
+   .sort((a,b)=>b.score-a.score||a.index-b.index).slice(0,8);
   return {role:col.role,name:col.name,label:col.label,total:col.total,entries:ranked.map(({e})=>({
    name:e.name,amount:e.amount,role:e.role,serviceAgent:e.serviceAgent||null,
    increaseImpact:{moneyDelta:e.increaseImpact?.moneyDelta||0,agentDelta:e.increaseImpact?.agentDelta||0,agentName:e.increaseImpact?.agentName||null},
    decreaseImpact:{moneyDelta:e.decreaseImpact?.moneyDelta||0,agentDelta:e.decreaseImpact?.agentDelta||0,agentName:e.decreaseImpact?.agentName||null}
   }))};
  });
- return {connected:true,updatedAt:source.updatedAt,columns,totals:source.totals||{},accountingModel:source.accountingModel?{moneyEntry:source.accountingModel.moneyEntry||null}:null,recentLedger:(source.recentLedger||[]).slice(0,6).map(e=>({at:e.at,action:e.action,details:String(e.details||'').slice(0,180),column:e.column,entryName:e.entryName,amount:e.amount,moneyDelta:e.moneyDelta}))};
+ return {connected:true,updatedAt:source.updatedAt,columns,totals:source.totals||{},accountingModel:source.accountingModel?{moneyEntry:source.accountingModel.moneyEntry||null}:null,recentLedger:(source.recentLedger||[]).slice(0,4).map(e=>({at:e.at,action:e.action,details:String(e.details||'').slice(0,100),column:e.column,entryName:e.entryName,amount:e.amount,moneyDelta:e.moneyDelta}))};
 }
 async function respond(text){
 if(!requireLiveDaga()){replying=false;return;}
@@ -235,7 +235,7 @@ headers:dagaAuthHeaders({'Content-Type':'application/json'}),
 body:JSON.stringify({
  mode:'live_daga',
  text:spokenText,
- history:workingHistory.slice(-8).map(item=>({role:item.role,content:String(item.content||'').slice(-700)})),
+ history:workingHistory.slice(-6).map(item=>({role:item.role,content:String(item.content||'').slice(-500)})),
  memory:longMemory,
  businessContext:"مساعد شخصي ذكي بالمصري لمحل إكسسوارات موبايل. افهم المقصود من الكلام الطبيعي حتى لو اختلفت الصياغة، واربط السؤال بالسياق والبيانات الحية. قواعد المحاسبة: الخارج مال خرج ويخصم من الفلوس الأساسية؛ الرصيد العادي يزيد الفلوس الأساسية؛ أرصدة مندوبي فوري وممكن وسوبر بي في عمود الرصيد منفصلة عن الفلوس الأساسية. صفوف رصيد أساسي وكارت وهوا وكاش أوت تتبع فوري؛ ممكن تتبع مندوب ممكن؛ سوبر بي يتبع مندوب سوبر بي. تأثير التعديلات الافتراضية موجود رقميًا في increaseImpact وdecreaseImpact داخل لقطة الداشبورد. اللقطة للقراءة فقط، لا تنفذ سؤال ماذا لو. لا تخترع بيانات ولا تنفذ تعديلًا قبل المعاينة والتأكيد. أجب طبيعيًا وباختصار، واسأل سؤالًا واحدًا فقط عند غموض يؤثر على النتيجة. بيانات الداشبورد الحالية: "+JSON.stringify(compactLiveDashboardSnapshot(spokenText))
 })
