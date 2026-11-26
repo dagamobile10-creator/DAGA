@@ -411,13 +411,17 @@ function moneyImpactForManualEdit(ci,entryName,delta,existingEntry=null){
   const linked=savedRole==='other-company'||treatment==='other_company'||savedRole.startsWith('card-agent:')||treatment==='service'||!!linkedAgent;
   if(linked){
    if(!linkedAgent)return {delta:0,agentDelta:0,agentName:null,description:'البند مرتبط بحساب في عمود الرصيد لكن اسم الحساب المقابل غير محدد؛ أوقفنا الحركة لحين تحديده.'};
-   return {delta:0,agentDelta:delta,agentName:linkedAgent,agentLabel:entryName,description:'أي زيادة أو نقص أو حذف في بند الكروت المرتبط تُسجّل بنفس القيمة والاتجاه في بند الحساب المقابل بعمود الرصيد باسم المندوب المحفوظ.'};
+   if(delta>0)return {delta:0,agentDelta:delta,agentName:linkedAgent,agentLabel:entryName,description:'زيادة بند الشركة الأخرى في عمود الكروت تزود رصيد الحساب المرتبط في عمود الرصيد بنفس المبلغ، من غير تغيير الفلوس الأساسية وقت الشحن.'};
+   return {delta:-delta,agentDelta:0,agentName:null,description:'نقص أو استهلاك بند الشركة الأخرى في عمود الكروت يزود الفلوس الأساسية بنفس المبلغ؛ رصيد المندوب في عمود الرصيد لا يتغير في عملية الاستهلاك.'};
   }
   return {delta:-delta,agentDelta:0,agentName:null,description:'البند يعامل كأصل مرتبط عكسيًا بالفلوس الأساسية.'};
  }
  if(role==='balance'){
-  if((existingEntry&&entryRole(cols[ci],existingEntry).startsWith('agent:'))||canonicalServiceAgent(entryName))return {delta:0,agentDelta:0,agentName:null,description:'تعديل بند المندوب في الرصيد يظل داخل حسابه المرتبط ولا ينشئ حركة نقدية تلقائية.'};
-  return {delta:delta,agentDelta:0,agentName:null,description:'البند العادي في عمود الرصيد مرتبط بالفلوس الأساسية بنفس الاتجاه.'};
+  if((existingEntry&&entryRole(cols[ci],existingEntry).startsWith('agent:'))||canonicalServiceAgent(entryName)){
+   if(delta<0)return {delta:delta,agentDelta:0,agentName:null,description:'نقص أو حذف بند من عمود الرصيد، بما فيه رصيد المندوب، يقلل الفلوس الأساسية بنفس المبلغ؛ الزيادة في رصيد المندوب وحدها لا تغيّر الفلوس الأساسية.'};
+   return {delta:0,agentDelta:0,agentName:null,description:'زيادة رصيد المندوب في عمود الرصيد تُسجل في حسابه فقط ولا تغيّر الفلوس الأساسية.'};
+  }
+  return {delta:delta,agentDelta:0,agentName:null,description:'البند العادي في عمود الرصيد مرتبط بالفلوس الأساسية بنفس الاتجاه؛ الحذف أو النقص يقلل الفلوس الأساسية بنفس الفرق.'};
  }
  if(role==='expenses')return {delta:-delta,agentDelta:0,agentName:null,description:'أي إضافة أو نقص أو حذف في أعمدة الخارج ينعكس عكسيًا على الفلوس الأساسية فور التأكيد.'};
  if(role==='cash'||role==='accessory'){
@@ -1090,9 +1094,9 @@ function sendLiveOrderReply(source,id,reply,handled=true){
 }
 function sendLiveDashboardSnapshot(){
  if(!dagaLiveWindow)return;
- const snapshot={schemaVersion:2,updatedAt:new Date().toISOString(),source:'DAGA Dashboard V30',readOnly:true,
-  columns:(Array.isArray(cols)?cols:[]).map((c,index)=>({index,role:columnRole(c),name:String(c.name||''),label:String(c.adminLabel||c.name||''),total:(Array.isArray(c.entries)?c.entries:[]).reduce((sum,e)=>sum+(Number(String(e[1]??0).replace(/[^0-9.-]/g,''))||0),0),
-   entries:(Array.isArray(c.entries)?c.entries:[]).map((e,entryIndex)=>{const entryName=String(e[2]?.adminLabel||e[0]||''),amount=Number(String(e[1]??0).replace(/[^0-9.-]/g,''))||0,up=moneyImpactForManualEdit(index,e[0],1,e),down=moneyImpactForManualEdit(index,e[0],-1,e),agent=columnRole(c)==='cards'?serviceAgentForCardEntry(e[0]):null;return {entryIndex,name:entryName,key:normAccountingName(e[0]||''),amount,role:String(e[2]?.role||entryRole(c,e)),moneyPosted:e[2]?.moneyPosted===true,serviceAgent:agent,increaseImpact:{moneyDelta:Number(up.delta||0),agentDelta:Number(up.agentDelta||0),agentName:up.agentName||agent||null,description:String(up.description||'')},decreaseImpact:{moneyDelta:Number(down.delta||0),agentDelta:Number(down.agentDelta||0),agentName:down.agentName||agent||null,description:String(down.description||'')}}})})),
+ const snapshot={schemaVersion:3,updatedAt:new Date().toISOString(),source:'DAGA Dashboard V30',readOnly:true,
+  columns:(Array.isArray(cols)?cols:[]).map((c,index)=>({index,id:String(c.id||''),role:columnRole(c),name:String(c.name||''),label:String(c.adminLabel||c.name||''),total:(Array.isArray(c.entries)?c.entries:[]).reduce((sum,e)=>sum+(Number(String(e[1]??0).replace(/[^0-9.-]/g,''))||0),0),
+   entries:(Array.isArray(c.entries)?c.entries:[]).map((e,entryIndex)=>{const entryName=String(e[2]?.adminLabel||e[0]||''),amount=Number(String(e[1]??0).replace(/[^0-9.-]/g,''))||0,up=moneyImpactForManualEdit(index,e[0],1,e),down=moneyImpactForManualEdit(index,e[0],-1,e),agent=columnRole(c)==='cards'?serviceAgentForCardEntry(e[0]):null;return {entryIndex,id:String(e[2]?.id||''),name:entryName,key:normAccountingName(e[0]||''),amount,role:String(e[2]?.role||entryRole(c,e)),treatment:String(e[2]?.treatment||''),linkedCompany:String(e[2]?.linkedCompany||''),serviceAgent:String(e[2]?.serviceAgent||agent||''),moneyPosted:e[2]?.moneyPosted===true,increaseImpact:{moneyDelta:Number(up.delta||0),agentDelta:Number(up.agentDelta||0),agentName:up.agentName||agent||null,description:String(up.description||'')},decreaseImpact:{moneyDelta:Number(down.delta||0),agentDelta:Number(down.agentDelta||0),agentName:down.agentName||agent||null,description:String(down.description||'')}}})})),
   totals:{balance:0,expenses:0,cards:0,cash:0,accessory:0},accountingModel:{moneyEntry:(()=>{const m=findMoneyEntry();return m?{column:String(m.col.adminLabel||m.col.name||''),name:String(m.entry[2]?.adminLabel||m.entry[0]||''),amount:num(m.entry[1])}:null})(),rulesSource:'moneyImpactForManualEdit',note:'Impact values are calculated from the same dashboard accounting function used for real edits; read-only scenario analysis only.'},recentLedger:(Array.isArray(ledger)?ledger.slice(0,20):[]).map(x=>({at:x.at||null,action:String(x.action||''),details:String(x.details||''),column:String(x.column||''),entryName:String(x.entryName||''),amount:Number(x.amount||0),moneyDelta:Number(x.moneyDelta||0)}))};
  snapshot.columns.forEach(c=>{if(Object.prototype.hasOwnProperty.call(snapshot.totals,c.role))snapshot.totals[c.role]+=c.total;});
  try{dagaLiveWindow.postMessage({type:'DAGA_DASHBOARD_SNAPSHOT',snapshot},'https://daga-app-staging.dagamobile10.workers.dev');}catch(_){}
@@ -1121,6 +1125,64 @@ function describeLiveOrder(p){
  if(p.mode==='receipt')return 'هسجل تحصيل '+fmt(p.amount)+' جنيه من '+p.name+' وأسوي المستحق عليه حسب الحساب الحالي.';
  return document.getElementById('orderPreview')?.innerText?.replace(/تأكيد وتنفيذ|إلغاء/g,'').trim()||'راجعت الأمر. راجع تفاصيل العملية على الداشبورد.';
 }
+
+function answerLiveAccountingScenario(text){
+ const raw=String(text||''),q=normAccountingName(raw);
+ const hypothetical=/(لو|اذا|ايه اللي يحصل|ايه اللي هيحصل|هيحصل ايه|يتاثر|تاثير|هتاثر)/u.test(q);
+ const deleting=/(حذف|حذفت|احذف|امسح|امسحلي|شيل|اشيل)/u.test(q);
+ const decreasing=/(نقص|نقصت|قلل|قللت|خصم|خصمت|انقص)/u.test(q);
+ const increasing=/(زود|زودت|اضف|ضيف|اضيف|ارفع|رفعت|حط|اشحن|شحن)/u.test(q);
+ if(!hypothetical||(!deleting&&!decreasing&&!increasing))return null;
+ const arabicDigits={'٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9'};
+ const numericText=raw.replace(/[٠-٩]/g,ch=>arabicDigits[ch]).replace(/[٬،]/g,',');
+ const numberMatch=numericText.match(/(\d[\d,]*(?:\.\d+)?)\s*(ألف|الف|آلاف|الاف|مليون)?/u);
+ let requested=numberMatch?Number(numberMatch[1].replace(/,/g,'')):null;
+ if(requested!==null&&numberMatch[2])requested*=/مليون/u.test(numberMatch[2])?1000000:1000;
+ if(requested!==null&&(!Number.isFinite(requested)||requested<=0))requested=null;
+ let forcedRole=null;
+ if(/عمود الرصيد|في عمود الرصيد|من عمود الرصيد|في الرصيد|من الرصيد/u.test(q))forcedRole='balance';
+ if(/عمود الكروت|في عمود الكروت|من عمود الكروت|في الكروت|من الكروت/u.test(q))forcedRole='cards';
+ const columnsToSearch=cols.map((c,i)=>({c,i})).filter(({c})=>!forcedRole||columnRole(c)===forcedRole);
+ const matches=[];
+ for(const {c,i} of columnsToSearch){
+  for(let j=0;j<(c.entries||[]).length;j++){
+   const e=c.entries[j],label=normAccountingName((e[2]&&e[2].adminLabel)||e[0]||'');
+   const exact=!!label&&q.includes(label);
+   const serviceMatch=columnRole(c)==='cards'&&serviceCardEntryMentioned(raw,e[0]);
+   if(exact||serviceMatch)matches.push({c,i,j,e,label,exact,role:columnRole(c)});
+  }
+ }
+ matches.sort((a,b)=>(b.exact-a.exact)||b.label.length-a.label.length);
+ if(!matches.length)return null;
+ const best=matches.filter(x=>x.exact&&x.label===matches[0].label);
+ const candidates=best.length?best:matches;
+ if(candidates.length>1){
+  const unique=candidates.filter((x,index)=>candidates.findIndex(y=>y.i===x.i&&y.j===x.j)===index);
+  if(unique.length>1)return 'أقدر أحسبهولك بدقة، بس الاسم ده موجود في أكتر من مكان. تقصد أنهي عمود: '+unique.map(x=>String(x.c.adminLabel||x.c.name||'')).join(' ولا ' )+'؟';
+ }
+ const target=candidates[0],current=num(target.e[1]);
+ if(deleting)requested=current;
+ else if(requested===null)return 'قولّي المبلغ اللي عايز تزوده أو تنقصه، وأنا أحسب لك تأثيره على الفلوس الأساسية والحساب المرتبط.';
+ const delta=deleting?-current:(decreasing?-requested:requested);
+ if(!deleting&&decreasing&&requested>current)return 'المبلغ اللي عايز تنقصه أكبر من الرصيد الحالي في '+String(target.c.adminLabel||target.c.name||'العمود')+'. الرصيد الحالي '+fmt(current)+' جنيه، فمش هينفع أعتبره نقصًا صالحًا.';
+ const impact=moneyImpactForManualEdit(target.i,target.e[0],delta,target.e),money=findMoneyEntry();
+ if(impact.delta!==0&&!money)return 'لقيت البند، لكن مش لاقي بند الفلوس الأساسية المرتبط بالداشبورد؛ مش هخمن الأثر المالي.';
+ const moneyBefore=money?num(money.entry[1]):0,moneyAfter=moneyBefore+Number(impact.delta||0);
+ if(money&&moneyAfter<0)return 'الحركة الافتراضية هتخلي الفلوس الأساسية بالسالب؛ لازم مراجعة الحساب قبل اعتبارها ممكنة.';
+ const action=deleting?'حذف':decreasing?'نقص':'زيادة';
+ let reply='لو '+action+' بند «'+String(target.e[2]?.adminLabel||target.e[0])+'» في عمود «'+String(target.c.adminLabel||target.c.name)+'» بمبلغ '+fmt(Math.abs(delta))+' جنيه: ';
+ if(impact.delta>0)reply+='الفلوس الأساسية هتزيد '+fmt(impact.delta)+' جنيه، من '+fmt(moneyBefore)+' إلى '+fmt(moneyAfter)+' جنيه. ';
+ else if(impact.delta<0)reply+='الفلوس الأساسية هتقل '+fmt(Math.abs(impact.delta))+' جنيه، من '+fmt(moneyBefore)+' إلى '+fmt(moneyAfter)+' جنيه. ';
+ else reply+='الفلوس الأساسية مش هتتغير. ';
+ if(impact.agentDelta){
+  const state=getCardAgentBalance(impact.agentName),agentBefore=state.value,agentAfter=agentBefore+impact.agentDelta;
+  reply+='رصيد '+String(impact.agentName)+' في عمود الرصيد هيتغير '+(impact.agentDelta>0?'بالزيادة ':'بالنقص ')+fmt(Math.abs(impact.agentDelta))+' جنيه، من '+fmt(agentBefore)+' إلى '+fmt(agentAfter)+' جنيه. ';
+ }
+ reply+=String(impact.description||'');
+ reply+=' ده تحليل افتراضي فقط؛ مفيش أي تعديل اتسجل.';
+ return reply;
+}
+
 window.addEventListener('message',function(event){
  const origin='https://daga-app-staging.dagamobile10.workers.dev';
  if(event.origin!==origin||!dagaLiveWindow||event.source!==dagaLiveWindow)return;
@@ -1236,6 +1298,8 @@ window.addEventListener('message',function(event){
   const reply='حساب '+person+': الرصيد '+fmt(balanceTotal)+' جنيه، والخارج '+fmt(outsideTotal)+' جنيه. الصافي '+fmt(Math.abs(net))+' جنيه '+(net>0?'عليه':net<0?'له':'ومتساوي')+'. دي قراءة فقط. قول «اعرض التسوية» عشان أجهزها للمراجعة.';
   sendLiveOrderReply(event.source,id,reply,true);return;
  }
+ const scenarioAnswer=answerLiveAccountingScenario(text);
+ if(scenarioAnswer){sendLiveOrderReply(event.source,id,scenarioAnswer,true);return;}
  const columnQuestion=/(كام|مجموع|اجمالي|إجمالي|قد ايه|قد إيه|حساب|الموجود|عليه كام|رصيده كام)/u.test(text)&&/(خارج|الرصيد|كاش|اكسسوار|الاكسسوار|الكروت|الفلوس)/u.test(text)&&!/(اكتب|تكتب|عايزك|سجل|ضيف|اضيف|زود|ارفع|حط|نفذ|نفّذ)/u.test(text);
  if(columnQuestion){
   withLiveOrderContext(()=>{const command=document.getElementById('cmd');if(command){command.value=text;review();}});
