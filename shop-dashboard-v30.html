@@ -167,13 +167,57 @@ async function loadCompanyLayoutLabels(storeId,token){
   render();
  }catch(err){console.warn('company_layout_labels_unavailable',String(err&&err.message||err));}
 }
+const DAGA_LOCAL_BACKUP_DAYS=10;
+function validDashboardSnapshot(value){
+ return !!value&&Array.isArray(value.cols)&&value.cols.length===10&&Array.isArray(value.ledger)&&Array.isArray(value.closedDays);
+}
+function dashboardBackupPrefix(){return STORE_KEY+'_daily_backup_';}
+function pruneDashboardBackups(){
+ const prefix=dashboardBackupPrefix(),cutoff=new Date();cutoff.setUTCHours(0,0,0,0);cutoff.setUTCDate(cutoff.getUTCDate()-(DAGA_LOCAL_BACKUP_DAYS-1));
+ const remove=[];
+ for(let i=0;i<localStorage.length;i++){
+  const key=localStorage.key(i);if(!key||!key.startsWith(prefix))continue;
+  const day=key.slice(prefix.length);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(day)||day<cutoff.toISOString().slice(0,10))remove.push(key);
+ }
+ remove.forEach(key=>localStorage.removeItem(key));
+}
 function loadStoreData(storeId){
  STORE_KEY='daga_dashboard_v30_store_'+encodeURIComponent(String(storeId));
  cols=JSON.parse(JSON.stringify(defaultCols));ledger=[];closedDays=[];
- try{const saved=JSON.parse(localStorage.getItem(STORE_KEY)||'null');if(saved){if(Array.isArray(saved.cols)&&saved.cols.length===10)cols=saved.cols;if(Array.isArray(saved.ledger))ledger=saved.ledger;if(Array.isArray(saved.closedDays))closedDays=saved.closedDays;}}catch(e){}
+ let restored=false;
+ try{
+  const saved=JSON.parse(localStorage.getItem(STORE_KEY)||'null');
+  if(validDashboardSnapshot(saved)){cols=saved.cols;ledger=saved.ledger;closedDays=saved.closedDays;restored=true;}
+ }catch(e){}
+ if(!restored){
+  try{
+   const prefix=dashboardBackupPrefix(),keys=[];
+   for(let i=0;i<localStorage.length;i++){const key=localStorage.key(i);if(key&&key.startsWith(prefix))keys.push(key);}
+   keys.sort((a,b)=>b.slice(prefix.length).localeCompare(a.slice(prefix.length)));
+   for(const key of keys){
+    try{const backup=JSON.parse(localStorage.getItem(key)||'null');if(!validDashboardSnapshot(backup))continue;
+     cols=backup.cols;ledger=backup.ledger;closedDays=backup.closedDays;restored=true;break;
+    }catch(e){}
+   }
+  }catch(e){}
+ }
  ensureStableIdentities();ensureMoneyEntry();ensureToggarEntry();ensureStableIdentities();
+ if(restored)persist();
 }
-function persist(){try{localStorage.setItem(STORE_KEY,JSON.stringify({cols,ledger,closedDays}));return true}catch(e){alert('تعذر الحفظ على هذا الجهاز. صدّر نسخة احتياطية قبل المتابعة.');return false}}
+function persist(){
+ const snapshot={cols,ledger,closedDays};
+ try{
+  const serialized=JSON.stringify(snapshot);
+  localStorage.setItem(STORE_KEY,serialized);
+  try{
+   const day=new Date().toISOString().slice(0,10);
+   localStorage.setItem(dashboardBackupPrefix()+day,serialized);
+   pruneDashboardBackups();
+  }catch(backupError){console.warn('DAGA daily local backup unavailable',String(backupError&&backupError.message||backupError));}
+  return true;
+ }catch(e){alert('تعذر الحفظ على هذا الجهاز. صدّر نسخة احتياطية قبل المتابعة.');return false}
+}
 function num(v){return Number(String(v).replace(/[^0-9.-]/g,''))||0} function fmt(v){return Math.round(v).toLocaleString('en-US')} function esc(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
 function sumCol(name){const c=cols.find(x=>x.name===name);return c?c.entries.reduce((a,e)=>a+num(e[1]),0):0}
 function findMoneyEntry(){
