@@ -1170,7 +1170,10 @@ function answerLiveAccountingScenario(text){
   }
  }
  matches.sort((a,b)=>(b.exact-a.exact)||b.label.length-a.label.length);
- if(!matches.length)return null;
+ if(!matches.length){
+  if(deleting)return 'فهمت إنك بتسأل عن حذف بند، لكن محتاج اسم البند والعمود عشان أحسب التأثير بدقة. ده سؤال فقط ومفيش أي حذف أو تعديل اتسجل.';
+  return 'فهمت إنك بتسأل عن تأثير زيادة أو نقص، لكن محتاج اسم البند والعمود عشان أحسب الرصيد قبل وبعد. ده تحليل فقط ومفيش أي تعديل اتسجل.';
+ }
  const best=matches.filter(x=>x.exact&&x.label===matches[0].label);
  const candidates=best.length?best:matches;
  if(candidates.length>1){
