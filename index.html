@@ -111,13 +111,10 @@ function handleUser(text){
  stopListening();
  const navText=String(text||'').toLowerCase().replace(/[إأآ]/g,'ا').replace(/[ىي]/g,'ي').replace(/[ةه]/g,'ه').replace(/[^\u0600-\u06FFa-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
  const prayerIntent=/(?:صلي|صل|الصلاه|الصلاة).*(?:النبي|محمد)|(?:النبي|محمد).*(?:صلي|صل)/u.test(navText);
- const greetingIntent=/(?:صباح الفل|صباح الخير|صباح النور|مساء الفل|مساء الخير|مساء النور|ازيك|عامل ايه|اخبارك|اهلا|اهلين|تسلم|شكرا|ربنا يخليك)/u.test(navText)||/^(?:يا صاحبي|يا حبيبي|حبيبي|صاحبي)$/u.test(navText);
  const insultIntent=/(?:يا غبي|يا حمار|يا اهبل|يا فاشل|يا ابن الكلب|يا ابن الجزمه|يلعن|خرا|زباله|غبي|حمار)/u.test(navText);
- if(prayerIntent||greetingIntent){
+ if(prayerIntent){
   replying=true;state.textContent='ضجه بيرد عليك يا صاحبي…';
-  const reply=prayerIntent
-   ? (greetingIntent?'صباح النور يا صاحبي، عليه أفضل الصلاة والسلام. يومك كله رزق بإذن الله.':'عليه أفضل الصلاة والسلام.')
-   : (/(مساء)/u.test(navText)?'مساء النور يا صاحبي، نورتني. عامل إيه؟':'صباح النور يا صاحبي، صباحك فل ورزق. عامل إيه؟');
+  const reply='عليه أفضل الصلاة والسلام.';
   const history=[...loadDagaMemory(),{role:'user',content:String(text||'')},{role:'assistant',content:reply}].slice(-100);
   saveDagaMemory(history.slice(-16));saveServerMemory(loadDagaProfile(),history).catch(()=>{});
   daga.textContent=reply;speak(reply);return;
@@ -200,6 +197,23 @@ window.addEventListener('message', (event) => {
 window.addEventListener('load', () => {
   try { if (window.parent && window.parent !== window) window.parent.postMessage({type:'DAGA_LIVE_REQUEST_SNAPSHOT'}, '*'); } catch (_) {}
 });
+function compactLiveDashboardSnapshot(userText){
+ const source=dashboardSnapshot;
+ if(!source||!Array.isArray(source.columns))return {connected:false};
+ const q=String(userText||'').toLowerCase().replace(/[إأآ]/g,'ا').replace(/[ىي]/g,'ي').replace(/[ةه]/g,'ه');
+ const words=q.split(/[^\u0600-\u06FFa-z0-9]+/u).filter(v=>v.length>2);
+ const columns=source.columns.map(col=>{
+  const entries=Array.isArray(col.entries)?col.entries:[];
+  const ranked=entries.map((e,index)=>({e,index,score:words.reduce((n,w)=>n+((String(e.name||'')+' '+String(e.key||'')+' '+String(e.serviceAgent||'')).toLowerCase().includes(w)?1:0),0)}))
+   .sort((a,b)=>b.score-a.score||a.index-b.index).slice(0,24);
+  return {role:col.role,name:col.name,label:col.label,total:col.total,entries:ranked.map(({e})=>({
+   name:e.name,amount:e.amount,role:e.role,serviceAgent:e.serviceAgent||null,
+   increaseImpact:{moneyDelta:e.increaseImpact?.moneyDelta||0,agentDelta:e.increaseImpact?.agentDelta||0,agentName:e.increaseImpact?.agentName||null},
+   decreaseImpact:{moneyDelta:e.decreaseImpact?.moneyDelta||0,agentDelta:e.decreaseImpact?.agentDelta||0,agentName:e.decreaseImpact?.agentName||null}
+  }))};
+ });
+ return {connected:true,updatedAt:source.updatedAt,columns,totals:source.totals||{},accountingModel:source.accountingModel?{moneyEntry:source.accountingModel.moneyEntry||null}:null,recentLedger:(source.recentLedger||[]).slice(0,8).map(e=>({at:e.at,action:e.action,details:String(e.details||'').slice(0,180),column:e.column,entryName:e.entryName,amount:e.amount,moneyDelta:e.moneyDelta}))};
+}
 async function respond(text){
 if(!requireLiveDaga()){replying=false;return;}
 if(!live&&!singleMode){replying=false;return}
@@ -218,7 +232,13 @@ const r=await fetch(DAGA_API_BASE+'/chat',{
 method:'POST',
 signal:AbortSignal.timeout(28000),
 headers:dagaAuthHeaders({'Content-Type':'application/json'}),
-body:JSON.stringify({mode:'live_daga',text:spokenText,history:workingHistory.slice(-16),memory:longMemory,businessContext:"ذاكرة المستخدم وتفضيلاته المحفوظة على هذا الجهاز (استخدم المرتبط بالسؤال فقط، وصحّحها لو المستخدم صحّحك): "+JSON.stringify(longMemory)+"\n\nسياق العمل الثابت: صاحب التطبيق يدير شركة إكسسوارات موبايل ويستخدم ضجه كمساعد إداري ومحاسبي صوتي. اتكلم بالمصري فقط. استخدم زائد وناقص ويساوي بدل المصطلحات الإنجليزية. اسم التطبيق والمساعد بالعربية: ضجه. هذه معلومات عن طبيعة الشركة وليست بيانات حية. أعمدة الشركة: خارج واحد وخارج اتنين وخارج تلاتة، أربعة أعمدة لمكسب فودافون كاش، بند الكاش، بند فودافون كاش، الرصيد، الكروت، والإكسسوارات. أعمدة مكسب فودافون كاش ليست نقدية. قواعد المحاسبة الملزمة: عمود الخارج يمثل فلوس خرجت من الشركة، وإضافة مبلغ إليه تخصم المبلغ من الفلوس الأساسية فورًا؛ لا تصفه أبدًا كفلوس دخلت. عمود الرصيد يمثل مبالغ دخلت أو مستحقات مسجلة للشركة؛ الإضافة العادية إليه تزود الفلوس الأساسية. الاستثناءات: أرصدة مندوبي الخدمات فوري وممكن وسوبر بي تُسجل في عمود الرصيد باسم المندوب فقط ولا تؤثر على الفلوس الأساسية عند الشحن أو الزيادة. بنود الكروت رصيد أساسي وكارت وهوا وكاش أوت تتبع مندوب فوري؛ وممكن تتبع مندوب ممكن؛ وسوبر باي/سوبر بي يتبع مندوب سوبر بي. إذا قال المستخدم إن مندوب فوري بعت مبلغًا على الماكينة، أو إن رصيدًا زاد في أي من هذه الخدمات، فالمقصود زيادة رصيد المندوب في عمود الرصيد فقط، وليس زيادة الفلوس الرئيسية. تقليل/استهلاك بنود الخدمات في عمود الكروت له قواعد مستقلة ويُحسب بالفرق وفق منطق الداشبورد؛ لا تخلطه بالشحن. أي حركة عادية في الخارج تخصم من الفلوس، وأي حركة عادية في الرصيد تزودها. اسأل للتوضيح إذا لم يتضح اسم المندوب أو اتجاه الحركة. لا تخترع بيانات، ولا تنفذ حركة قبل معاينتها وتأكيدها. لا تخترع أرقامًا ولا تدّعِ رؤية الداشبورد أو تعديل بيانات فعلية ما لم تصلك البيانات أو تنفذ أداة فعلية ذلك. بيانات الداشبورد المرسلة حاليًا (قد تكون غير موجودة أو قديمة؛ تعامل معها كمرجع للقراءة فقط ولا تنفذ أي تعديل من خلالها): "+JSON.stringify(dashboardSnapshot||{connected:false})})
+body:JSON.stringify({
+ mode:'live_daga',
+ text:spokenText,
+ history:workingHistory.slice(-8).map(item=>({role:item.role,content:String(item.content||'').slice(-700)})),
+ memory:longMemory,
+ businessContext:"مساعد شخصي ذكي بالمصري لمحل إكسسوارات موبايل. افهم المقصود من الكلام الطبيعي حتى لو اختلفت الصياغة، واربط السؤال بالسياق والبيانات الحية. قواعد المحاسبة: الخارج مال خرج ويخصم من الفلوس الأساسية؛ الرصيد العادي يزيد الفلوس الأساسية؛ أرصدة مندوبي فوري وممكن وسوبر بي في عمود الرصيد منفصلة عن الفلوس الأساسية. صفوف رصيد أساسي وكارت وهوا وكاش أوت تتبع فوري؛ ممكن تتبع مندوب ممكن؛ سوبر بي يتبع مندوب سوبر بي. تأثير التعديلات الافتراضية موجود رقميًا في increaseImpact وdecreaseImpact داخل لقطة الداشبورد. اللقطة للقراءة فقط، لا تنفذ سؤال ماذا لو. لا تخترع بيانات ولا تنفذ تعديلًا قبل المعاينة والتأكيد. أجب طبيعيًا وباختصار، واسأل سؤالًا واحدًا فقط عند غموض يؤثر على النتيجة. بيانات الداشبورد الحالية: "+JSON.stringify(compactLiveDashboardSnapshot(spokenText))
+})
 });
 const data=await r.json().catch(()=>({}));
 if(!r.ok||!data.reply){
