@@ -1102,13 +1102,13 @@ function sendLiveDashboardSnapshot(){
  try{dagaLiveWindow.postMessage({type:'DAGA_DASHBOARD_SNAPSHOT',snapshot},'https://daga-app-staging.dagamobile10.workers.dev');}catch(_){}
 }
 function liveOrderConfirmation(text){
- const n=normAccountingName(text).replace(/\\s+/g,' ').trim();
+ const n=normAccountingName(text).replace(/ +/g,' ').trim();
  // A short, explicit affirmative confirms only the currently displayed LIVE preview.
- return /^(ايوه|اه|تمام|ماشي|موافق|اكد|اعتمد|خلاص|اتفضل|اوكي|ok|okay|yes|نفذ|نفذها)(\\s+(يا|يا صاحبي|يا حبيبي|صاحبي|حبيبي|عم|يلا|نفذ|نفذها|اعتمد|تمام|خلاص|اتفضل|ماشي|موافق|كمل|توكل))*$/.test(n);
+ return /^(ايوه|اه|تمام|ماشي|موافق|اكد|اعتمد|خلاص|اتفضل|اوكي|ok|okay|yes|نفذ|نفذها)( +((يا|يا صاحبي|يا حبيبي|صاحبي|حبيبي|عم|يلا|نفذ|نفذها|اعتمد|تمام|خلاص|اتفضل|ماشي|موافق|كمل|توكل)))*$/.test(n);
 }
 function liveOrderCancellation(text){
- const n=normAccountingName(text).replace(/\\s+/g,' ').trim();
- return /^(لا|لاا|الغ|الغاء|مش موافق|مش عايز|مش عاوز|بلاش|وقف|استنى|استني|cancel|no)(\\s+(يا|صاحبي|حبيبي|عم))?$/.test(n);
+ const n=normAccountingName(text).replace(/ +/g,' ').trim();
+ return /^(لا|لاا|الغ|الغاء|مش موافق|مش عايز|مش عاوز|بلاش|وقف|استنى|استني|cancel|no)( +(يا|صاحبي|حبيبي|عم))?$/.test(n);
 }
 function describeLiveOrder(p){
  const money=findMoneyEntry(),current=money?num(money.entry[1]):0;
