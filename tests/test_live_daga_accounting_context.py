@@ -20,6 +20,11 @@ checks = {
 
     "LIVE confirmation accepts Egyptian Arabic without literal backslash-s": r"return /^(ايوه|اه|تمام|ماشي|موافق|اكد|اعتمد|خلاص|اتفضل|اوكي|ok|okay|yes|نفذ|نفذها)( +" in dashboard,
 
+    "read-only scenarios are handled before pending confirmation": dashboard.index("const earlyScenarioAnswer=answerLiveAccountingScenario(text)") < dashboard.index("if(dagaLiveOrderPending&&liveOrderConfirmation(text))"),
+    "unmatched pending messages fall through to conversational AI": "sendLiveOrderReply(event.source,id,'',false);return;" in dashboard,
+    "other-company wizard asks for company name": "اسم الشركة الأخرى المرتبطة بالبند" in dashboard and "اسم الشركة</label>" in dashboard,
+    "LIVE iframe waits for parent confirmation response": "},15000);" in live_page,
+    "LIVE assistant prompt preserves exact Super Bee spelling and spacing": "الاسم المعتمد «سوبر بي» وليس «سوبر باي»" in worker,
     "read-only scenario handling runs before destructive delete intent": dashboard.index("const earlyScenarioAnswer=answerLiveAccountingScenario(text)") < dashboard.index("const deleteIntent="),
     "failed LIVE confirmation clears stale pending approval": "dagaLivePendingOrder=null;dagaLivePendingDelete=null;dagaLivePendingClarification=null;" in dashboard,
     "LIVE scenario questions recognize plural delete and change verbs": "شيلنا|نشيل|حذفنا|الغينا" in dashboard and "زودنا|ضفنا|رفعنا|شحننا" in dashboard,
