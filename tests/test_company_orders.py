@@ -272,7 +272,7 @@ class LiveDagaLoginFlowTests(unittest.TestCase):
         for element_id in ("dagaAuthPanel", "dagaAuthIdentifier", "dagaAuthPassword", "dagaAuthSend", "dagaAuthLogout"):
             self.assertNotIn('id="' + element_id + '"', self.client)
         self.assertNotIn("'/api/shop/auth/login'", self.client)
-        self.assertNotIn("'/api/shop/auth/me'", self.client)
+        self.assertIn("fetch('/api/shop/auth/me'", self.client)  # Read-only LIVE balance lookup; no second login flow.
         self.assertNotIn("'/api/shop/auth/logout'", self.client)
         self.assertIn("event.data.type!=='DAGA_AUTH'", self.client)
         self.assertIn("event.source!==window.opener", self.client)
