@@ -35,6 +35,9 @@ checks = {
     "manual dashboard edits are direct corrections and do not post accounting deltas": "const impact={delta:0,agentDelta:0,agentName:null" in dashboard and "ترحيل الفرق للفلوس الأساسية <b>لا يوجد — تعديل مباشر فقط</b>" in dashboard,
     "card entry edit offers asset or other-company classification": 'id="manualTreatment"' in dashboard and 'value="other_company"' in dashboard and 'id="manualCompany"' in dashboard,
     "manual card classification is saved with the entry metadata": "updatedMeta.treatment='asset'" in dashboard and "updatedMeta.treatment='other_company'" in dashboard and "updatedMeta.linkedCompany=p.manualCompany" in dashboard,
+    "manual edit preview shows selected card treatment and company name": "تصنيف البند <b>${manualTreatment==='asset'?'أصل':'شركة أخرى'}</b>" in dashboard and "الشركة المرتبطة <b>${esc(manualCompany)}</b>" in dashboard,
+    "existing linked company metadata is preserved as the selected edit treatment": "||!!meta.linkedCompany?'other_company':'asset'" in dashboard,
+    "switching card treatment clears stale company linkage when changed to asset": "updatedMeta.linkedCompany=null;updatedMeta.serviceAgent=null" in dashboard,
     "dashboard label is dynamic and not a fixed company type": "اسم العمود والبند الظاهر للمستخدم قد يتغير" in live,
     "worker identifies the context as current dashboard data": "سياق الشركة والداشبورد الحالي المرسل من الواجهة" in worker,
 }
