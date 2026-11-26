@@ -63,9 +63,10 @@ jobs:
           p = Path("android/app/src/main/AndroidManifest.xml")
           s = p.read_text()
           marker = '<manifest'
-          i = s.find('>')
+          root_start = s.find(marker)
+          i = s.find('>', root_start) if root_start >= 0 else -1
           if i < 0:
-              raise SystemExit("Invalid Android manifest")
+              raise SystemExit("Invalid Android manifest: missing manifest root element")
           permissions = [
               '    <uses-permission android:name="android.permission.INTERNET" />',
               '    <uses-permission android:name="android.permission.RECORD_AUDIO" />',
