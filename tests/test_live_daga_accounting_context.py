@@ -33,6 +33,8 @@ checks = {
     "LIVE company session is retained when entitlement or company mapping needs attention": "e&&e.message==='authenticated_account_required'" in live and "تم تسجيل الدخول، لكن الحساب ليس مرتبطًا بشركة نشطة معتمدة" in live,
     "owner login fields use explicit LTR input and prevent native form reload": "onsubmit=\"return false\"" in (root / "owner-console.html").read_text(encoding="utf-8") and "unicode-bidi:plaintext" in (root / "owner-console.html").read_text(encoding="utf-8"),
     "manual dashboard edits are direct corrections and do not post accounting deltas": "const impact={delta:0,agentDelta:0,agentName:null" in dashboard and "ترحيل الفرق للفلوس الأساسية <b>لا يوجد — تعديل مباشر فقط</b>" in dashboard,
+    "card entry edit offers asset or other-company classification": 'id="manualTreatment"' in dashboard and 'value="other_company"' in dashboard and 'id="manualCompany"' in dashboard,
+    "manual card classification is saved with the entry metadata": "updatedMeta.treatment='asset'" in dashboard and "updatedMeta.treatment='other_company'" in dashboard and "updatedMeta.linkedCompany=p.manualCompany" in dashboard,
     "dashboard label is dynamic and not a fixed company type": "اسم العمود والبند الظاهر للمستخدم قد يتغير" in live,
     "worker identifies the context as current dashboard data": "سياق الشركة والداشبورد الحالي المرسل من الواجهة" in worker,
 }
