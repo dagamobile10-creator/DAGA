@@ -1143,6 +1143,10 @@ function answerLiveAccountingScenario(text){
     return words.some(word=>label.includes(word));
    });
    if(historyMatch)return 'آخر حركة مطابقة في سجل الداشبورد: '+String(historyMatch.action||'حركة مسجلة')+'. '+String(historyMatch.details||'')+' دي حركة فعلية مسجلة بالفعل، مش توقع افتراضي.';
+   const latest=(Array.isArray(ledger)?ledger:[])[0];
+   if(latest&&/(عملنا|نعمل|هنعمل|حصل|سجلنا|اتعمل|اخر حاجه|اخر حركه)/u.test(q)){
+    return 'لو تقصد آخر عملية اتسجلت، فهي: '+String(latest.action||'حركة مسجلة')+'. '+String(latest.details||'')+' دي بيانات فعلية من سجل الداشبورد. لو تقصد عملية أقدم، اذكر اسم البند أو الشخص.';
+   }
   }
   return asksOutcome?'أقدر أوضح التأثير، بس كلمة «عملنا» لوحدها مش بتحدد نوع الحركة. تقصد زوّدنا البند، نقصناه، ولا حذفناه؟ مفيش أي تعديل هيتسجل من السؤال.':null;
  }
