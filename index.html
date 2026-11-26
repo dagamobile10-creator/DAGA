@@ -200,19 +200,40 @@ window.addEventListener('load', () => {
 function compactLiveDashboardSnapshot(userText){
  const source=dashboardSnapshot;
  if(!source||!Array.isArray(source.columns))return {connected:false};
- const q=String(userText||'').toLowerCase().replace(/[إأآ]/g,'ا').replace(/[ىي]/g,'ي').replace(/[ةه]/g,'ه');
- const words=q.split(/[^\u0600-\u06FFa-z0-9]+/u).filter(v=>v.length>2);
+ const norm=v=>String(v||'').toLowerCase().replace(/[إأآ]/g,'ا').replace(/[ىي]/g,'ي').replace(/[ةه]/g,'ه').replace(/[ؤ]/g,'و').replace(/[ئ]/g,'ي').replace(/[^\u0600-\u06FFa-z0-9 ]/gu,' ').replace(/\s+/g,' ').trim();
+ const q=norm(userText),words=q.split(' ').filter(v=>v.length>1);
+ const aliases={
+  'فوري':['فوري','فورى','مندوب فوري','رصيد اساسي','الرصيد الاساسي','كارت وهوا','كارت هوا','كاش اوت'],
+  'ممكن':['ممكن','مندوب ممكن','ماكينة ممكن'],
+  'سوبر بي':['سوبر بي','سوبر باي','super pay','سوبر باى']
+ };
+ const isMoney=e=>e.role==='money'||/^(الفلوس|فلوس|الفلوس الاساسيه|فلوس المحل|النقديه)$/.test(norm(e.name));
  const columns=source.columns.map(col=>{
   const entries=Array.isArray(col.entries)?col.entries:[];
-  const ranked=entries.map((e,index)=>({e,index,score:words.reduce((n,w)=>n+((String(e.name||'')+' '+String(e.key||'')+' '+String(e.serviceAgent||'')).toLowerCase().includes(w)?1:0),0)}))
-   .sort((a,b)=>b.score-a.score||a.index-b.index).slice(0,8);
-  return {role:col.role,name:col.name,label:col.label,total:col.total,entries:ranked.map(({e})=>({
+  const ranked=entries.map((e,index)=>{
+   const label=norm([e.name,e.key,e.serviceAgent,e.role].filter(Boolean).join(' '));
+   let score=words.reduce((n,w)=>n+(label.includes(w)?2:0),0);
+   if(isMoney(e)&&/(فلوس|اساسي|نقد|كروت)/.test(q))score+=12;
+   for(const [agent,terms] of Object.entries(aliases)){
+    if(terms.some(term=>q.includes(norm(term)))&&norm(e.serviceAgent)===norm(agent))score+=15;
+    if(terms.some(term=>label.includes(norm(term))&&q.includes(norm(term))))score+=10;
+   }
+   if(e.role==='agent:فوري'&&/(فوري|رصيد اساسي|كارت|هوا|كاش اوت)/.test(q))score+=8;
+   if(e.role==='agent:ممكن'&&q.includes('ممكن'))score+=8;
+   if(e.role==='agent:سوبر بي'&&/(سوبر بي|سوبر باي)/.test(q))score+=8;
+   return {e,index,score};
+  });
+  const mandatory=ranked.filter(({e})=>isMoney(e)||(e.role==='agent:فوري'&&/(فوري|رصيد اساسي|كارت|هوا|كاش اوت)/.test(q))||(e.role==='agent:ممكن'&&q.includes('ممكن'))||(e.role==='agent:سوبر بي'&&/(سوبر بي|سوبر باي)/.test(q)));
+  const chosen=new Map(mandatory.map(x=>[x.index,x]));
+  ranked.filter(x=>x.score>0).sort((a,b)=>b.score-a.score||a.index-b.index).slice(0,10).forEach(x=>chosen.set(x.index,x));
+  const selected=[...chosen.values()].sort((a,b)=>a.index-b.index).slice(0,14);
+  return {role:col.role,name:col.name,label:col.label,total:col.total,entries:selected.map(({e})=>({
    name:e.name,amount:e.amount,role:e.role,serviceAgent:e.serviceAgent||null,
-   increaseImpact:{moneyDelta:e.increaseImpact?.moneyDelta||0,agentDelta:e.increaseImpact?.agentDelta||0,agentName:e.increaseImpact?.agentName||null},
-   decreaseImpact:{moneyDelta:e.decreaseImpact?.moneyDelta||0,agentDelta:e.decreaseImpact?.agentDelta||0,agentName:e.decreaseImpact?.agentName||null}
+   increaseImpact:{moneyDelta:e.increaseImpact?.moneyDelta||0,agentDelta:e.increaseImpact?.agentDelta||0,agentName:e.increaseImpact?.agentName||null,description:e.increaseImpact?.description||''},
+   decreaseImpact:{moneyDelta:e.decreaseImpact?.moneyDelta||0,agentDelta:e.decreaseImpact?.agentDelta||0,agentName:e.decreaseImpact?.agentName||null,description:e.decreaseImpact?.description||''}
   }))};
  });
- return {connected:true,updatedAt:source.updatedAt,columns,totals:source.totals||{},accountingModel:source.accountingModel?{moneyEntry:source.accountingModel.moneyEntry||null}:null,recentLedger:(source.recentLedger||[]).slice(0,4).map(e=>({at:e.at,action:e.action,details:String(e.details||'').slice(0,100),column:e.column,entryName:e.entryName,amount:e.amount,moneyDelta:e.moneyDelta}))};
+ return {connected:true,updatedAt:source.updatedAt,columns,totals:source.totals||{},accountingModel:source.accountingModel?{moneyEntry:source.accountingModel.moneyEntry||null,rulesSource:source.accountingModel.rulesSource||null}:null,recentLedger:(source.recentLedger||[]).slice(0,5).map(e=>({at:e.at,action:e.action,details:String(e.details||'').slice(0,120),column:e.column,entryName:e.entryName,amount:e.amount,moneyDelta:e.moneyDelta}))};
 }
 async function respond(text){
 if(!requireLiveDaga()){replying=false;return;}
@@ -237,7 +258,7 @@ body:JSON.stringify({
  text:spokenText,
  history:workingHistory.slice(-6).map(item=>({role:item.role,content:String(item.content||'').slice(-500)})),
  memory:longMemory,
- businessContext:"مساعد شخصي ذكي بالمصري لمحل إكسسوارات موبايل. افهم المقصود من الكلام الطبيعي حتى لو اختلفت الصياغة، واربط السؤال بالسياق والبيانات الحية. قواعد المحاسبة: الخارج مال خرج ويخصم من الفلوس الأساسية؛ الرصيد العادي يزيد الفلوس الأساسية؛ أرصدة مندوبي فوري وممكن وسوبر بي في عمود الرصيد منفصلة عن الفلوس الأساسية. صفوف رصيد أساسي وكارت وهوا وكاش أوت تتبع فوري؛ ممكن تتبع مندوب ممكن؛ سوبر بي يتبع مندوب سوبر بي. تأثير التعديلات الافتراضية موجود رقميًا في increaseImpact وdecreaseImpact داخل لقطة الداشبورد. اللقطة للقراءة فقط، لا تنفذ سؤال ماذا لو. لا تخترع بيانات ولا تنفذ تعديلًا قبل المعاينة والتأكيد. أجب طبيعيًا وباختصار، واسأل سؤالًا واحدًا فقط عند غموض يؤثر على النتيجة. بيانات الداشبورد الحالية: "+JSON.stringify(compactLiveDashboardSnapshot(spokenText))
+ businessContext:"مساعد شخصي ذكي بالمصري لمحل إكسسوارات موبايل. افهم المقصود من الكلام الطبيعي حتى لو اختلفت الصياغة، واربط السؤال بالسياق والبيانات الحية. قواعد المحاسبة الدقيقة: فرّق بين صف «الفلوس/الفلوس الأساسية» في عمود الكروت وبين صف «رصيد أساسي» الخاص بخدمة فوري في العمود نفسه. صفوف الخدمات داخل عمود الكروت: رصيد أساسي وكارت وهوا وكاش أوت تتبع فوري؛ ممكن تتبع مندوب ممكن؛ سوبر باي/سوبر بي يتبع مندوب سوبر بي. زيادة صف خدمة في الكروت تزيد رصيد المندوب المقابل في عمود الرصيد فقط ولا تغيّر الفلوس الأساسية. نقص صف خدمة في الكروت يزيد الفلوس الأساسية بنفس مقدار النقص ولا يقلل رصيد المندوب. زيادة صف الفلوس الأساسية تعدّل صف الفلوس نفسه مباشرة. داخل عمود الرصيد، زيادة رصيد مندوب فوري أو ممكن أو سوبر بي تعدّل رصيده فقط؛ نقصه أو حذفه يخصم نفس القيمة من الفلوس الأساسية في عمود الكروت. لا تسأل عن اسم شخص إذا لم يذكره المستخدم، ولا تسأل كاش أم أكسسوار إذا سمّى البند والعمود. في السؤال الافتراضي اشرح الرصيد الذي يتغير والذي يظل ثابتًا اعتمادًا على increaseImpact/decreaseImpact الفعليين. تأثير التعديلات الافتراضية موجود رقميًا في increaseImpact وdecreaseImpact داخل لقطة الداشبورد. اللقطة للقراءة فقط، لا تنفذ سؤال ماذا لو. لا تخترع بيانات ولا تنفذ تعديلًا قبل المعاينة والتأكيد. أجب طبيعيًا وباختصار، واسأل سؤالًا واحدًا فقط عند غموض يؤثر على النتيجة. بيانات الداشبورد الحالية: "+JSON.stringify(compactLiveDashboardSnapshot(spokenText))
 })
 });
 const data=await r.json().catch(()=>({}));
