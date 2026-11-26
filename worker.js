@@ -112,6 +112,34 @@ export default {
       return json({ error: "owner_auth_internal_error", ...(url.hostname === "daga-app-staging.dagamobile10.workers.dev" ? { diagnostic: error instanceof Error ? error.message.slice(0, 200) : "unknown_error" } : {}) }, 500);
     }
     if (ownerAuthResponse) return ownerAuthResponse;
+    if (url.pathname === "/api/company/dashboard-layout" && request.method === "GET") {
+      const db = env.DAGA_APP_DB;
+      if (!db) return json({ error: "application_database_not_configured" }, 503);
+      const account = await authenticatedAccount(request, db);
+      if (!account || account.status !== "approved" || account.role === "program_owner") return json({ error: "company_session_required" }, 401);
+      const selected = String(url.searchParams.get("storeId") || request.headers.get("X-DAGA-Company-ID") || "").trim();
+      let storeId = "";
+      if (account.role === "store_owner") {
+        if (!selected) return json({ error: "company_selection_required" }, 400);
+        const owned = await db.prepare("SELECT id FROM daga_stores WHERE id=? AND owner_account_id=? AND status='approved'").bind(selected, account.id).first();
+        if (!owned) return json({ error: "company_membership_required" }, 403);
+        storeId = owned.id;
+      } else if (["manager","employee"].includes(account.role)) {
+        if (!selected) return json({ error: "company_selection_required" }, 400);
+        const membership = await db.prepare("SELECT m.store_id FROM daga_store_memberships m JOIN daga_stores s ON s.id=m.store_id WHERE m.account_id=? AND m.store_id=? AND m.status='active' AND m.role=? AND s.status='approved'").bind(account.id,selected,account.role).first();
+        if (!membership) return json({ error: "company_membership_required" }, 403);
+        storeId = membership.store_id;
+      } else return json({ error: "company_membership_required" }, 403);
+      let row = await db.prepare("SELECT id,layout_json,version,updated_at FROM daga_dashboard_layouts WHERE scope='store' AND store_id=?").bind(storeId).first();
+      let effectiveScope = "store";
+      if (!row) {
+        row = await db.prepare("SELECT id,layout_json,version,updated_at FROM daga_dashboard_layouts WHERE scope='global' AND store_id IS NULL").first();
+        effectiveScope = "global";
+      }
+      let layout = null;
+      if (row) { try { layout = JSON.parse(row.layout_json); } catch (_) { return json({ error: "stored_layout_invalid" }, 500); } }
+      return json({ ok: true, storeId, scope: effectiveScope, layout, version: Number(row?.version || 0), updatedAt: row?.updated_at || null });
+    }
     const shopAuthResponse = await handleShopAuth(request, env, url);
     if (shopAuthResponse) return shopAuthResponse;
     const ownerAdminResponse = await handleOwnerAdmin(request, env, url);

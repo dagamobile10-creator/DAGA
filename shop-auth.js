@@ -117,6 +117,15 @@ async function login(request,env,db){
   if(!account||account.role!=="store_owner"||account.status!=="approved")return json(env,{error:account&&account.status==="pending"?"shop_pending_approval":"invalid_credentials"},401);
   const attempt=await passwordHash(password,account.password_salt,Number(account.password_iterations)||ITERATIONS);
   if(!same(attempt,account.password_hash))return json(env,{error:"invalid_credentials"},401);
+  const store=await db.prepare("SELECT id,status,owner_list_removed_at FROM daga_stores WHERE id=? AND owner_account_id=? LIMIT 1").bind(account.store_id,account.id).first();
+  if(!store||store.owner_list_removed_at||store.status!=="approved"){
+    const now=new Date().toISOString();
+    await db.batch([
+      db.prepare("UPDATE daga_accounts SET status='suspended',updated_at=? WHERE id=? AND role='store_owner'").bind(now,account.id),
+      db.prepare("UPDATE daga_auth_sessions SET revoked_at=? WHERE account_id=? AND revoked_at IS NULL").bind(now,account.id)
+    ]);
+    return json(env,{error:"company_access_revoked",message:"تم إيقاف الوصول لهذه الشركة. تواصل مع مالك التطبيق."},403);
+  }
   const session=await createSession(db,account.id);
   return json(env,{ok:true,account:{id:account.id,role:account.role,displayName:account.display_name,emailMasked:maskEmail(account.email)},sessionToken:session.token,expiresAt:session.expiresAt});
 }
