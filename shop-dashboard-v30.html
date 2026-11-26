@@ -178,7 +178,7 @@ function pruneDashboardBackups(){
  for(let i=0;i<localStorage.length;i++){
   const key=localStorage.key(i);if(!key||!key.startsWith(prefix))continue;
   const day=key.slice(prefix.length);
-  if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(day)||day<cutoff.toISOString().slice(0,10))remove.push(key);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(day)||day<cutoff.toISOString().slice(0,10))remove.push(key);
  }
  remove.forEach(key=>localStorage.removeItem(key));
 }
