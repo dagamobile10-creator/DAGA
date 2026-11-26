@@ -19,6 +19,9 @@ checks = {
     "LIVE DAGA passes linked-company metadata to the model": "linkedCompany:e.linkedCompany||null" in live and "treatment:e.treatment||null" in live,
 
     "LIVE confirmation accepts Egyptian Arabic without literal backslash-s": r"return /^(ايوه|اه|تمام|ماشي|موافق|اكد|اعتمد|خلاص|اتفضل|اوكي|ok|okay|yes|نفذ|نفذها)( +" in dashboard,
+
+    "read-only scenario handling runs before destructive delete intent": dashboard.index("const earlyScenarioAnswer=answerLiveAccountingScenario(text)") < dashboard.index("const deleteIntent="),
+    "failed LIVE confirmation clears stale pending approval": "dagaLivePendingOrder=null;dagaLivePendingDelete=null;dagaLivePendingClarification=null;" in dashboard,
     "LIVE scenario questions recognize plural delete and change verbs": "شيلنا|نشيل|حذفنا|الغينا" in dashboard and "زودنا|ضفنا|رفعنا|شحننا" in dashboard,
     "LIVE completed-operation questions consult the actual ledger": "آخر حركة مطابقة في سجل الداشبورد" in dashboard and "Array.isArray(ledger)" in dashboard,
     "dashboard label is dynamic and not a fixed company type": "اسم العمود والبند الظاهر للمستخدم قد يتغير" in live,
