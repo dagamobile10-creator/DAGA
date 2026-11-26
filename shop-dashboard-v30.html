@@ -874,7 +874,7 @@ function answerClarification(choice){
 function executeOrderCore(){
  dagaLastOrderSaved=false;
  if(!pendingOrder)return; const p=pendingOrder;
- const findEntry=(ci,name)=>cols[ci].entries.findIndex(e=>normAccountingName(e[0])===normAccountingName(name));
+ const findEntry=(ci,name,index=null)=>{const rows=cols[ci]?.entries||[];if(Number.isInteger(index)&&rows[index]&&normAccountingName(rows[index][0])===normAccountingName(name))return index;return rows.findIndex(e=>normAccountingName(e[0])===normAccountingName(name));};
  if(p.mode==='namedEntrySet'){
   const row=cols[p.ci]?.entries[p.index],money=findMoneyEntry();
   if(!row||row[0]!==p.entryName||num(row[1])!==p.oldAmount){alert('البند اتغير من وقت المراجعة. اعمل مراجعة جديدة.');pendingOrder=null;return}
@@ -890,7 +890,7 @@ function executeOrderCore(){
  const setEntry=(ci,idx,val)=>{if(idx>=0)cols[ci].entries[idx][1]=String(val)};
  const addSigned=(ci,label,delta)=>{const entries=cols[ci].entries;let i=entries.findIndex(e=>e[0]===label);if(i<0)entries.push([label,String(delta)]);else setEntry(ci,i,num(entries[i][1])+delta)};
  const addToNamed=(ci,name,delta)=>{const isBalance=columnRole(cols[ci])==='balance',label=isBalance?String(name||'').trim():name,agent=isBalance?canonicalServiceAgent(label):null;let i=agent?cols[ci].entries.findIndex(e=>entryRole(cols[ci],e)==='agent:'+agent||canonicalServiceAgent(e[0])===agent):findEntry(ci,label);if(i<0)cols[ci].entries.push([label,String(delta),agent?{role:'agent:'+agent,id:'agent-'+agent}:{}]);else setEntry(ci,i,num(cols[ci].entries[i][1])+delta)};
- const updateRows=(rows,delta)=>{let remaining=delta;for(const r of rows||[]){if(remaining<=0)break;const idx=findEntry(r.ci,r.name);if(idx<0)continue;const cur=num(cols[r.ci].entries[idx][1]),take=Math.min(cur,remaining);setEntry(r.ci,idx,Math.max(0,cur-take));remaining-=take;}return remaining;};
+ const updateRows=(rows,delta)=>{let remaining=delta;for(const r of rows||[]){if(remaining<=0)break;const idx=findEntry(r.ci,r.name,r.index);if(idx<0)continue;const cur=num(cols[r.ci].entries[idx][1]),take=Math.min(cur,remaining);setEntry(r.ci,idx,Math.max(0,cur-take));remaining-=take;}return remaining;};
  if(p.mode==='balanceOutsideReconcile'){
    const allRows=[...(p.balanceRows||[]),...(p.outsideRows||[])];
    for(const r of allRows){const row=cols[r.ci]?.entries.find(e=>e[0]===r.name);if(!row||num(row[1])!==r.amount){alert('بيانات حساب '+p.name+' اتغيرت من وقت المراجعة. اعمل مراجعة جديدة.');pendingOrder=null;return;}}
