@@ -1231,8 +1231,10 @@ window.addEventListener('message',function(event){
    }
    dagaLivePendingOrder=null;dagaLiveOrderSummary='';dagaLivePendingClarification=null;sendLiveOrderReply(event.source,id,reply,true);sendLiveDashboardSnapshot();
   }else{
+   // Clear stale approval state after any failed attempt; the user must review again.
+   dagaLivePendingOrder=null;dagaLivePendingDelete=null;dagaLivePendingClarification=null;
    dagaLiveOrderSummary='';
-   sendLiveOrderReply(event.source,id,'ما تمش التنفيذ. البيانات ممكن تكون اتغيرت أو فيه مشكلة في الحفظ. راجع الداشبورد؛ مفيش تأكيد بنجاح العملية.',true);
+   sendLiveOrderReply(event.source,id,'ما تمش التنفيذ. البيانات ممكن تكون اتغيرت أو فيه مشكلة في الحفظ. أعد طلب العملية لمراجعتها من جديد؛ مفيش تأكيد بنجاح العملية.',true);
   }
   return;
  }
@@ -1256,6 +1258,9 @@ window.addEventListener('message',function(event){
  if(dagaLiveOrderPending){
   sendLiveOrderReply(event.source,id,'لسه مستني تأكيد أو إلغاء العملية المعروضة. قول «أيوه نفّذ» أو «إلغاء».',true);return;
  }
+ // Read-only "what if / what happened" questions must be classified before delete/edit intents.
+ const earlyScenarioAnswer=answerLiveAccountingScenario(text);
+ if(earlyScenarioAnswer){sendLiveOrderReply(event.source,id,earlyScenarioAnswer,true);return;}
  const deleteIntent=/(احذف|حذف|شيل|اشطب|شطب|ازاله|ازيل|امسح|الغاء بند)/u.test(normAccountingName(text));
  if(deleteIntent){
   const q=normAccountingName(text);
