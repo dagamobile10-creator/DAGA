@@ -17,6 +17,10 @@ checks = {
     "hypothetical accounting questions are answered from the live dashboard": "function answerLiveAccountingScenario(text)" in dashboard and "answerLiveAccountingScenario(text)" in dashboard,
     "hypothetical answers are explicitly read-only": "ده تحليل افتراضي فقط؛ مفيش أي تعديل اتسجل." in dashboard,
     "LIVE DAGA passes linked-company metadata to the model": "linkedCompany:e.linkedCompany||null" in live and "treatment:e.treatment||null" in live,
+
+    "LIVE confirmation accepts Egyptian Arabic without literal backslash-s": r"return /^(ايوه|اه|تمام|ماشي|موافق|اكد|اعتمد|خلاص|اتفضل|اوكي|ok|okay|yes|نفذ|نفذها)(\\s+" in dashboard,
+    "LIVE scenario questions recognize plural delete and change verbs": "شيلنا|نشيل|حذفنا|الغينا" in dashboard and "زودنا|ضفنا|رفعنا|شحننا" in dashboard,
+    "LIVE completed-operation questions consult the actual ledger": "آخر حركة مطابقة في سجل الداشبورد" in dashboard and "Array.isArray(ledger)" in dashboard,
     "dashboard label is dynamic and not a fixed company type": "اسم العمود والبند الظاهر للمستخدم قد يتغير" in live,
     "worker identifies the context as current dashboard data": "سياق الشركة والداشبورد الحالي المرسل من الواجهة" in worker,
 }
