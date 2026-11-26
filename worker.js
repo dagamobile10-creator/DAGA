@@ -298,7 +298,7 @@ export default {
 
     if (url.pathname === "/chat" && request.method === "POST") {
       try {
-        const parsed = await readBoundedJson(request, 65536);
+        const parsed = await readBoundedJson(request, 32768);
         if (!parsed.ok) return json({ error: parsed.error }, parsed.status);
         const body = parsed.value;
         if (voiceIdentityRequired) {
@@ -323,10 +323,10 @@ export default {
         const userText = String(body?.text || "").trim();
         if (!userText) return json({ error: "text is required" }, 400);
         if (userText.length > 2000) return json({ error: "text_too_long", maxLength: 2000 }, 413);
-        const history = Array.isArray(body?.history) ? body.history.slice(-8).filter(item => item && ["user", "assistant"].includes(item.role) && typeof item.content === "string" && item.content.trim()).map(item => ({ role: item.role, content: item.content.trim().slice(0, 700) })) : [];
+        const history = Array.isArray(body?.history) ? body.history.slice(-8).filter(item => item && ["user", "assistant"].includes(item.role) && typeof item.content === "string" && item.content.trim()).map(item => ({ role: item.role, content: item.content.trim().slice(0, 500) })) : [];
         const conversation = [...history, { role: "user", content: userText }];
         const businessContext = typeof body?.businessContext === "string" ? body.businessContext.trim().slice(0, 14000) : "";
-        const memory = body?.memory && typeof body.memory === "object" ? JSON.stringify(body.memory).slice(0, 1000) : "";
+        const memory = body?.memory && typeof body.memory === "object" ? JSON.stringify(body.memory).slice(0, 800) : "";
 
         const verifiedIdentityContext = voiceAccount
           ? "\\n\\nهوية الحساب الموثقة من الخادم: " + JSON.stringify({ accountId: voiceAccount.id, publicId: voiceAccount.public_id || null, displayName: voiceAccount.display_name || null, role: voiceAccount.role, storeId: voiceAccount.store_id || null }) + ". استخدم هذه الهوية فقط عند الحاجة؛ لا تعتبرها دليلًا على بيانات مالية أو صلاحيات شركة غير مسترجعة من قاعدة البيانات."
