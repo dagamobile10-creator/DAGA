@@ -403,7 +403,7 @@ async function confirmManualEdit(){
  if(p.impact.delta!==0&&(!money||num(money.entry[1])!==p.moneyBefore)){pendingManualEdit=null;alert('الفلوس الأساسية اتغيرت من وقت المراجعة. راجع العملية من جديد.');render();return}
  if(p.impact.agentDelta&&getCardAgentBalance(p.impact.agentName).value!==p.agentBefore){pendingManualEdit=null;alert('رصيد المندوب اتغير من وقت المراجعة. راجع العملية من جديد.');render();return}
  const updatedMeta={...(p.old[2]||{})};if(!updatedMeta.role)updatedMeta.role=entryRole(cols[p.i],p.old);if(columnRole(cols[p.i])==='expenses'||isDailyMoneyColumn(p.i))updatedMeta.moneyPosted=true;
- const visibleOldName=String(p.oldDisplayName||p.old[2]?.adminLabel||p.old[0]);if(p.n!==visibleOldName){try{await saveCompanyLayoutLabel('entry:'+String(updatedMeta.id||''),p.n)}catch(error){alert(error.message||'تعذر حفظ اسم البند؛ لم يتم تنفيذ أي تغيير مالي.');return;}updatedMeta.adminLabel=p.n;}else if(p.old[2]?.adminLabel)updatedMeta.adminLabel=p.old[2].adminLabel;
+ const visibleOldName=String(p.oldDisplayName||p.old[2]?.adminLabel||p.old[0]);if(p.n!==visibleOldName){try{await saveCompanyLayoutLabel('entry:'+String(updatedMeta.id||''),p.n)}catch(error){alert(error.message||'تعذر حفظ اسم البند؛ لم يتم تنفيذ أي تغيير مالي.');return;}if(columnRole(cols[p.i])==='balance')renameLinkedBalanceName(p.old[0],p.n);updatedMeta.adminLabel=p.n;}else if(p.old[2]?.adminLabel)updatedMeta.adminLabel=p.old[2].adminLabel;
  if(p.impact.agentDelta){const a=applyCardAgentDelta(p.impact.agentName,p.impact.agentDelta,p.impact.agentLabel);if(!a.ok){alert(a.message);return}}
  if(p.impact.delta!==0)money.entry[1]=String(num(money.entry[1])+p.impact.delta);
  const storedEntryName=p.n===visibleOldName?p.old[0]:p.n;cols[p.i].entries[p.j]=[storedEntryName,String(p.newAmount),updatedMeta];
@@ -1279,6 +1279,10 @@ function getServiceAgentBalance(agent){
  const value=indexes.length?indexes.reduce((sum,x)=>sum+num(x.e[1]),0):0;
  return {column,index,entry,value,indexes};
 }
+function renameLinkedBalanceName(oldName,newName){
+ const oldKey=normAccountingName(oldName),cards=columnByRole('cards');if(!cards||!oldKey)return;
+ for(const entry of cards.entries){const meta=entry[2];if(meta&&typeof meta==='object'&&normAccountingName(meta.linkedCompany||'')===oldKey)meta.linkedCompany=String(newName||'').trim();}
+}
 function getCardAgentBalance(agent){
  const canonical=canonicalServiceAgent(agent);if(canonical)return getServiceAgentBalance(canonical);
  const label=String(agent||'').trim(),key=normAccountingName(label),column=columnByRole('balance');
@@ -1303,7 +1307,9 @@ function applyServiceAgentDelta(agent,delta,label){
  const after=state.value+delta;if(after<0)return {ok:false,message:'تعديل رصيد المندوب '+agent+' هيخلي رصيده بالسالب. راجع القيمة.'};
  if(state.index<0)state.column.entries.push([canonicalServiceAgent(agent),String(after),{role:'agent:'+canonicalServiceAgent(agent),id:'agent-'+canonicalServiceAgent(agent)}]);
  else{
-  state.entry[0]=canonicalServiceAgent(agent);state.entry[1]=String(after);
+  state.entry[1]=String(after);
+  if(!state.entry[2]||typeof state.entry[2]!=='object')state.entry[2]={};
+  state.entry[2].role='agent:'+canonicalServiceAgent(agent);
   (state.indexes||[]).slice(1).sort((a,b)=>b.i-a.i).forEach(x=>state.column.entries.splice(x.i,1));
  }
  return {ok:true,before:state.value,after};
