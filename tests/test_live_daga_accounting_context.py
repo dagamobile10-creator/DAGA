@@ -29,6 +29,9 @@ checks = {
     "failed LIVE confirmation clears stale pending approval": "dagaLivePendingOrder=null;dagaLivePendingDelete=null;dagaLivePendingClarification=null;" in dashboard,
     "LIVE scenario questions recognize plural delete and change verbs": "شيلنا|نشيل|حذفنا|الغينا" in dashboard and "زودنا|ضفنا|رفعنا|شحننا" in dashboard,
     "LIVE completed-operation questions consult the actual ledger": "آخر حركة مطابقة في سجل الداشبورد" in dashboard and "Array.isArray(ledger)" in dashboard,
+    "outside reconciliation stores exact row indices to avoid duplicate-name false conflicts": "existingRows:matching.map(r=>({ci:r.ci,index:r.ei,name:r.name,amount:r.amount}))" in dashboard and "findEntry(r.ci,r.name,r.index)" in dashboard,
+    "LIVE company session is retained when entitlement or company mapping needs attention": "e&&e.message==='authenticated_account_required'" in live and "تم تسجيل الدخول، لكن الحساب ليس مرتبطًا بشركة نشطة معتمدة" in live,
+    "owner login fields use explicit LTR input and prevent native form reload": "onsubmit=\"return false\"" in (root / "owner-console.html").read_text(encoding="utf-8") and "unicode-bidi:plaintext" in (root / "owner-console.html").read_text(encoding="utf-8"),
     "dashboard label is dynamic and not a fixed company type": "اسم العمود والبند الظاهر للمستخدم قد يتغير" in live,
     "worker identifies the context as current dashboard data": "سياق الشركة والداشبورد الحالي المرسل من الواجهة" in worker,
 }
