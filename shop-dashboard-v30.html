@@ -138,6 +138,26 @@ function ensureStableIdentities(){
 function columnByRole(role){return cols.find(c=>c.role===role)||null}
 function columnRole(col){return col&&col.role?col.role:inferColumnRole(col,cols.indexOf(col))}
 function entryRole(col,entry){return entry&&entry[2]&&entry[2].role?entry[2].role:inferEntryRole(col,entry)}
+async function loadCompanyDashboardLayout(storeId,token){
+ try{
+  const r=await fetch('/api/company/dashboard-layout?storeId='+encodeURIComponent(storeId),{headers:{Authorization:'Bearer '+token,'X-DAGA-Company-ID':storeId},cache:'no-store',credentials:'omit'});
+  const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'dashboard_layout_load_failed');
+  if(!d.layout||!Array.isArray(d.layout.columns)||!d.layout.columns.length)return;
+  const previous=cols.slice();
+  const next=d.layout.columns.filter(x=>x&&x.enabled!==false).map((column,index)=>{
+   const old=previous.find(x=>String(x.id||'')===String(column.id))||previous.find(x=>String(x.key||'')===String(column.key));
+   const oldEntries=old&&Array.isArray(old.entries)?old.entries:[];
+   const entries=(column.entries||[]).filter(x=>x&&x.enabled!==false).map((entry,j)=>{
+    const prior=oldEntries.find(x=>String(x[2]?.id||'')===String(entry.id))||oldEntries.find(x=>String(x[2]?.stableKey||'')===String(entry.key));
+    const meta=Object.assign({},prior&&prior[2]&&typeof prior[2]==='object'?prior[2]:{});
+    Object.assign(meta,{id:entry.id,stableKey:entry.key,role:entry.treatment==='asset'?'asset':entry.treatment==='other_company'?'other-company':entry.treatment==='service'?'card-agent:'+String(entry.linkedCompany||''):meta.role||'custom',treatment:entry.treatment,linkedCompany:entry.linkedCompany||''});
+    return [entry.name,prior?prior[1]:'0',meta];
+   });
+   return {id:column.id,key:column.key,name:column.name,adminLabel:column.name,role:column.role||old?.role||'custom',entries};
+  });
+  if(next.length){cols=next;ensureStableIdentities();render();persist();}
+ }catch(err){console.warn('company_dashboard_layout_unavailable',String(err&&err.message||err));}
+}
 async function loadCompanyLayoutLabels(storeId,token){
  try{
   const r=await fetch('/api/company/layout-labels?storeId='+encodeURIComponent(storeId),{headers:{Authorization:'Bearer '+token},cache:'no-store',credentials:'omit'});
@@ -1409,7 +1429,7 @@ async function bootAuthenticatedDashboard(token,selectedCompanyId){
   document.querySelectorAll('button[onclick="voiceDaga()"]').forEach(b=>{b.hidden=!smartAllowed;b.disabled=!smartAllowed;b.title=smartAllowed?'':'زر كلم ضجة متاح بعد تفعيل اشتراك DAGA للشركة.';b.setAttribute('aria-disabled',String(!smartAllowed));});
   document.querySelectorAll('button.liveBtn').forEach(b=>{b.hidden=!liveAllowed;b.disabled=!liveAllowed;b.title='LIVE DAGA متاحة؛ يلزم وجود رصيد حروف للتحدث.';b.setAttribute('aria-disabled',String(!liveAllowed));});
   document.querySelectorAll('button[onclick="showReports()"]').forEach(b=>{b.hidden=false;b.disabled=false;b.title=window.DAGA_AUTH_USER.historyEnabled?'':'تفاصيل الأيام السابقة متاحة بعد تفعيل اشتراك DAGA للشركة.';});
-  loadStoreData(company.id);migrateLegacyDailyAccounting();loadCompanyLayoutLabels(company.id,window.DAGA_SESSION_TOKEN);
+  loadStoreData(company.id);migrateLegacyDailyAccounting();loadCompanyDashboardLayout(company.id,window.DAGA_SESSION_TOKEN);loadCompanyLayoutLabels(company.id,window.DAGA_SESSION_TOKEN);
   const header=document.querySelector('header.top .row');
   if(header&&!document.getElementById('accountLogout')){const b=document.createElement('button');b.id='accountLogout';b.type='button';b.textContent='تسجيل الخروج';b.style.cssText='margin:0 10px;padding:8px 11px;border:1px solid #4a402c;border-radius:9px;background:#15120c;color:#d7ad57;font:inherit;font-size:12px;cursor:pointer';b.addEventListener('click',async()=>{b.disabled=true;try{await fetch('/api/company/auth/logout',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:'{}',cache:'no-store',credentials:'omit'});}finally{window.location.replace('/shop-access/');}});header.insertBefore(b,header.lastElementChild);}
   render();
