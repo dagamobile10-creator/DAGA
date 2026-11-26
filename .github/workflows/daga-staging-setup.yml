@@ -187,7 +187,9 @@ jobs:
               echo "- Missing GitHub Actions repository secrets: $missing_csv."
               echo "- Add the missing secrets under Settings → Secrets and variables → Actions, then rerun this workflow. Staging bootstrap uses the separate DAGA_STAGING_OWNER_BOOTSTRAP_TOKEN secret; it does not reuse the production bootstrap token."
               echo "- Optional voice secrets missing: ${voice_missing[*]:-none}."
-            echo "- Optional LiveAvatar credentials: API key ${LIVEAVATAR_API_KEY:+configured}${LIVEAVATAR_API_KEY:-not configured}; MH avatar ID ${LIVEAVATAR_AVATAR_ID:+configured}${LIVEAVATAR_AVATAR_ID:-not configured}."
+            if [ -n "${LIVEAVATAR_API_KEY:-}" ]; then liveavatar_key_state="configured"; else liveavatar_key_state="not configured"; fi
+            if [ -n "${LIVEAVATAR_AVATAR_ID:-}" ]; then liveavatar_id_state="configured"; else liveavatar_id_state="not configured"; fi
+            echo "- Optional LiveAvatar credentials: API key ${liveavatar_key_state}; MH avatar ID ${liveavatar_id_state}."
               echo "- Production Worker and main branch were not targeted."
             } >> "$GITHUB_STEP_SUMMARY"
             echo "auth_ready=false" >> "$GITHUB_OUTPUT"
