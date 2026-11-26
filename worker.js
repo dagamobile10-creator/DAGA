@@ -449,7 +449,9 @@ export default {
       // No word-specific phonetic substitutions or pronunciation exceptions.
       // TTS-only pronunciation hint: use گ to cue the hard Egyptian /g/ sound.
       // The visible/chat spelling remains «ضجه»; only the spoken text is phoneticized.
-      text = text.replace(/ضَجَّة|ضَجّة|ضجّة|ضجه/gu, "ضَگَّة").replace(/\s{2,}/g, " ").trim();
+      text = text.replace(/ضَجَّة|ضَجّة|ضجّة|ضجه/gu, "ضَگَّة");
+      // Normalize punctuation spacing and preserve deliberate pauses for Arabic TTS.
+      text = text.replace(/[ \\t]+([،؛.!؟])/gu, "$1").replace(/([،؛.!؟])(?=\\S)/gu, "$1 ").replace(/[ \\t]{2,}/g, " ").replace(/\\n{3,}/g, "\\n\\n").trim();
       text = arabicizeSpokenNumbers(text);
 
       let quota = null;
@@ -505,9 +507,9 @@ export default {
 
 
 function arabicizeSpokenNumbers(input) {
-  const ones = ["", "واحد", "اثنان", "ثلاثة", "أربعة", "خمسة", "ستة", "سبعة", "ثمانية", "تسعة"];
-  const teens = ["عشرة", "أحد عشر", "اثنا عشر", "ثلاثة عشر", "أربعة عشر", "خمسة عشر", "ستة عشر", "سبعة عشر", "ثمانية عشر", "تسعة عشر"];
-  const tens = ["", "", "عشرون", "ثلاثون", "أربعون", "خمسون", "ستون", "سبعون", "ثمانون", "تسعون"];
+  const ones = ["", "واحد", "اتنين", "تلاتة", "أربعة", "خمسة", "ستة", "سبعة", "تمانية", "تسعة"];
+  const teens = ["عشرة", "حداشر", "اتناشر", "تلتاشر", "اربعتاشر", "خمستاشر", "ستاشر", "سبعتاشر", "تمنتاشر", "تسعتاشر"];
+  const tens = ["", "", "عشرين", "تلاتين", "أربعين", "خمسين", "ستين", "سبعين", "تمانين", "تسعين"];
   const under100 = n => {
     if (n < 10) return ones[n];
     if (n < 20) return teens[n - 10];
@@ -517,20 +519,20 @@ function arabicizeSpokenNumbers(input) {
   const under1000 = n => {
     if (n < 100) return under100(n);
     const h = Math.floor(n / 100), r = n % 100;
-    const hw = ["", "مائة", "مائتان", "ثلاثمائة", "أربعمائة", "خمسمائة", "ستمائة", "سبعمائة", "ثمانمائة", "تسعمائة"][h];
+    const hw = ["", "مية", "ميتين", "تلتمية", "ربعمية", "خمسمية", "ستمية", "سبعمية", "تمنمية", "تسعمية"][h];
     return hw + (r ? " و" + under100(r) : "");
   };
   const groupWords = (n, scale) => {
     if (!n) return "";
     if (scale === 1000) {
       if (n === 1) return "ألف";
-      if (n === 2) return "ألفان";
+      if (n === 2) return "ألفين";
       if (n >= 3 && n <= 10) return under1000(n) + " آلاف";
       return under1000(n) + " ألف";
     }
     if (scale === 1000000) {
       if (n === 1) return "مليون";
-      if (n === 2) return "مليونان";
+      if (n === 2) return "مليونين";
       if (n >= 3 && n <= 10) return under1000(n) + " ملايين";
       return under1000(n) + " مليون";
     }
@@ -549,7 +551,9 @@ function arabicizeSpokenNumbers(input) {
     if (rest) parts.push(under1000(rest));
     return parts.join(" و");
   };
-  return String(input).replace(/(?<![\\w])([0-9٠-٩]{1,12})(?![\\w])/gu, match => {
+  let text = String(input);
+  text = text.replace(/(?<![0-9٠-٩])([0-9٠-٩]{1,3}(?:[,،٬][0-9٠-٩]{3})+)(?![0-9٠-٩])/gu, match => match.replace(/[,،٬]/g, ""));
+  return text.replace(/(?<![\\w])([0-9٠-٩]{1,12})(?![\\w])/gu, match => {
     const western = match.replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
     return toWords(western);
   });
