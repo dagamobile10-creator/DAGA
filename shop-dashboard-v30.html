@@ -743,7 +743,7 @@ function review(){
    const matching=outsideCols.flatMap(x=>x.c.entries.map((e,ei)=>({ci:x.i,ei,name:String(e[0]||''),amount:num(e[1])}))).filter(r=>normAccountingName(r.name)===normAccountingName(p.name));
    const target=matching.length?outsideCols.find(x=>x.i===matching[0].ci):(outsideCols.find(x=>x.c.entries.length===0)||outsideCols[0]);
    const existingTotal=matching.reduce((sum,r)=>sum+r.amount,0);
-   const order={...p,mode:'outsideAdd',targetIndex:target?.i,cardsIndex,existingRows:matching.map(r=>({ci:r.ci,name:r.name,amount:r.amount})),existingTotal,expectedAfter:existingTotal+p.amount};
+   const order={...p,mode:'outsideAdd',targetIndex:target?.i,cardsIndex,existingRows:matching.map(r=>({ci:r.ci,index:r.ei,name:r.name,amount:r.amount})),existingTotal,expectedAfter:existingTotal+p.amount};
    if(matching.length){
     pendingOrder=null;pendingClarification={type:'outsideAddDuplicate',order};
     out.innerHTML=`<div class="reconMini"><div>الاسم <b>${esc(p.name)}</b></div><div>الموجود في الخارج <b>${fmt(existingTotal)} جنيه</b></div><div>المبلغ الجديد <b>${fmt(p.amount)} جنيه</b></div></div><p class="small">الاسم موجود في الخارج. تحب تضيفه كبند مستقل ولا تدمجه مع الموجود؟</p><button class="primary" onclick="answerClarificationFromText('بند مستقل')">إضافة مستقلة</button><button onclick="answerClarificationFromText('ادمج على الموجود')">دمج مع الموجود</button><button onclick="answerClarificationFromText('إلغاء')">إلغاء</button>`;return;
@@ -930,7 +930,7 @@ function executeOrderCore(){
  }else if(p.mode==='outsideAddAndSettle'){
    const target=cols[p.targetIndex],money=findMoneyEntry();
    if(!target||columnRole(target)!=='expenses'){alert('مش لاقي عمود خارج مناسب.');return}
-   const currentRows=(p.existingRows||[]).map(r=>({r,idx:cols[r.ci]?.entries.findIndex(e=>normAccountingName(e[0])===normAccountingName(r.name))??-1}));
+   const currentRows=(p.existingRows||[]).map(r=>({r,idx:Number.isInteger(r.index)?r.index:(cols[r.ci]?.entries.findIndex(e=>normAccountingName(e[0])===normAccountingName(r.name))??-1)}));
    if(currentRows.some(x=>x.idx<0||num(cols[x.r.ci].entries[x.idx][1])!==x.r.amount)){alert('حساب الخارج اتغير من وقت المراجعة. راجع الأمر من جديد.');pendingOrder=null;return}
    const balanceNow=(p.balanceRows||[]).reduce((sum,r)=>{const idx=cols[r.ci]?.entries.findIndex(e=>normAccountingName(e[0])===normAccountingName(r.name))??-1;return sum+(idx>=0?num(cols[r.ci].entries[idx][1]):0)},0);
    if(balanceNow!==p.balanceBefore){alert('رصيد الشخص اتغير من وقت المراجعة. راجع التسوية من جديد.');pendingOrder=null;return}
@@ -957,7 +957,7 @@ function executeOrderCore(){
  }else if(p.mode==='outsideAdd'){
    const target=cols[p.targetIndex],money=findMoneyEntry();
    if(!target||columnRole(target)!=='expenses'){alert('مش لاقي عمود خارج مناسب.');return}
-   const currentRows=(p.existingRows||[]).map(r=>({r,idx:cols[r.ci]?.entries.findIndex(e=>normAccountingName(e[0])===normAccountingName(r.name))??-1}));
+   const currentRows=(p.existingRows||[]).map(r=>({r,idx:Number.isInteger(r.index)?r.index:(cols[r.ci]?.entries.findIndex(e=>normAccountingName(e[0])===normAccountingName(r.name))??-1)}));
    if(currentRows.some(x=>x.idx<0||num(cols[x.r.ci].entries[x.idx][1])!==x.r.amount)){alert('حساب الخارج اتغير من وقت المراجعة. راجع الأمر من جديد؛ مفيش أي تغيير اتسجل.');pendingOrder=null;return}
    if(!money||num(money.entry[1])<p.amount){alert('الفلوس الأساسية مش كفاية لتسجيل الحركة الجديدة. مفيش أي تغيير اتسجل.');pendingOrder=null;return}
    const mergedTotal=(p.existingTotal||0)+p.amount;
