@@ -345,6 +345,8 @@ jobs:
         run: python3 tests/test_knowledge_context.py
       - name: Run LIVE DAGA accounting context regression tests
         run: python3 tests/test_live_daga_accounting_context.py
+      - name: Verify optional LiveAvatar staging configuration
+        run: python3 tests/test_liveavatar_staging_config.py
       - name: Run company order and payment security tests
         run: python3 tests/test_company_orders.py
       - name: Apply D1 migrations to a fresh SQLite database
