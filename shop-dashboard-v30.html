@@ -268,11 +268,12 @@ function chooseCardEntryTreatment(treatment){
  const p=pendingCreate;if(!p)return;
  if(treatment==='independent'){prepareNewEntry(p.i,p.n,p.amount,'independent',null);return;}
  open(`<h2>البند تابع لمين؟</h2><p class="small">اختار المندوب اللي هيرتبط بالبند ${esc(p.n)}. أي زيادة فيه هتزود رصيد المندوب ده، وأي استهلاك هيرجع للفلوس الأساسية.</p>
- <button class="primary" onclick="prepareNewEntry(${p.i},'${esc(p.n)}',${p.amount},'service','فوري')">فوري</button>
- <button class="primary" onclick="prepareNewEntry(${p.i},'${esc(p.n)}',${p.amount},'service','سوبر بي')">سوبر بي</button>
- <button class="primary" onclick="prepareNewEntry(${p.i},'${esc(p.n)}',${p.amount},'service','ممكن')">ممكن</button>
+ <button class="primary" onclick="chooseCardServiceAgent('فوري')">فوري</button>
+ <button class="primary" onclick="chooseCardServiceAgent('سوبر بي')">سوبر بي</button>
+ <button class="primary" onclick="chooseCardServiceAgent('ممكن')">ممكن</button>
  <button onclick="chooseCardEntryTreatment('independent')">اختيار رصيد مستقل</button>`);
 }
+function chooseCardServiceAgent(agent){const p=pendingCreate;if(!p)return;prepareNewEntry(p.i,p.n,p.amount,'service',agent)}
 function prepareNewEntry(i,n,amount,treatment,agent){
  const money=findMoneyEntry();
  const entryMeta={role:treatment==='service'?'card-agent:'+agent:'custom',treatment,serviceAgent:agent||null,id:'entry-'+Date.now()+'-'+Math.random().toString(36).slice(2)};
