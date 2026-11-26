@@ -48,7 +48,7 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn("${DAGA_API_ORIGIN}/liveavatar/token", assistant)
         self.assertNotIn('id="dagaAuthPanel"', assistant)
         self.assertNotIn("/api/shop/auth/login", assistant)
-        self.assertNotIn("/api/shop/auth/me", assistant)
+        self.assertIn("fetch('/api/shop/auth/me'", assistant)  # Read-only LIVE DAGA balance lookup; auth is handed off by the dashboard.
         self.assertNotIn("/api/company/auth/login", assistant)
         self.assertIn('url.pathname === "/assistant"', worker)
         self.assertIn("smart_store_subscription_required", worker)
