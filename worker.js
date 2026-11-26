@@ -614,7 +614,7 @@ function normalizeArabicReply(value, userText = "") {
       .split(/(?<=[.!؟])\s+|\n+/u).filter(sentence => !/(الهاء|التاء المربوطة|التشكيل|مخارج الحروف)/u.test(sentence)).join(" ");
   }
   return reply
-    .replace(/\\*{1,3}|_{1,3}|~{1,2}|\x60{1,3}/gu, "")
+    .replace(/\*{1,3}|_{1,3}|~{1,2}|\x60{1,3}/gu, "")
     .replace(/أنا\s+هتساعدك/gu, "أنا هساعدك").replace(/أنا\s+هتجاوبك/gu, "أنا هجاوبك")
     .replace(/أنا\s+هترد عليك/gu, "أنا هرد عليك").replace(/هتجاوبك/gu, "هجاوبك")
     .replace(/هتساعدك/gu, "هساعدك").replace(/هترد عليك/gu, "هرد عليك")
