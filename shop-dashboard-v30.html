@@ -712,7 +712,7 @@ function review(){
    const currentBalance=serviceAgent?getServiceAgentBalance(serviceAgent).value:(cols[balanceIndex]?.entries||[]).filter(e=>normAccountingName(e[0])===normAccountingName(p.name)).reduce((sum,e)=>sum+num(e[1]),0);
    if(currentBalance>0){
     pendingOrder=null;pendingClarification={type:'balanceAddChoice',name:p.name,amount:p.amount,currentBalance,serviceAgent,balanceIndex,moneyBefore:money?num(money.entry[1]):null};
-    out.innerHTML=`<div class="reconMini"><div>الاسم <b>${esc(p.name)}</b></div><div>الرصيد الحالي قبل الأمر <b>${fmt(currentBalance)} جنيه</b></div><div>المبلغ اللي طلبته <b>${fmt(p.amount)} جنيه</b></div></div><p class="small">لقيت رصيدًا موجودًا بالفعل باسم ${esc(p.name)}. تقصد أضيف ${fmt(p.amount)} جنيه فوق الموجود فيبقى الإجمالي ${fmt(currentBalance+p.amount)} جنيه، ولا تقصد إن إجمالي الرصيد يبقى ${fmt(p.amount)} جنيه بدل ${fmt(currentBalance)}؟</p><button class="primary" onclick="answerClarificationFromText('أضف فوق الموجود')">أضف فوق الموجود</button><button onclick="answerClarificationFromText('خلي الإجمالي هو المبلغ الجديد')">خلي الإجمالي ${fmt(p.amount)}</button><button onclick="answerClarificationFromText('إلغاء')">إلغاء</button>`;return;
+    out.innerHTML=`<div class="reconMini"><div>الاسم <b>${esc(p.name)}</b></div><div>الرصيد الحالي قبل الأمر <b>${fmt(currentBalance)} جنيه</b></div><div>المبلغ المطلوب إضافته <b>${fmt(p.amount)} جنيه</b></div></div><p class="small">الاسم موجود بالفعل. تحب تسجل المبلغ كبند مستقل بنفس الاسم، ولا تدمجه على الرصيد الموجود؟</p><button class="primary" onclick="answerClarificationFromText('بند مستقل')">إضافة مستقلة</button><button onclick="answerClarificationFromText('ادمج على الموجود')">دمج مع الموجود</button><button onclick="answerClarificationFromText('إلغاء')">إلغاء</button>`;return;
    }
    const balanceOrder={...p,mode:'balanceAdd',balanceIndex,cardsIndex,serviceAgent,moneyDelta,moneyBefore:money?num(money.entry[1]):null,currentBalance};
    prepareBalanceAddWithOutside(balanceOrder,out);return;
@@ -752,13 +752,13 @@ function answerClarificationFromText(text){
   return;
  }
  if(pendingClarification?.type==='balanceAddChoice'){
-  const q=pendingClarification,yesAdd=/(اضف فوق الموجود|اضيف فوق الموجود|زود على الموجود|خليهم يزيدوا|ضيف المبلغ فوق)/.test(v),setTotal=/(خلي الاجمالي|الاجمالي يبقى|بدل الموجود|استبدل|خلي الرصيد|يبقى الرصيد|مش تضيف|بدل ما تزود)/.test(v);
+  const q=pendingClarification,makeSeparate=/(بند مستقل|اضافه مستقله|اضيفه لوحده|لوحده|منفصل)/.test(v),yesAdd=/(اضف فوق الموجود|اضيف فوق الموجود|زود على الموجود|خليهم يزيدوا|ضيف المبلغ فوق|ادمج على الموجود|دمج مع الموجود)/.test(v),setTotal=/(خلي الاجمالي|الاجمالي يبقى|بدل الموجود|استبدل|خلي الرصيد|يبقى الرصيد|مش تضيف|بدل ما تزود)/.test(v);
   if(/^(الغاء|الغي|وقف|الغى العملية)$/.test(v)){pendingClarification=null;pendingOrder=null;const box=document.getElementById('orderPreview');if(box)box.innerHTML='<p class="status">تم إلغاء الحركة. لم يتغير أي رصيد.</p>';return;}
-  if(!yesAdd&&!setTotal){const box=document.getElementById('orderPreview');if(box)box.innerHTML='<p class="small">تقصد أضيف المبلغ فوق الرصيد الحالي، ولا أخلي الإجمالي هو المبلغ الجديد؟ لم يتم تسجيل أي تغيير.</p><button class="primary" onclick="answerClarificationFromText(\'أضف فوق الموجود\')">أضف فوق الموجود</button><button onclick="answerClarificationFromText(\'خلي الإجمالي هو المبلغ الجديد\')">استبدل الإجمالي</button><button onclick="answerClarificationFromText(\'إلغاء\')">إلغاء</button>';return;}
-  const delta=yesAdd?q.amount:q.amount-q.currentBalance,after=q.currentBalance+delta,money=findMoneyEntry(),moneyDelta=q.serviceAgent?0:delta;
+  if(!yesAdd&&!setTotal&&!makeSeparate){const box=document.getElementById('orderPreview');if(box)box.innerHTML='<p class="small">تقصد أضيفه كبند مستقل، ولا أدمجه على الموجود؟ مفيش أي تغيير اتسجل.</p><button class="primary" onclick="answerClarificationFromText(\'بند مستقل\')">إضافة مستقلة</button><button onclick="answerClarificationFromText(\'ادمج على الموجود\')">دمج مع الموجود</button><button onclick="answerClarificationFromText(\'إلغاء\')">إلغاء</button>';return;}
+  const delta=makeSeparate||yesAdd?q.amount:q.amount-q.currentBalance,after=q.currentBalance+delta,money=findMoneyEntry(),moneyDelta=q.serviceAgent?0:delta;
   if(after<0){const box=document.getElementById('orderPreview');if(box)box.innerHTML='<p class="small">الإجمالي المطلوب لا يمكن أن يكون سالبًا. لم يتغير أي رصيد.</p>';return;}
   if(moneyDelta!==0&&(!money||num(money.entry[1])+moneyDelta<0)){const box=document.getElementById('orderPreview');if(box)box.innerHTML='<p class="small">التغيير هيخلي الفلوس الأساسية بالسالب أو بند الفلوس غير متاح. لم يتم تسجيل أي شيء.</p>';return;}
-  const balanceOrder={type:'balanceAdd',mode:'balanceAdd',name:q.name,amount:delta,balanceIndex:q.balanceIndex,cardsIndex:cols.findIndex(c=>columnRole(c)==='cards'),serviceAgent:q.serviceAgent,moneyDelta,moneyBefore:q.moneyBefore,currentBalance:q.currentBalance,balanceTarget:after,balanceChoice:yesAdd?'add':'set'};
+  const balanceOrder={type:'balanceAdd',mode:'balanceAdd',name:q.name,amount:delta,balanceIndex:q.balanceIndex,cardsIndex:cols.findIndex(c=>columnRole(c)==='cards'),serviceAgent:q.serviceAgent,moneyDelta,moneyBefore:q.moneyBefore,currentBalance:q.currentBalance,balanceTarget:after,balanceChoice:makeSeparate?'separate':yesAdd?'add':'set'};
   pendingClarification=null;
   prepareBalanceAddWithOutside(balanceOrder,document.getElementById('orderPreview'));
   return;
@@ -916,6 +916,7 @@ function executeOrderCore(){
    const agentName=normalizeServiceAgentLabel(p.name),serviceAgent=canonicalServiceAgent(agentName),money=findMoneyEntry();
    if((p.moneyDelta||0)!==0&&(!money||num(money.entry[1])!==p.moneyBefore)){alert('الفلوس الأساسية اتغيرت من وقت المراجعة. راجع الإضافة من جديد.');pendingOrder=null;return;}
    if(serviceAgent){const applied=applyServiceAgentDelta(serviceAgent,p.amount);if(!applied.ok){alert(applied.message);pendingOrder=null;return;}}
+   else if(p.balanceChoice==='separate')cols[p.balanceIndex].entries.push([agentName,String(p.amount),{role:'custom',id:'balance-'+Date.now()+'-'+Math.random().toString(36).slice(2)}]);
    else addToNamed(p.balanceIndex,agentName,p.amount);
    if(!serviceAgent&&money)money.entry[1]=String(num(money.entry[1])+p.amount);
    addLedger('إضافة رصيد في عمود الرصيد',agentName+' — '+fmt(p.amount)+' جنيه؛ تأثير الفلوس الأساسية '+fmt(p.moneyDelta||0)+' جنيه.',{column:'الرصيد',entryName:agentName,amount:p.amount,moneyDelta:p.moneyDelta||0,agentName:serviceAgent?agentName:null,agentDelta:serviceAgent?p.amount:0});
