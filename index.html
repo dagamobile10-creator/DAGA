@@ -13,7 +13,6 @@
 
 .name{font-size:18px;font-weight:800;margin-top:12px}.state{font-size:13px;color:var(--muted);margin-top:4px}.chat{padding:0 18px 15px}.bubble{border:1px solid #2a2925;background:#151514;border-radius:17px;padding:14px 16px;line-height:1.85;margin-top:9px}.me{background:#20190e;border-color:#4c3b1d}.who{font-size:11px;color:var(--muted);margin-bottom:4px}
 .controls{padding:16px 18px 14px;border-top:1px solid var(--line);display:flex;justify-content:center;gap:10px;flex-wrap:wrap}button{font:inherit;font-weight:800;border:1px solid #3a3935;background:#191918;color:#eee;border-radius:14px;padding:12px 16px;cursor:pointer}.primary{min-width:210px;background:linear-gradient(180deg,#e0b55c,#c99a3f);color:#080706;border-color:#f0c96e;box-shadow:0 8px 28px rgba(205,157,59,.22)}.primary.stop{background:#191918;color:#e56e6e;border-color:#5c3333}button:disabled{opacity:.45}
-.voiceRef{margin:0 18px 15px;padding:11px 13px;border:1px solid #3b3427;border-radius:14px;background:#17130c;color:#cdb47a;font-size:12px;display:flex;align-items:center;justify-content:space-between;gap:10px}.voiceRef button{padding:7px 10px;font-size:12px}
 .help{padding:0 20px 18px;text-align:center;color:var(--muted);font-size:11px;line-height:1.7}
 
 </style></head>
@@ -235,11 +234,12 @@ if(!r.ok||!data.reply){
  throw new Error(safeMessages[code]||('تعذر الرد من خدمة ضجّة: '+code));
 }
 if(!live&&!singleMode){replying=false;return}
-const finalHistory=[...nextHistory,{role:'assistant',content:data.reply}].slice(-100);
+const cleanReply=cleanAssistantReply(data.reply);
+const finalHistory=[...nextHistory,{role:'assistant',content:cleanReply}].slice(-100);
 saveDagaMemory(finalHistory.slice(-16));
 await saveServerMemory(longMemory,finalHistory);
-daga.textContent=data.reply;
-speak(data.reply);
+daga.textContent=cleanReply;
+speak(cleanReply);
 }catch(e){
 console.error(e);
 replying=false;
@@ -248,7 +248,15 @@ daga.textContent=(e.name==='TimeoutError'?'الرد اتأخر أكتر من ا�
 if(live&&!muted)setTimeout(()=>{if(live&&!muted&&!replying&&!rec)startListening()},450);
 }
 }
+function cleanAssistantReply(value){
+ let text=String(value||'');
+ text=text.replace(/<[^>]*>/gu,' ').replace(/\*{1,3}|_{1,3}|~{2,}/gu,'').replace(/^\s{0,3}#{1,6}\s*/gmu,'').replace(/^\s*[-•]+\s*/gmu,'');
+ text=text.replace(/[ \t]+([،؛.!؟])/gu,'$1').replace(/([،؛.!؟])(?=\S)/gu,'$1 ').replace(/[ \t\n]{2,}/gu,' ');
+ text=text.replace(/([\u0600-\u06FF]{2,})(?:\s+\1)+/giu,'$1');
+ return text.trim();
+}
 function speak(text){
+text=cleanAssistantReply(text);
 if(!requireLiveDaga()){replying=false;return;}
 const token=++speechToken;
 if(window.__dagaAudio){try{window.__dagaAudio.pause();window.__dagaAudio.currentTime=0}catch(e){}window.__dagaAudio=null}
@@ -263,30 +271,7 @@ a.play().catch(()=>{});
 .catch(e=>{if(token!==speechToken)return;console.error(e);replying=false;state.textContent='حصلت مشكلة في صوت ضجه';if(live&&!muted)setTimeout(startListening,100);else singleMode=false})
 }
 function stopVoice(){speechToken++;if('speechSynthesis'in window)speechSynthesis.cancel();if(window.__dagaAudio){const a=window.__dagaAudio;window.__dagaAudio=null;try{a.onended=null;a.onerror=null;a.pause();a.currentTime=0}catch(e){}}replying=false;if(!live)singleMode=false;state.textContent='تم إيقاف الصوت';if(live&&!muted)setTimeout(startListening,100);else status.textContent='جاهز'}
-async function playVoiceTest(){
-  if(!requireLiveDaga())return;
-  const testText="أهلاً بيك، أنا المساعد الصوتي لضَجَّة. خلّينا نجرّب الصوت المصري الطبيعي، ونسمع وضوح الكلام ومخارج الحروف.";
-  try{
-    stopVoice();
-    status.textContent='بيجهّز اختبار الصوت…';
-    state.textContent='جاري توليد الكلام بالصوت المتصل بالمساعد';
-    const r=await fetch(DAGA_API_BASE+'/tts',{
-      method:'POST',headers:dagaAuthHeaders({'Content-Type':'application/json'}),body:JSON.stringify({mode:'live_daga',text:testText})
-    });
-    if(!r.ok) throw new Error(await r.text());
-    const blob=await r.blob(),url=URL.createObjectURL(blob),a=new Audio(url);
-    window.__dagaAudio=a;
-    state.textContent='اختبار الصوت شغّال…';
-    status.textContent='اختبار الصوت';
-    a.onended=()=>{URL.revokeObjectURL(url);window.__dagaAudio=null;state.textContent='انتهى اختبار الصوت';status.textContent=live?'Live شغال':'جاهز'};
-    a.onerror=()=>{URL.revokeObjectURL(url);window.__dagaAudio=null;state.textContent='تعذّر تشغيل الاختبار';status.textContent='خطأ في الصوت'};
-    await a.play();
-  }catch(e){
-    state.textContent='فشل اختبار الصوت: '+(e.message||'خطأ غير معروف');
-    status.textContent='خطأ في الصوت';
-  }
-}
-function playReference(){audio.currentTime=0;audio.play()}
+
 </script>
 
 <script>
