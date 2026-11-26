@@ -89,7 +89,7 @@ function requestDashboardOrder(text){
  if(!dashboardWindow)return Promise.resolve({handled:false});
  const id='live-order-'+(++liveOrderRequestSeq)+'-'+Date.now();
  return new Promise(resolve=>{
-  const timer=setTimeout(()=>{liveOrderWaiters.delete(id);resolve({handled:false})},2500);
+  const timer=setTimeout(()=>{liveOrderWaiters.delete(id);resolve({handled:false})},15000);
   liveOrderWaiters.set(id,result=>{clearTimeout(timer);liveOrderWaiters.delete(id);resolve(result)});
   try{dashboardWindow.postMessage({type:'DAGA_LIVE_ORDER_REQUEST',id,text:String(text||'')},new URL(DAGA_API_BASE).origin);}
   catch(_){clearTimeout(timer);liveOrderWaiters.delete(id);resolve({handled:false});}
@@ -287,9 +287,13 @@ if(live&&!muted)setTimeout(()=>{if(live&&!muted&&!replying&&!rec)startListening(
 }
 function cleanAssistantReply(value){
  let text=String(value||'');
- text=text.replace(/<[^>]*>/gu,' ').replace(/\*{1,3}|_{1,3}|~{2,}/gu,'').replace(/^\s{0,3}#{1,6}\s*/gmu,'').replace(/^\s*[-•]+\s*/gmu,'');
- text=text.replace(/[ \t]+([،؛.!؟])/gu,'$1').replace(/([،؛.!؟])(?=\S)/gu,'$1 ').replace(/[ \t\n]{2,}/gu,' ');
- text=text.replace(/([\u0600-\u06FF]{2,})(?:\s+\1)+/giu,'$1');
+ text=text.replace(/<[^>]*>/gu,' ').replace(/\\*{1,3}|_{1,3}|~{2,}/gu,'').replace(/^\\s{0,3}#{1,6}\\s*/gmu,'').replace(/^\\s*[-•]+\\s*/gmu,'');
+ // Preserve line breaks as speech pauses; normalize punctuation and mixed-script boundaries only.
+ text=text.replace(/([\\u0600-\\u06FF])([A-Za-z0-9])/gu,'$1 $2').replace(/([A-Za-z0-9])([\\u0600-\\u06FF])/gu,'$1 $2');
+ text=text.replace(/[ \\t]+([،؛.!؟])/gu,'$1').replace(/([،؛.!؟])(?=\\S)/gu,'$1 ');
+ text=text.replace(/[ \\t]{2,}/gu,' ').replace(/ *\\n */gu,'\\n').replace(/\\n{3,}/gu,'\\n\\n');
+ text=text.replace(/سوبر\\s*باي/giu,'سوبر بي').replace(/سوبر\\s*بي/giu,'سوبر بي');
+ text=text.replace(/([،؛.!؟]){2,}/gu,'$1');
  return text.trim();
 }
 function speak(text){
