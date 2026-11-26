@@ -89,7 +89,7 @@ function requestDashboardOrder(text){
  if(!dashboardWindow)return Promise.resolve({handled:false});
  const id='live-order-'+(++liveOrderRequestSeq)+'-'+Date.now();
  return new Promise(resolve=>{
-  const timer=setTimeout(()=>{liveOrderWaiters.delete(id);resolve({handled:false})},2500);
+  const timer=setTimeout(()=>{liveOrderWaiters.delete(id);resolve({handled:false})},15000);
   liveOrderWaiters.set(id,result=>{clearTimeout(timer);liveOrderWaiters.delete(id);resolve(result)});
   try{dashboardWindow.postMessage({type:'DAGA_LIVE_ORDER_REQUEST',id,text:String(text||'')},new URL(DAGA_API_BASE).origin);}
   catch(_){clearTimeout(timer);liveOrderWaiters.delete(id);resolve({handled:false});}
@@ -202,33 +202,29 @@ function compactLiveDashboardSnapshot(userText){
  if(!source||!Array.isArray(source.columns))return {connected:false};
  const norm=v=>String(v||'').toLowerCase().replace(/[إأآ]/g,'ا').replace(/[ىي]/g,'ي').replace(/[ةه]/g,'ه').replace(/[ؤ]/g,'و').replace(/[ئ]/g,'ي').replace(/[^\u0600-\u06FFa-z0-9 ]/gu,' ').replace(/\s+/g,' ').trim();
  const q=norm(userText),words=q.split(' ').filter(v=>v.length>1);
- const aliases={
-  'فوري':['فوري','فورى','مندوب فوري','رصيد اساسي','الرصيد الاساسي','كارت وهوا','كارت هوا','كاش اوت'],
-  'ممكن':['ممكن','مندوب ممكن','ماكينة ممكن'],
-  'سوبر بي':['سوبر بي','سوبر باي','super pay','سوبر باى']
- };
  const isMoney=e=>e.role==='money'||/^(الفلوس|فلوس|الفلوس الاساسيه|فلوس المحل|النقديه)$/.test(norm(e.name));
+ const linkedTargets=new Set();
+ (source.columns||[]).filter(col=>col.role==='cards').forEach(col=>(col.entries||[]).forEach(e=>{
+  const label=norm([e.name,e.key].filter(Boolean).join(' '));
+  if(label&&words.some(word=>label.includes(word))){
+   const linked=norm(e.linkedCompany||e.serviceAgent||'');if(linked)linkedTargets.add(linked);
+  }
+ }));
  const columns=source.columns.map(col=>{
   const entries=Array.isArray(col.entries)?col.entries:[];
   const ranked=entries.map((e,index)=>{
-   const label=norm([e.name,e.key,e.serviceAgent,e.role].filter(Boolean).join(' '));
+   const label=norm([e.name,e.key,e.linkedCompany,e.serviceAgent,e.role,e.treatment].filter(Boolean).join(' '));
    let score=words.reduce((n,w)=>n+(label.includes(w)?2:0),0);
-   if(isMoney(e)&&/(فلوس|اساسي|نقد|كروت)/.test(q))score+=12;
-   for(const [agent,terms] of Object.entries(aliases)){
-    if(terms.some(term=>q.includes(norm(term)))&&norm(e.serviceAgent)===norm(agent))score+=15;
-    if(terms.some(term=>label.includes(norm(term))&&q.includes(norm(term))))score+=10;
-   }
-   if(e.role==='agent:فوري'&&/(فوري|رصيد اساسي|كارت|هوا|كاش اوت)/.test(q))score+=8;
-   if(e.role==='agent:ممكن'&&q.includes('ممكن'))score+=8;
-   if(e.role==='agent:سوبر بي'&&/(سوبر بي|سوبر باي)/.test(q))score+=8;
+   if(isMoney(e)&&/(فلوس|اساسي|نقد)/.test(q))score+=12;
+   if(col.role==='balance'&&linkedTargets.has(norm(e.name)))score+=18;
    return {e,index,score};
   });
-  const mandatory=ranked.filter(({e})=>isMoney(e)||(e.role==='agent:فوري'&&/(فوري|رصيد اساسي|كارت|هوا|كاش اوت)/.test(q))||(e.role==='agent:ممكن'&&q.includes('ممكن'))||(e.role==='agent:سوبر بي'&&/(سوبر بي|سوبر باي)/.test(q)));
+  const mandatory=ranked.filter(({e})=>isMoney(e)||(col.role==='balance'&&linkedTargets.has(norm(e.name))));
   const chosen=new Map(mandatory.map(x=>[x.index,x]));
   ranked.filter(x=>x.score>0).sort((a,b)=>b.score-a.score||a.index-b.index).slice(0,10).forEach(x=>chosen.set(x.index,x));
   const selected=[...chosen.values()].sort((a,b)=>a.index-b.index).slice(0,14);
   return {role:col.role,name:col.name,label:col.label,total:col.total,entries:selected.map(({e})=>({
-   name:e.name,amount:e.amount,role:e.role,serviceAgent:e.serviceAgent||null,
+   id:e.id||null,name:e.name,amount:e.amount,role:e.role,treatment:e.treatment||null,linkedCompany:e.linkedCompany||null,serviceAgent:e.serviceAgent||null,
    increaseImpact:{moneyDelta:e.increaseImpact?.moneyDelta||0,agentDelta:e.increaseImpact?.agentDelta||0,agentName:e.increaseImpact?.agentName||null,description:e.increaseImpact?.description||''},
    decreaseImpact:{moneyDelta:e.decreaseImpact?.moneyDelta||0,agentDelta:e.decreaseImpact?.agentDelta||0,agentName:e.decreaseImpact?.agentName||null,description:e.decreaseImpact?.description||''}
   }))};
@@ -258,7 +254,7 @@ body:JSON.stringify({
  text:spokenText,
  history:workingHistory.slice(-6).map(item=>({role:item.role,content:String(item.content||'').slice(-500)})),
  memory:longMemory,
- businessContext:"مساعد ذكي بالمصري لمحل إكسسوارات موبايل. افهم الأمر من المعنى والسياق والبيانات الحية، ولا تعتمد على اسم الخدمة وحده لتحديد المحاسبة. مصدر الحقيقة هو نوع البند المحفوظ في إعدادات عمود الكروت: أصل أو شركة أخرى أو عادي. عند زيادة بند نوعه أصل في الكروت، اخصم نفس الزيادة من الفلوس الأساسية؛ وعند تقليل الأصل أو حذفه، أعد نفس القيمة إلى الفلوس الأساسية. عند تغيير بند نوعه شركة أخرى، انعكس بنفس قيمة واتجاه التغيير على حساب الرصيد المرتبط باسم المندوب أو الشركة؛ وعند حذف البند سوِّ الحساب المرتبط بعكس أثره، ولا تخلط تسوية الشركة الأخرى بتسوية الأصول. البند العادي لا تفترض له تسوية تلقائية. في عمود الرصيد، التغيير العادي ينعكس على نفس الحساب؛ وفي أعمدة الخارج، المصروف يقلل الفلوس الأساسية. لا تستخدم قواعد قديمة مبنية على أسماء فوري أو ممكن أو سوبر باي إذا خالفت نوع البند أو تأثير المعاينة الحالي. قبل أي تنفيذ، اقرأ increaseImpact وdecreaseImpact الفعليين من لقطة الداشبورد، وبيّن الحساب الذي سيتغير والحساب الذي سيظل ثابتًا، واعرض معاينة واضحة ثم انتظر تأكيد المستخدم. اللقطة للقراءة فقط ولا تنفذ منها سؤال ماذا لو. لا تخترع أرصدة أو أسماء أو معاملات، ولا تدّع تنفيذ تعديل لم يحدث. لا تسأل عن اسم شخص لم يذكره المستخدم؛ وإذا كان نوع البند أو الحساب المرتبط غير واضح وكان سيغير النتيجة، اسأل سؤالًا واحدًا فقط. بيانات الداشبورد الحالية: "+JSON.stringify(compactLiveDashboardSnapshot(spokenText))
+ businessContext:"أنت مساعد ذكي بالمصري لإدارة الشركة الحالية، وليس لنشاط ثابت. لا تفترض أن الشركة محل موبايلات أو مطعم أو تجارة؛ استنتج النشاط وأسماء الأعمدة والبنود من لقطة الداشبورد الحالية فقط. اسم العمود والبند الظاهر للمستخدم قد يتغير، لكن role وid وtreatment والربط الداخلي هي هوية الوظيفة المحاسبية. مصدر الحقيقة في حساب الأثر هو increaseImpact وdecreaseImpact المحسوبان من نفس دالة الداشبورد، وليس تخمين الاسم. في عمود الكروت: إذا كان البند أصلًا، زيادته تخصم من الفلوس الأساسية ونقصه أو حذفه يزيدها بنفس الفرق. إذا كان البند شركة أخرى أو خدمة مرتبطة بحساب في عمود الرصيد، زيادته تزيد الحساب المرتبط في عمود الرصيد بنفس المبلغ من غير تغيير الفلوس الأساسية وقت الشحن؛ نقصه أو استهلاكه يزيد الفلوس الأساسية بنفس المبلغ ولا يخصم من رصيد المندوب. في عمود الرصيد: زيادة رصيد المندوب تسجل في حسابه فقط، أما نقصه أو حذفه فيقلل الفلوس الأساسية بنفس المبلغ. البنود العادية في الرصيد تتبع الأثر المحسوب في الداشبورد. أعمدة الخارج والمصروفات تؤثر عكسيًا على الفلوس الأساسية، والكاش والإكسسوار يتبعان قواعد الترحيل اليومية المسجلة. لا تستخدم أسماء ثابتة مثل فوري أو ممكن أو سوبر بي لتحديد وظيفة أي بند؛ استخدم الاسم الحالي وrole والربط المحفوظ في هذا الداشبورد. عند سؤال ماذا لو، احسب الفرق من القيمة الحالية، واذكر الحساب المتأثر والرصيد قبل وبعد، ووضح أن السؤال افتراضي ولا يسجل حركة. عند أمر تنفيذ، اعرض معاينة دقيقة بالعمود والبند والمبلغ والأثر قبل التأكيد الصريح؛ لا تنفذ من لقطة القراءة فقط. لا تخترع أرصدة أو أسماء أو معاملات، ولا تدّع تنفيذ تعديل لم يحدث. إذا كان البند موجودًا في أكثر من عمود ولا يمكن تحديده من الكلام، اسأل سؤال توضيح واحدًا. بيانات الشركة والداشبورد الحالية: "+JSON.stringify(compactLiveDashboardSnapshot(spokenText))
 })
 });
 const data=await r.json().catch(()=>({}));
@@ -291,9 +287,13 @@ if(live&&!muted)setTimeout(()=>{if(live&&!muted&&!replying&&!rec)startListening(
 }
 function cleanAssistantReply(value){
  let text=String(value||'');
- text=text.replace(/<[^>]*>/gu,' ').replace(/\*{1,3}|_{1,3}|~{2,}/gu,'').replace(/^\s{0,3}#{1,6}\s*/gmu,'').replace(/^\s*[-•]+\s*/gmu,'');
- text=text.replace(/[ \t]+([،؛.!؟])/gu,'$1').replace(/([،؛.!؟])(?=\S)/gu,'$1 ').replace(/[ \t\n]{2,}/gu,' ');
- text=text.replace(/([\u0600-\u06FF]{2,})(?:\s+\1)+/giu,'$1');
+ text=text.replace(/<[^>]*>/gu,' ').replace(/\\*{1,3}|_{1,3}|~{2,}/gu,'').replace(/^\\s{0,3}#{1,6}\\s*/gmu,'').replace(/^\\s*[-•]+\\s*/gmu,'');
+ // Preserve line breaks as speech pauses; normalize punctuation and mixed-script boundaries only.
+ text=text.replace(/([\\u0600-\\u06FF])([A-Za-z0-9])/gu,'$1 $2').replace(/([A-Za-z0-9])([\\u0600-\\u06FF])/gu,'$1 $2');
+ text=text.replace(/[ \\t]+([،؛.!؟])/gu,'$1').replace(/([،؛.!؟])(?=\\S)/gu,'$1 ');
+ text=text.replace(/[ \\t]{2,}/gu,' ').replace(/ *\\n */gu,'\\n').replace(/\\n{3,}/gu,'\\n\\n');
+ text=text.replace(/سوبر\\s*باي/giu,'سوبر بي').replace(/سوبر\\s*بي/giu,'سوبر بي');
+ text=text.replace(/([،؛.!؟]){2,}/gu,'$1');
  return text.trim();
 }
 function speak(text){
@@ -330,7 +330,7 @@ function stopVoice(){speechToken++;if('speechSynthesis'in window)speechSynthesis
  }
  function messageFor(error){const map={company_login_not_configured:'تسجيل الدخول مش متجهز على الخادم.',company_account_password_setup_required:'الحساب محتاج إنشاء كلمة مرور من بوابة الشركة أولًا.',invalid_credentials:'البريد الإلكتروني أو كلمة المرور غير صحيحة.',rate_limited:'محاولات كتير؛ استنى شوية وجرب تاني.',authenticated_account_required:'الجلسة انتهت أو محتاجة تسجيل دخول.'};return map[error]||('تعذر إكمال العملية: '+error)}
  function busy(button,fn){button.disabled=true;return fn().catch(e=>{state.textContent=messageFor(e.message);state.style.color='var(--red)' }).finally(()=>button.disabled=false)}
- async function refreshIdentity(){liveDagaEligible=false;shell.style.display='none';let token='';try{token=sessionStorage.getItem('daga_account_session_v1')||''}catch(e){}if(!token){state.textContent='سجّل دخول بحساب الشركة لتفعيل LIVE DAGA';state.style.color='var(--muted)';logout.style.display='none';return}try{const data=await authApi('/api/company/auth/me',undefined,'GET',true);const companyId=sessionStorage.getItem('daga_company_id_v1')||'';const companies=data.companies||[];const company=companies.find(c=>c.id===companyId)||companies[0];if(!company?.id)throw new Error('company_not_found');sessionStorage.setItem('daga_company_id_v1',company.id);liveDagaEligible=company.smartAssistantEnabled===true&&Number(company.liveWordsRemaining||0)>0&&company.liveDagaEnabled===true;shell.style.display=liveDagaEligible?'':'none';state.textContent=liveDagaEligible?('تم ربط الشركة — رصيدك '+Number(company.liveWordsRemaining||0)+' حرف'):company.smartAssistantEnabled!==true?'LIVE DAGA متاحة للاشتراك الذكي المؤكد والمدفوع فقط.':'رصيد الحروف صفر؛ اشحن رصيدك لتفعيل LIVE DAGA';state.style.color=liveDagaEligible?'var(--green)':'var(--red)';logout.style.display='inline-block';$('dagaAuthFields').style.display='none';send.style.display='none'}catch(e){try{sessionStorage.removeItem('daga_account_session_v1');sessionStorage.removeItem('daga_company_id_v1')}catch(_){}state.textContent='الجلسة غير صالحة؛ سجّل الدخول من جديد';state.style.color='var(--red)';logout.style.display='none'}}
+ async function refreshIdentity(){liveDagaEligible=false;shell.style.display='none';let token='';try{token=sessionStorage.getItem('daga_account_session_v1')||''}catch(e){}if(!token){state.textContent='سجّل دخول بحساب الشركة لتفعيل LIVE DAGA';state.style.color='var(--muted)';logout.style.display='none';return}try{const data=await authApi('/api/company/auth/me',undefined,'GET',true);const companyId=sessionStorage.getItem('daga_company_id_v1')||'';const companies=data.companies||[];const company=companies.find(c=>c.id===companyId)||companies[0];if(!company?.id)throw new Error('company_not_found');sessionStorage.setItem('daga_company_id_v1',company.id);liveDagaEligible=company.smartAssistantEnabled===true&&Number(company.liveWordsRemaining||0)>0&&company.liveDagaEnabled===true;shell.style.display=liveDagaEligible?'':'none';state.textContent=liveDagaEligible?('تم ربط الشركة — رصيدك '+Number(company.liveWordsRemaining||0)+' حرف'):company.smartAssistantEnabled!==true?'LIVE DAGA متاحة للاشتراك الذكي المؤكد والمدفوع فقط.':'رصيد الحروف صفر؛ اشحن رصيدك لتفعيل LIVE DAGA';state.style.color=liveDagaEligible?'var(--green)':'var(--red)';logout.style.display='inline-block';$('dagaAuthFields').style.display='none';send.style.display='none'}catch(e){if(e&&e.message==='authenticated_account_required'){try{sessionStorage.removeItem('daga_account_session_v1');sessionStorage.removeItem('daga_company_id_v1')}catch(_){}}state.textContent=e&&e.message==='company_not_found'?'تم تسجيل الدخول، لكن الحساب ليس مرتبطًا بشركة نشطة معتمدة. راجع بوابة الشركة.':messageFor(e&&e.message||'تعذر التحقق من الحساب');state.style.color='var(--red)';logout.style.display='inline-block';$('dagaAuthFields').style.display='grid';send.style.display='inline-block'}}
  if(new URLSearchParams(location.search).get('api')==='staging' && (window.parent!==window||window.opener)){
   const stagingOrigin='https://daga-app-staging.dagamobile10.workers.dev';
   window.addEventListener('message',async event=>{
