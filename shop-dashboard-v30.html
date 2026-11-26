@@ -271,8 +271,12 @@ let pendingCreate=null;
 function saveNewEntry(i){
  const n=document.getElementById('n').value.trim(),a=document.getElementById('a').value.trim();
  if(!n||a===''||num(a)<0)return alert('اكتب الاسم ومبلغًا صحيحًا');
- const amount=num(a),money=findMoneyEntry();
- if(columnRole(cols[i])==='cards'&&!(money&&normAccountingName(money.entry[0])===normAccountingName(n))&&!/^(الفلوس|فلوس|الفلوس الاساسيه|الفلوس الموجوده|فلوس المحل|فلوس الخزنه|فلوس الدرج|النقديه|النقد|فلوس الكروت)$/.test(normAccountingName(n))){
+ const amount=num(a),money=findMoneyEntry(),role=columnRole(cols[i]);
+ if(role==='balance'||role==='expenses'){
+  const matches=cols[i].entries.map((e,j)=>({e,j})).filter(x=>normAccountingName(x.e[0])===normAccountingName(n));
+  if(matches.length){pendingCreate={i,n,amount,requestedAt:new Date().toISOString(),duplicateMatches:matches.map(x=>x.j)};open(`<h2>الاسم موجود بالفعل</h2><p class="small">لقيت ${matches.length} بند باسم <b>${esc(n)}</b>. تحب الإضافة تبقى بند مستقل ولا تندمج مع الموجود؟</p><button class="primary" onclick="confirmDuplicateManualAdd('separate')">إضافة مستقلة</button><button onclick="confirmDuplicateManualAdd('merge')">دمج مع الموجود</button><button onclick="pendingCreate=null;closeModal()">إلغاء</button>`);return;}
+ }
+ if(role==='cards'&&!(money&&normAccountingName(money.entry[0])===normAccountingName(n))&&!/^(الفلوس|فلوس|الفلوس الاساسيه|الفلوس الموجوده|فلوس المحل|فلوس الخزنه|فلوس الدرج|النقديه|النقد|فلوس الكروت)$/.test(normAccountingName(n))){
   pendingCreate={i,n,amount,requestedAt:new Date().toISOString()};
   const knownAgent=serviceAgentForCardEntry(n);
   if(knownAgent){prepareNewEntry(i,n,amount,'service',knownAgent);return;}
@@ -285,6 +289,13 @@ function saveNewEntry(i){
   return;
  }
  prepareNewEntry(i,n,amount,'asset',null);
+}
+function confirmDuplicateManualAdd(mode){
+ const p=pendingCreate;if(!p||!Array.isArray(p.duplicateMatches))return;
+ if(!['separate','merge'].includes(mode))return;
+ const i=p.i,n=p.n,amount=p.amount,target=mode==='merge'?p.duplicateMatches[0]:null;
+ pendingCreate={i,n,amount,requestedAt:p.requestedAt,mergeTarget:target,duplicateMode:mode};
+ prepareNewEntry(i,n,amount,'standard',null);
 }
 function chooseCardEntryTreatment(treatment){
  const p=pendingCreate;if(!p)return;
@@ -315,7 +326,7 @@ function confirmCreateEntry(){
  if(p.impact.agentDelta&&getCardAgentBalance(p.impact.agentName).value!==p.agentBefore){pendingCreate=null;alert('رصيد المندوب اتغير من وقت المراجعة. راجع الإضافة من جديد.');render();return}
  if(p.impact.agentDelta){const a=applyCardAgentDelta(p.impact.agentName,p.impact.agentDelta,p.impact.agentLabel);if(!a.ok){alert(a.message);return}}
  if(p.impact.delta!==0)money.entry[1]=String(num(money.entry[1])+p.impact.delta);
- const meta={...(p.entryMeta||{}),id:p.entryMeta?.id||'entry-'+Date.now()+'-'+Math.random().toString(36).slice(2)};if(!meta.role)meta.role=columnRole(cols[p.i])==='cards'&&serviceAgentForCardEntry(p.n)?'card-agent:'+serviceAgentForCardEntry(p.n):columnRole(cols[p.i])==='balance'&&canonicalServiceAgent(p.n)?'agent:'+canonicalServiceAgent(p.n):'custom';const created=[p.n,String(p.amount),meta];if(isDailyMoneyColumn(p.i)||columnRole(cols[p.i])==='expenses')created[2]={...created[2],moneyPosted:true};cols[p.i].entries.push(created);
+ const meta={...(p.entryMeta||{}),id:p.entryMeta?.id||'entry-'+Date.now()+'-'+Math.random().toString(36).slice(2)};if(!meta.role)meta.role=columnRole(cols[p.i])==='cards'&&serviceAgentForCardEntry(p.n)?'card-agent:'+serviceAgentForCardEntry(p.n):columnRole(cols[p.i])==='balance'&&canonicalServiceAgent(p.n)?'agent:'+canonicalServiceAgent(p.n):'custom';const created=[p.n,String(p.amount),meta];if(isDailyMoneyColumn(p.i)||columnRole(cols[p.i])==='expenses')created[2]={...created[2],moneyPosted:true};if(Number.isInteger(p.mergeTarget)){const target=cols[p.i].entries[p.mergeTarget];if(!target){alert('البند الموجود اتغير. راجع الإضافة من جديد.');return;}target[1]=String(num(target[1])+p.amount);}else cols[p.i].entries.push(created);
  addLedger('إضافة بند بعد مراجعة',p.n+' — '+fmt(p.amount)+' جنيه في '+cols[p.i].name+'؛ تأثير الفلوس '+fmt(p.impact.delta)+' جنيه'+(p.impact.agentName?'؛ رصيد '+p.impact.agentName+' زاد '+fmt(p.impact.agentDelta)+' جنيه':''),{column:cols[p.i].name,entryName:p.n,oldValue:null,newValue:p.amount,moneyDelta:p.impact.delta,agentName:p.impact.agentName||null,agentDelta:p.impact.agentDelta||0});
  pendingCreate=null;persist();closeModal();render();open('<h2>تمت الإضافة</h2><p class="status">تم حفظ البند بعد التأكيد.</p><button class="primary" onclick="closeModal()">تمام</button>');
 }
