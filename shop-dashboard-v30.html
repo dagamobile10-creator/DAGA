@@ -365,7 +365,7 @@ function parseOrder(t){
  const cardsForDelta=columnByRole('cards');
  const serviceRows=(cardsForDelta?.entries||[]).map((e,i)=>({name:String(e[0]||''),index:i,amount:num(e[1]),agent:(entryRole(cardsForDelta,e).startsWith('card-agent:')?entryRole(cardsForDelta,e).slice(11):serviceAgentForCardEntry(e[0])),normalized:norm(e[0])})).filter(e=>e.agent&&serviceCardEntryMentioned(cleaned,e.name));
  if(serviceRows.length){serviceRows.sort((a,b)=>b.normalized.length-a.normalized.length);const best=serviceRows[0];
-  const subtractIntent=/(اخصم|خصم|انقص|نقص|اسحب|استهلك)/.test(cleaned),addServiceIntent=/(زود|زيد|ضيف|اضيف|ارفع|حط|سجل|اكتب|دخل)/.test(cleaned);
+  const subtractIntent=/(اخصم|خصم|انقص|نقص|اسحب|استهلك|شيل|شل|نزل|اطرح|قلل|قل)/.test(cleaned),addServiceIntent=/(زود|زيد|ضيف|اضيف|ارفع|حط|سجل|اكتب|دخل)/.test(cleaned);
   if(subtractIntent||addServiceIntent){const delta=subtractIntent?-amount:amount,newAmount=best.amount+delta;
    if(newAmount<0)return {ambiguous:'رصيد '+best.name+' الحالي '+fmt(best.amount)+' جنيه، ومش ممكن نخصم '+fmt(amount)+' جنيه منه. لم يتم تنفيذ أي تغيير.'};
    return {type:'namedEntrySet',column:'الكروت',entryName:best.name,index:best.index,oldAmount:best.amount,newAmount,amount,raw,serviceAgent:best.agent};
@@ -921,17 +921,17 @@ function sendLiveDashboardSnapshot(){
  const snapshot={schemaVersion:2,updatedAt:new Date().toISOString(),source:'DAGA Dashboard V30',readOnly:true,
   columns:(Array.isArray(cols)?cols:[]).map((c,index)=>({index,role:columnRole(c),name:String(c.name||''),label:String(c.adminLabel||c.name||''),total:(Array.isArray(c.entries)?c.entries:[]).reduce((sum,e)=>sum+(Number(String(e[1]??0).replace(/[^0-9.-]/g,''))||0),0),
    entries:(Array.isArray(c.entries)?c.entries:[]).map((e,entryIndex)=>({entryIndex,name:String(e[2]?.adminLabel||e[0]||''),key:normAccountingName(e[0]||''),amount:Number(String(e[1]??0).replace(/[^0-9.-]/g,''))||0,role:String(e[2]?.role||''),moneyPosted:e[2]?.moneyPosted===true}))})),
-  totals:{balance:0,expenses:0,cards:0,cash:0,accessory:0}};
+  totals:{balance:0,expenses:0,cards:0,cash:0,accessory:0},recentLedger:(Array.isArray(ledger)?ledger.slice(0,20):[]).map(x=>({at:x.at||null,action:String(x.action||''),details:String(x.details||''),column:String(x.column||''),entryName:String(x.entryName||''),amount:Number(x.amount||0),moneyDelta:Number(x.moneyDelta||0)}))};
  snapshot.columns.forEach(c=>{if(Object.prototype.hasOwnProperty.call(snapshot.totals,c.role))snapshot.totals[c.role]+=c.total;});
  try{dagaLiveWindow.postMessage({type:'DAGA_DASHBOARD_SNAPSHOT',snapshot},'https://daga-app-staging.dagamobile10.workers.dev');}catch(_){}
 }
 function liveOrderConfirmation(text){
  const n=normAccountingName(text);
- return /^(ايوه|اه|تمام|ماشي|نفذ|نفذها|موافق|اكد|اعتمد|خلاص|اتفضل|اوكي|ok|yes)(\s+(نفذ|نفذها|اعتمد|خلاص|تمام|يلا))*$/.test(n);
+ return /^(ايوه|اه|تمام|ماشي|موافق|اكد|اعتمد|خلاص|اتفضل|اوكي|ok|okay|yes|نفذ|نفذها)(\\s+(يا\\s*)?(صاحبي|حبيبي|عم|يلا|نفذ|نفذها|اعتمد|تمام|خلاص|اتفضل|ماشي|موافق|كمل|توكل))*$/.test(n);
 }
 function liveOrderCancellation(text){
  const n=normAccountingName(text);
- return /^(لا|لاا|الغ|الغاء|مش موافق|بلاش|وقف|cancel|no)$/.test(n);
+ return /^(لا|لاا|الغ|الغاء|مش موافق|مش عايز|مش عاوز|بلاش|وقف|استنى|استني|cancel|no)(\\s+(يا\\s*)?(صاحبي|حبيبي|عم))?$/.test(n);
 }
 function describeLiveOrder(p){
  const money=findMoneyEntry(),current=money?num(money.entry[1]):0;
