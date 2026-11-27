@@ -501,8 +501,9 @@ function saveEntry(i,j){
  const n=document.getElementById('n').value.trim(),a=document.getElementById('a').value.trim();
  if(!n||a===''||num(a)<0)return alert('اكتب الاسم ومبلغًا صحيحًا');
  const old=[...cols[i].entries[j]],oldDisplayName=String((old[2]&&old[2].adminLabel)||old[0]),newAmount=num(a),delta=newAmount-num(old[1]);
- const impact=moneyImpactForManualEdit(i,old[0],delta,old),money=findMoneyEntry();
- if(impact.delta!==0&&!money)return alert('مش لاقي بند «فلوس» داخل عمود الكروت، فمش هقدر أنفّذ تعديل مرتبط بأمان. لم يتغير أي رقم.');
+ const isPrimaryCashEntry=columnRole(cols[i])==='cards'&&/^(الفلوس|فلوس|الفلوس الاساسيه|الفلوس الموجوده|فلوس المحل|فلوس الخزنه|فلوس الدرج|النقديه|النقد|فلوس الكروت)$/.test(normAccountingName(old[0]));
+ const impact=isPrimaryCashEntry?{delta:0,agentDelta:0,agentName:null,directMoneyEdit:true,description:'تعديل مستقل لقيمة بند الفلوس في عمود الكروت؛ يتم حفظ القيمة كما أدخلتها دون تغيير أي عمود أو رصيد أو تسوية أخرى.'}:moneyImpactForManualEdit(i,old[0],delta,old),money=findMoneyEntry();
+ if(!isPrimaryCashEntry&&impact.delta!==0&&!money)return alert('مش لاقي بند «فلوس» داخل عمود الكروت، فمش هقدر أنفّذ تعديل مرتبط بأمان. لم يتغير أي رقم.');
  pendingManualEdit={i,j,old,oldDisplayName,n,newAmount,delta,impact,moneyBefore:money?num(money.entry[1]):null,agentBefore:impact.agentName?getCardAgentBalance(impact.agentName).value:null,moneyLabel:money?.entry[0]||null,requestedAt:new Date().toISOString()};
  const isLinkedOther=columnRole(cols[i])==='cards'&&(old[2]?.treatment==='other_company'||old[2]?.treatment==='service'||entryRole(cols[i],old)==='other-company'||entryRole(cols[i],old).startsWith('card-agent:')||!!old[2]?.linkedCompany||!!old[2]?.serviceAgent);
  if(isLinkedOther&&delta>0){askCompanyRemittanceStatus();return;}
