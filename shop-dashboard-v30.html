@@ -442,6 +442,14 @@ function confirmCreateEntry(){
 function removeEntry(i){if(!cols[i].entries.length)return alert('مفيش بنود في العمود');open(`<h2>اختار البند للحذف</h2><p class="small">من عمود ${esc(cols[i].name)}. الحذف سيتسجل في سجل الحركات.</p>${cols[i].entries.map((e,j)=>`<button class="removeRow" onclick="confirmDelete(${i},${j})"><span>${esc((e[2]&&e[2].adminLabel)||e[0])}</span><b>${fmt(num(e[1]))} ج.م</b></button>`).join('')}`)}
 function confirmDelete(i,j){
  const e=cols[i].entries[j],money=findMoneyEntry();
+ const linkedBalanceEntry=columnRole(cols[i])==='balance'&&(((e[2]&&entryRole(cols[i],e).startsWith('agent:')))||!!canonicalServiceAgent(e[0]));
+ if(linkedBalanceEntry){
+  const amount=num(e[1]),name=String((e[2]&&e[2].adminLabel)||e[0]);
+  if(!money){alert('مش لاقي بند الفلوس الأساسية في عمود الكروت. لم يتم حذف أي حاجة.');return;}
+  if(money.entry[1]!==undefined&&num(money.entry[1])-amount<0){alert('التسوية هتخلي الفلوس الأساسية بالسالب. راجع المبلغ قبل الحذف.');return;}
+  open(`<h2>تأكيد تسوية المندوب</h2><div class="reconMini"><div>حساب المندوب / الشركة <b>${esc(name)}</b></div><div>المبلغ المستحق <b>${fmt(amount)} ج.م</b></div><div>الفلوس الأساسية حاليًا <b>${fmt(num(money.entry[1]))} ج.م</b></div><div>الفلوس الأساسية بعد التسوية <b>${fmt(num(money.entry[1])-amount)} ج.م</b></div></div><p class="small">هل تم حساب المندوب وصرف مستحقاته بالفعل؟</p><div class="grid"><button class="primary" onclick="doDelete(${i},${j},-${amount},${num(money.entry[1]},'',0,null)">أيوه، اتحسب — احذف وسوّي</button><button onclick="closeModal()">لأ، لسه ما اتحسبش — احتفظ بالبند</button><button onclick="closeModal()">إلغاء</button></div>`);
+  return;
+ }
  const impact=moneyImpactForManualEdit(i,e[0],-num(e[1]),e);
  if(columnRole(cols[i])==='cards'&&money&&money.entry===e){open('<h2>لا يمكن حذف الفلوس الأساسية</h2><p class="small">ده بند الأساس اللي باقي الحسابات مرتبطة بيه. غيّر اسمه بدل حذفه.</p><button class="primary" onclick="closeModal()">فهمت</button>');return;}
  if(impact.delta!==0&&!money){alert('مش لاقي بند الفلوس الأساسية؛ مش هحذف بندًا مرتبطًا من غير مراجعة أثره.');return;}
