@@ -73,8 +73,9 @@ function applyColumnDefinitions(definitions){
  // Custom server-defined columns are appended once, without touching existing entries or balances.
  (definitions||[]).filter(def=>def&&def.is_enabled!==0&&String(def.stable_key||'').startsWith('dashboard_custom_')).forEach(def=>{
   const key=String(def.stable_key);
-  if(!cols.some(c=>c.stableKey===key))cols.push({name:String(def.display_name||'عمود جديد'),stableKey:key,entries:[]});
-  else {const found=cols.find(c=>c.stableKey===key);if(found)found.name=String(def.display_name||found.name);}
+  const behavior=(()=>{try{return JSON.parse(def.behavior_json||'{}').kind||JSON.parse(def.behavior_json||'{}').behavior||'standard'}catch(_){return 'standard'}})();
+  if(!cols.some(c=>c.stableKey===key))cols.push({name:String(def.display_name||'عمود جديد'),stableKey:key,behavior,entries:[]});
+  else {const found=cols.find(c=>c.stableKey===key);if(found){found.name=String(def.display_name||found.name);found.behavior=behavior;}}
  });
 }
 function loadStoreData(storeId){
