@@ -112,6 +112,56 @@ export default {
       return json({ error: "owner_auth_internal_error", ...(url.hostname === "daga-app-staging.dagamobile10.workers.dev" ? { diagnostic: error instanceof Error ? error.message.slice(0, 200) : "unknown_error" } : {}) }, 500);
     }
     if (ownerAuthResponse) return ownerAuthResponse;
+    if (url.pathname === "/api/company/dashboard-layout" && request.method === "PUT") {
+      const db = env.DAGA_APP_DB;
+      if (!db) return json({ error: "application_database_not_configured" }, 503);
+      const account = await authenticatedAccount(request, db);
+      if (!account || account.status !== "approved" || account.role !== "store_owner") return json({ error: "store_owner_required" }, 403);
+      const parsed = await readBoundedJson(request, 120000);
+      if (!parsed.ok) return json({ error: parsed.error }, parsed.status);
+      const body = parsed.value || {};
+      const selected = String(body.storeId || request.headers.get("X-DAGA-Company-ID") || "").trim();
+      if (!selected) return json({ error: "company_selection_required" }, 400);
+      const owned = await db.prepare("SELECT id FROM daga_stores WHERE id=? AND owner_account_id=? AND status='approved'").bind(selected, account.id).first();
+      if (!owned) return json({ error: "company_membership_required" }, 403);
+      const columns = body.columns;
+      if (!Array.isArray(columns) || columns.length < 2 || columns.length > 30) return json({ error: "invalid_dashboard_columns" }, 400);
+      const allowedRoles = new Set(["cards","balance","expenses","cash","accessory"]);
+      const ids = new Set(), names = new Set();
+      const normalized = [];
+      for (const column of columns) {
+        if (!column || typeof column !== "object" || !allowedRoles.has(String(column.role || ""))) return json({ error: "invalid_dashboard_column" }, 400);
+        const id = String(column.id || "").trim(), name = String(column.name || "").trim();
+        if (!id || id.length > 160 || !name || name.length > 60 || ids.has(id) || names.has(name.toLocaleLowerCase())) return json({ error: "invalid_or_duplicate_dashboard_column" }, 400);
+        ids.add(id); names.add(name.toLocaleLowerCase());
+        const entries = Array.isArray(column.entries) ? column.entries : [];
+        if (entries.length > 500) return json({ error: "too_many_dashboard_entries" }, 400);
+        const entryIds = new Set();
+        const safeEntries = [];
+        for (const entry of entries) {
+          if (!entry || typeof entry !== "object") return json({ error: "invalid_dashboard_entry" }, 400);
+          const entryId = String(entry.id || "").trim(), entryName = String(entry.name || "").trim();
+          if (!entryId || entryId.length > 180 || !entryName || entryName.length > 120 || entryIds.has(entryId)) return json({ error: "invalid_or_duplicate_dashboard_entry" }, 400);
+          entryIds.add(entryId);
+          const treatment = entry.treatment == null ? null : String(entry.treatment);
+          if (treatment && !["asset","other_company","service"].includes(treatment)) return json({ error: "invalid_dashboard_entry_treatment" }, 400);
+          safeEntries.push({ id: entryId, key: String(entry.key || entryId).slice(0,180), name: entryName, enabled: entry.enabled !== false, treatment, linkedCompany: String(entry.linkedCompany || "").slice(0,120) });
+        }
+        normalized.push({ id, key: String(column.key || id).slice(0,160), name, role: String(column.role), enabled: true, entries: safeEntries });
+      }
+      if (!normalized.some(c => c.role === "cards") || !normalized.some(c => c.role === "balance")) return json({ error: "required_accounting_columns_missing" }, 400);
+      const layout = { version: 1, columns: normalized };
+      const layoutJson = JSON.stringify(layout);
+      const now = new Date().toISOString();
+      const existing = await db.prepare("SELECT id,version FROM daga_dashboard_layouts WHERE scope='store' AND store_id=?").bind(owned.id).first();
+      const layoutId = existing?.id || crypto.randomUUID();
+      const version = Number(existing?.version || 0) + 1;
+      await db.prepare("INSERT INTO daga_dashboard_layouts (id,scope,store_id,layout_json,version,updated_by,updated_at) VALUES (?,'store',?,?,?,?,?) ON CONFLICT(store_id) WHERE scope='store' DO UPDATE SET layout_json=excluded.layout_json,version=excluded.version,updated_by=excluded.updated_by,updated_at=excluded.updated_at")
+        .bind(layoutId, owned.id, layoutJson, version, account.id, now).run();
+      await db.prepare("INSERT INTO daga_dashboard_layout_versions (id,layout_id,version,layout_json,changed_by,change_note,created_at) VALUES (?,?,?,?,?,?,?)")
+        .bind(crypto.randomUUID(), layoutId, version, layoutJson, account.id, "Company dashboard columns updated", now).run();
+      return json({ ok: true, storeId: owned.id, scope: "store", layout, version, updatedAt: now });
+    }
     if (url.pathname === "/api/company/dashboard-layout" && request.method === "GET") {
       const db = env.DAGA_APP_DB;
       if (!db) return json({ error: "application_database_not_configured" }, 503);
