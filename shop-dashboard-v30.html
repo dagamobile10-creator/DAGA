@@ -19,7 +19,7 @@ th,td{border-left:1px solid #25231f;border-bottom:1px solid #25231f;vertical-ali
 th{background:#171611;color:#d7ae58;font-size:13px;padding:14px 10px;position:sticky;top:0;z-index:5;min-width:165px}
 th:first-child{position:sticky;right:0;z-index:7;min-width:130px}
 td{padding:8px;min-width:165px;height:520px}td:first-child{position:sticky;right:0;background:#10100f;z-index:4}
-.colhead{display:flex;justify-content:center;align-items:center;gap:6px}.edithead{background:transparent;border:0;color:#d7ae58;padding:3px;font-size:13px}
+.colAdminActions{display:flex;gap:5px;flex-wrap:wrap;margin-top:7px}.colAdminActions .miniBtn{font-size:11px;padding:5px 7px;white-space:nowrap}.colhead{display:flex;justify-content:center;align-items:center;gap:6px}.edithead{background:transparent;border:0;color:#d7ae58;padding:3px;font-size:13px}
 .entry{display:flex;justify-content:space-between;align-items:center;gap:7px;background:#11110f;border:1px solid #28261f;border-radius:12px;padding:12px 10px;margin:7px 0;cursor:pointer;min-height:58px}
 .entry:hover{border-color:#6a522b}.entry{touch-action:manipulation;user-select:none;-webkit-user-select:none}.entry.longpress-hint:after{content:'اضغط مطولًا للتفاصيل';font-size:10px;color:#bda36e}.entry .name{font-weight:700}.entry .amount{color:#e7e1d5;font-weight:800;font-size:16px}.entry .sub{display:block;color:#888;font-size:11px;margin-top:3px}.entry .tag{display:inline-block;color:#7f7768;font-size:10px;margin-top:4px}
 
@@ -47,7 +47,7 @@ button{cursor:pointer}button:disabled{opacity:.55;cursor:not-allowed}.removeRow{
 <button onclick="closeDay()">✓ تسوية اليوم</button>
 </div>
 </main>
-<nav class="bottom"><button class="active" onclick="showHome()">الرئيسية</button><button onclick="showTeam()">الفريق</button><button class="liveBtn" onclick="showLiveComingSoon()">LIVE DAGA</button><button onclick="voiceDaga()">🎙️ كلم ضجه</button><button onclick="showReports()">التقارير</button><button onclick="showSettings()">الإعدادات</button></nav>
+<nav class="bottom"><button class="active" onclick="showHome()">الرئيسية</button><button onclick="showTeam()">الفريق</button><button class="liveBtn" onclick="showLiveComingSoon()">LIVE DAGA</button><button onclick="voiceDaga()">🎙️ كلم ضجه</button><button onclick="showReports()">التقارير</button><button onclick="addDashboardColumn()">＋ إضافة عمود</button><button onclick="showSettings()">الإعدادات</button></nav>
 <div class="modal" id="modal"><div class="sheet"><button class="close" onclick="closeModal()">×</button><div id="sheet"></div></div></div>
 <script>
 const defaultCols=[
@@ -71,7 +71,7 @@ function applyColumnDefinitions(definitions){
 function loadStoreData(storeId){
  STORE_KEY='daga_dashboard_v30_store_'+encodeURIComponent(String(storeId));
  cols=JSON.parse(JSON.stringify(defaultCols));ledger=[];closedDays=[];
- try{const saved=JSON.parse(localStorage.getItem(STORE_KEY)||'null');if(saved){if(Array.isArray(saved.cols)&&saved.cols.length===10)cols=saved.cols;if(Array.isArray(saved.ledger))ledger=saved.ledger;if(Array.isArray(saved.closedDays))closedDays=saved.closedDays;}}catch(e){}
+ try{const saved=JSON.parse(localStorage.getItem(STORE_KEY)||'null');if(saved){if(Array.isArray(saved.cols)&&saved.cols.length>=1&&saved.cols.length<=30)cols=saved.cols;if(Array.isArray(saved.ledger))ledger=saved.ledger;if(Array.isArray(saved.closedDays))closedDays=saved.closedDays;}}catch(e){}
 }
 function persist(){try{localStorage.setItem(STORE_KEY,JSON.stringify({cols,ledger,closedDays}));return true}catch(e){alert('تعذر الحفظ على هذا الجهاز. صدّر نسخة احتياطية قبل المتابعة.');return false}}
 function num(v){return Number(String(v).replace(/[^0-9.-]/g,''))||0} function fmt(v){return Math.round(v).toLocaleString('en-US')} function esc(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
@@ -114,7 +114,41 @@ function currentAccountRole(){const user=window.DAGA_AUTH_USER||window.dagaAuthe
 function refreshAccountRoleLabel(){applyAccountRole(currentAccountRole());}
 function isShopOwner(){return currentAccountRole()==='owner';}
 
-function render(){updateLiveDate();refreshAccountRoleLabel();const h=document.getElementById('headers'),c=document.getElementById('cells');h.innerHTML='';c.innerHTML='';cols.forEach((col,i)=>{const th=document.createElement('th');th.innerHTML='<div class="colhead"><span>'+esc(col.name)+'</span></div>';h.appendChild(th);const td=document.createElement('td');const list=document.createElement('div');list.className='entryList';col.entries.forEach((e,j)=>{const d=document.createElement('div');d.className='entry';d.innerHTML='<div><span class="name">'+esc(e[0])+'</span><span class="sub">ضغطة للتعديل · ضغطة مطوّلة للتفاصيل</span></div><span class="amount">'+fmt(num(e[1]))+'</span>';attachEntryGestures(d,i,j);list.appendChild(d)});const total=document.createElement('div');total.className='colTotal';total.innerHTML='<span>إجمالي العمود</span><b>'+fmt(sumCol(col.name))+' ج.م</b>';const footer=document.createElement('div');footer.className='colFooter';const add=document.createElement('button');add.className='miniBtn';add.textContent='＋ بند جديد';add.onclick=ev=>{ev.stopPropagation();addEntry(i)};const del=document.createElement('button');del.className='miniBtn danger';del.textContent='− حذف بند';del.onclick=ev=>{ev.stopPropagation();removeEntry(i)};footer.append(add,del);td.append(list,total,footer);c.appendChild(td)});updateRecon()}
+function render(){updateLiveDate();refreshAccountRoleLabel();const h=document.getElementById('headers'),c=document.getElementById('cells');h.innerHTML='';c.innerHTML='';cols.forEach((col,i)=>{const th=document.createElement('th');th.innerHTML='<div class="colhead"><span>'+esc(col.name)+'</span><div class="colAdminActions"><button type="button" class="miniBtn" onclick="renameDashboardColumn(${i})">تغيير الاسم</button><button type="button" class="miniBtn danger" onclick="deleteDashboardColumn(${i})">حذف العمود</button></div></div>';h.appendChild(th);const td=document.createElement('td');const list=document.createElement('div');list.className='entryList';col.entries.forEach((e,j)=>{const d=document.createElement('div');d.className='entry';d.innerHTML='<div><span class="name">'+esc(e[0])+'</span><span class="sub">ضغطة للتعديل · ضغطة مطوّلة للتفاصيل</span></div><span class="amount">'+fmt(num(e[1]))+'</span>';attachEntryGestures(d,i,j);list.appendChild(d)});const total=document.createElement('div');total.className='colTotal';total.innerHTML='<span>إجمالي العمود</span><b>'+fmt(sumCol(col.name))+' ج.م</b>';const footer=document.createElement('div');footer.className='colFooter';const add=document.createElement('button');add.className='miniBtn';add.textContent='＋ بند جديد';add.onclick=ev=>{ev.stopPropagation();addEntry(i)};const del=document.createElement('button');del.className='miniBtn danger';del.textContent='− حذف بند';del.onclick=ev=>{ev.stopPropagation();removeEntry(i)};footer.append(add,del);td.append(list,total,footer);c.appendChild(td)});updateRecon()}
+function addDashboardColumn(){
+ if(cols.length>=30)return alert('وصلت للحد الأقصى المسموح به وهو 30 عمودًا.');
+ open('<h2>إضافة عمود جديد</h2><label>اسم العمود</label><input id="newColumnName" maxlength="60" placeholder="اكتب اسم العمود"><p class="small">سيُضاف العمود فارغًا، ولن يغيّر أي رصيد أو حركة سابقة.</p><button class="primary" onclick="confirmAddDashboardColumn()">إضافة العمود</button>');
+}
+function confirmAddDashboardColumn(){
+ const input=document.getElementById('newColumnName');const name=String(input?.value||'').trim();
+ if(!name)return alert('اكتب اسم العمود.');
+ if(cols.some(c=>String(c.name).trim()===name))return alert('فيه عمود بنفس الاسم بالفعل.');
+ if(cols.length>=30)return alert('وصلت للحد الأقصى.');
+ cols.push({name,entries:[]});persist();closeModal();render();
+}
+function renameDashboardColumn(i){
+ const col=cols[i];if(!col)return;
+ open('<h2>تغيير اسم العمود</h2><label>الاسم الجديد</label><input id="renameColumnName" maxlength="60" value="'+esc(col.name)+'"><p class="small">تغيير الاسم لا يغيّر البنود أو الأرصدة أو الحركات.</p><button class="primary" onclick="confirmRenameDashboardColumn('+i+')">حفظ الاسم</button>');
+}
+function confirmRenameDashboardColumn(i){
+ const col=cols[i],input=document.getElementById('renameColumnName'),name=String(input?.value||'').trim();
+ if(!col||!name)return alert('اكتب اسمًا صحيحًا.');
+ if(cols.some((c,index)=>index!==i&&String(c.name).trim()===name))return alert('الاسم مستخدم في عمود آخر.');
+ const previous=col.name;col.name=name;
+ addLedger('تغيير اسم عمود',previous+' ← '+name,{oldColumnName:previous,newColumnName:name});
+ persist();closeModal();render();
+}
+function deleteDashboardColumn(i){
+ const col=cols[i];if(!col)return;
+ if(col.name==='الرصيد'||col.name==='الكروت')return alert('لا يمكن حذف عمود أساسي مرتبط بمعادلات الرصيد والتسوية.');
+ open('<h2>حذف عمود</h2><p class="small">العمود: <b>'+esc(col.name)+'</b><br>عدد البنود: '+col.entries.length+'<br>سيتم الاحتفاظ بسجل الحركات، لكن العمود وبنوده سيختفيان من الداشبورد.</p><p class="small">لو فيه بيانات مهمة، صدّر نسخة احتياطية قبل الحذف.</p><button class="danger" onclick="confirmDeleteDashboardColumn('+i+')">تأكيد حذف العمود</button><button onclick="closeModal()">إلغاء</button>');
+}
+function confirmDeleteDashboardColumn(i){
+ const col=cols[i];if(!col)return;
+ if(col.name==='الرصيد'||col.name==='الكروت')return alert('لا يمكن حذف عمود أساسي.');
+ addLedger('حذف عمود',col.name+' — '+col.entries.length+' بند',{deletedColumn:col.name,deletedEntries:col.entries});
+ cols.splice(i,1);persist();closeModal();render();
+}
 function getDayReconciliation(){
  const capitalCol=cols.find(c=>c.name==='الرصيد');
  const capital=capitalCol?capitalCol.entries.reduce((a,e)=>a+num(e[1]),0):0;
