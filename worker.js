@@ -126,7 +126,7 @@ export default {
       if (!owned) return json({ error: "company_membership_required" }, 403);
       const columns = body.columns;
       if (!Array.isArray(columns) || columns.length < 2 || columns.length > 30) return json({ error: "invalid_dashboard_columns" }, 400);
-      const allowedRoles = new Set(["cards","balance","expenses","cash","accessory"]);
+      const allowedRoles = new Set(["cards","balance","expenses","cash","accessory","custom"]);
       const ids = new Set(), names = new Set();
       const normalized = [];
       for (const column of columns) {
@@ -140,8 +140,14 @@ export default {
         const safeEntries = [];
         for (const entry of entries) {
           if (!entry || typeof entry !== "object") return json({ error: "invalid_dashboard_entry" }, 400);
-          const entryId = String(entry.id || "").trim(), entryName = String(entry.name || "").trim();
-          if (!entryId || entryId.length > 180 || !entryName || entryName.length > 120 || entryIds.has(entryId)) return json({ error: "invalid_or_duplicate_dashboard_entry" }, 400);
+          const entryName = String(entry.name || "").trim();
+          if (!entryName || entryName.length > 120) return json({ error: "invalid_dashboard_entry" }, 400);
+          const requestedEntryId = String(entry.id || "").trim();
+          if (requestedEntryId.length > 180) return json({ error: "invalid_dashboard_entry_id" }, 400);
+          let entryId = requestedEntryId || ("entry-" + id + "-" + safeEntries.length);
+          const baseEntryId = entryId;
+          let duplicateSuffix = 1;
+          while (entryIds.has(entryId)) entryId = (baseEntryId.slice(0, 160) + "-" + duplicateSuffix++);
           entryIds.add(entryId);
           const treatment = entry.treatment == null ? null : String(entry.treatment);
           if (treatment && !["asset","other_company","service"].includes(treatment)) return json({ error: "invalid_dashboard_entry_treatment" }, 400);
