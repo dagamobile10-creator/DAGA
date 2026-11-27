@@ -318,7 +318,7 @@ async function createDashboardColumn(role){
  if(!name)return alert('اكتب اسم العمود الأول.');
  if(cols.length>=30)return alert('وصلت للحد الأقصى لعدد الأعمدة.');
  if(cols.some(c=>String(c.adminLabel||c.name).trim()===name))return alert('اسم العمود موجود بالفعل.');
- const labels={balance:'الرصيد',expenses:'الخارج',cash:'الكاش',accessory:'الإكسسوارات',cards:'الكروت'};
+ const labels={balance:'الرصيد',expenses:'الخارج',cash:'الكاش',accessory:'الإكسسوارات',cards:'الكروت',custom:'عمود مستقل بدون حسابات'};
  const col={id:'column-'+role+'-'+crypto.randomUUID(),key:'column-'+crypto.randomUUID(),name,adminLabel:name,role:role==='custom'?'custom':role,calculationMode:role==='custom'?'none':'accounting',entries:[]};
  cols.push(col);ensureStableIdentities();
  try{await saveDashboardColumnLayout();addLedger('إضافة عمود',name+' — نوع المعاملة: '+labels[role],{columnId:col.id,columnRole:role,columnName:name});if(!persist())return;closeModal();render();}
