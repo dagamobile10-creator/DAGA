@@ -3,6 +3,7 @@ import { authenticatedAccount } from "./owner-auth.js";
 export async function handleShopDashboardState(request, env, url) {
   const path = url.pathname.replace(/\/+$/, "");
   if (path !== "/api/shop/dashboard/state") return null;
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: { "Access-Control-Allow-Origin": url.origin, "Access-Control-Allow-Methods": "GET,POST,PUT,OPTIONS", "Access-Control-Allow-Headers": "Content-Type, Authorization", "Vary": "Origin" } });
   if (!["GET", "POST", "PUT"].includes(request.method)) return json({ error: "method_not_allowed" }, 405);
   const db = env.DAGA_APP_DB;
   if (!db) return json({ error: "application_database_not_configured" }, 503);
