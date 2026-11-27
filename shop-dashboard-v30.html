@@ -84,6 +84,28 @@ button{transition:filter .15s,transform .15s;border-radius:14px}button:active{tr
 #dagaLivePanel.docked .livePanelRestore{display:flex;width:58px;height:58px;align-items:center;justify-content:center;border:0;border-radius:50%;font-size:25px;background:transparent;color:#f0d28f}
 #dagaLivePanel.docked iframe{display:none}
 @media(min-width:700px){#dagaLivePanel.docked{right:20px;left:auto;bottom:90px;width:60px;height:60px}}
+
+/* Compact mobile ledger density: presentation only */
+@media(max-width:600px){
+ .tablewrap{max-height:72vh}
+ table{min-width:1320px}
+ th{min-width:148px;padding:10px 7px;font-size:12px}
+ th:first-child{min-width:118px}
+ td{min-width:148px;padding:6px;height:450px}
+ .colhead{min-height:58px;padding:6px 4px;gap:6px}
+ .colhead>span{font-size:17px;line-height:1.25}
+ .columnEditBtn{width:20px;min-width:20px;height:20px;min-height:20px;flex-basis:20px;font-size:11px!important}
+ .entry{min-height:52px;padding:9px 8px;margin:5px 0;gap:5px;border-radius:10px}
+ .entry .name{font-size:14px;line-height:1.35}
+ .entry .amount{font-size:15px}
+ .entry .sub{font-size:10px;margin-top:2px}
+ .entryList{min-height:450px}
+ .colTotal{margin-top:7px;padding:7px 2px 6px}
+ .colFooter{padding-top:6px}
+ .miniBtn{padding:7px 5px!important;font-size:10px!important}
+ .columnTitleBar{margin:9px 0 6px}
+ .columnTitleBar .title{font-size:19px}
+}
 </style>
 </head>
 <body>
