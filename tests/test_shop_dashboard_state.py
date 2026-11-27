@@ -25,6 +25,14 @@ class ShopDashboardStateTests(unittest.TestCase):
         self.assertIn("daga_audit_log", source)
         self.assertIn("validateState(state)", source)
 
+    def test_dashboard_client_preserves_legacy_data_and_detects_conflicts(self):
+        dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
+        api = (ROOT / "shop-dashboard-state.js").read_text(encoding="utf-8")
+        self.assertIn("initializeRemoteDashboardState()", dashboard)
+        self.assertIn("_legacy_backup_", dashboard)
+        self.assertIn("dashboard_state_revision_conflict", api)
+        self.assertIn("dashboardSyncConflict=true", dashboard)
+        self.assertIn("scheduleDashboardSync()", dashboard)
     def test_worker_routes_dashboard_state_api(self):
         worker = (ROOT / "worker.js").read_text(encoding="utf-8")
         self.assertIn('import { handleShopDashboardState } from "./shop-dashboard-state.js";', worker)
