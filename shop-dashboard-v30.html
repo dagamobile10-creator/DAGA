@@ -449,19 +449,23 @@ function askCompanyRemittanceStatus(){
 function companyRemittanceSent(sent){
  const p=pendingManualEdit;if(!p)return;
  p.remittanceSent=!!sent;
- if(!sent){applyCompanyIncreaseSettlement(false);return;}
+ if(!sent){applyCompanyIncreaseSettlement('not_sent');return;}
  open(`<h2>أنت حسبت المبلغ ده ولا لأ؟</h2><p class="small">المندوب بعت ${fmt(p.delta)} ج.م. هل ضفت المبلغ ده في حساب الفلوس بالفعل؟</p><div class="grid"><button class="primary" onclick="applyCompanyIncreaseSettlement(true)">أيوه، حسبته</button><button onclick="applyCompanyIncreaseSettlement(false)">لأ، لسه ما حسبتوش</button><button onclick="askCompanyRemittanceStatus()">رجوع</button></div>`);
 }
-function applyCompanyIncreaseSettlement(counted){
+function applyCompanyIncreaseSettlement(status){
  const p=pendingManualEdit;if(!p)return;
  const money=findMoneyEntry(),agent=String(p.old[2]?.linkedCompany||p.old[2]?.serviceAgent||(entryRole(cols[p.i],p.old).startsWith('card-agent:')?entryRole(cols[p.i],p.old).slice(11):'')||serviceAgentForCardEntry(p.old[0])||'').trim();
- if(!agent)return alert('مش لاقي اسم الشركة/المندوب المرتبط بالبند. لم يتغير أي رقم.');
- p.impact=counted
-  ?{delta:-p.delta,agentDelta:0,agentName:null,description:'المندوب بعت والمبلغ اتحسب بالفعل: الفلوس الأساسية تقل بنفس قيمة الزيادة، ورصيد الشركة لا يتغير.'}
-  :{delta:0,agentDelta:p.delta,agentName:agent,agentLabel:p.old[0],description:'المبلغ لم يُحسب بعد: الزيادة تُضاف لرصيد الشركة في عمود الرصيد فقط، والفلوس الأساسية لا تتغير.'};
+ if(status==='not_sent'){
+  p.impact={delta:-p.delta,agentDelta:0,agentName:null,description:'المندوب لم يرسل المبلغ: الزيادة تُخصم من الفلوس الأساسية في عمود الكروت بنفس القيمة، ولا يتغير رصيد الشركة أو المندوب.'};
+ }else if(status===true){
+  p.impact={delta:-p.delta,agentDelta:0,agentName:null,description:'المندوب أرسل المبلغ وتم احتسابه بالفعل: الفلوس الأساسية تقل بنفس قيمة الزيادة، ورصيد الشركة لا يتغير.'};
+ }else{
+  if(!agent)return alert('مش لاقي اسم الشركة/المندوب المرتبط بالبند. لم يتغير أي رقم.');
+  p.impact={delta:0,agentDelta:p.delta,agentName:agent,agentLabel:p.old[0],description:'المندوب أرسل المبلغ لكنه لم يُحسب بعد: الزيادة تُضاف لرصيد الشركة في عمود الرصيد فقط، والفلوس الأساسية لا تتغير.'};
+ }
  p.moneyBefore=money?num(money.entry[1]):null;
  p.agentBefore=p.impact.agentName?getCardAgentBalance(p.impact.agentName).value:null;
- p.settlementCounted=!!counted;
+ p.settlementStatus=status;
  if(p.impact.delta!==0&&(!money||num(money.entry[1])+p.impact.delta<0))return alert('العملية هتخلي الفلوس الأساسية بالسالب أو بند الفلوس غير موجود. لم يتغير أي رقم.');
  renderManualEditReview();
 }
