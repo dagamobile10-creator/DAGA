@@ -411,7 +411,7 @@ function moneyImpactForManualEdit(ci,entryName,delta,existingEntry=null){
   if(linked){
    if(!linkedAgent)return {delta:0,agentDelta:0,agentName:null,description:'البند مرتبط بحساب في عمود الرصيد لكن اسم الحساب المقابل غير محدد؛ أوقفنا الحركة لحين تحديده.'};
    const baseCashDelta=delta<0?-delta:0;
-   return {delta:baseCashDelta,agentDelta:delta,agentName:linkedAgent,agentLabel:entryName,description:delta>0?'زيادة بند الشركة في عمود الكروت ترفع رصيد الشركة المقابل في عمود الرصيد فقط، ولا تغيّر الفلوس الأساسية.':delta<0?'نقص بند الشركة في عمود الكروت يخفض رصيد الشركة المقابل، ويزيد الفلوس الأساسية في عمود الكروت بنفس قيمة النقص.':'لا يوجد فرق في رصيد الشركة أو الفلوس الأساسية.'};
+   return {delta:baseCashDelta,agentDelta:delta>0?delta:0,agentName:delta>0?linkedAgent:null,agentLabel:entryName,description:delta>0?'زيادة بند الشركة تُسجّل بعد سؤال حالة التحويل: لو المبلغ اتحسب، الفلوس الأساسية تقل ولا يتغير رصيد الشركة؛ ولو لم يُحسب، يزيد رصيد الشركة فقط.':delta<0?'نقص بند الشركة يزيد الفلوس الأساسية بنفس قيمة النقص، ولا يغيّر رصيد الشركة أو المندوب.':'لا يوجد فرق مالي.'};
   }
   return {delta:-delta,agentDelta:0,agentName:null,description:'البند يعامل كأصل مرتبط عكسيًا بالفلوس الأساسية.'};
  }
@@ -435,13 +435,40 @@ function saveEntry(i,j){
  const n=document.getElementById('n').value.trim(),a=document.getElementById('a').value.trim();
  if(!n||a===''||num(a)<0)return alert('اكتب الاسم ومبلغًا صحيحًا');
  const old=[...cols[i].entries[j]],oldDisplayName=String((old[2]&&old[2].adminLabel)||old[0]),newAmount=num(a),delta=newAmount-num(old[1]);
- const isMoneyRow=entryRole(cols[i],cols[i].entries[j])==='money'||(columnRole(cols[i])==='cards'&&findMoneyEntry()?.entry===cols[i].entries[j]);/* Keep the money role in entry metadata when its visible name changes. */
  const impact=moneyImpactForManualEdit(i,old[0],delta,old),money=findMoneyEntry();
- if(impact.delta!==0&&!money){return alert('مش لاقي بند «فلوس» داخل عمود الكروت، فمش هقدر أنفّذ تعديل مرتبط بأمان. لم يتغير أي رقم.')}
- if(money&&num(money.entry[1])+impact.delta<0)return alert('التعديل هيخلي الفلوس الأساسية بالسالب. راجع القيمة قبل المتابعة.');
+ if(impact.delta!==0&&!money)return alert('مش لاقي بند «فلوس» داخل عمود الكروت، فمش هقدر أنفّذ تعديل مرتبط بأمان. لم يتغير أي رقم.');
  pendingManualEdit={i,j,old,oldDisplayName,n,newAmount,delta,impact,moneyBefore:money?num(money.entry[1]):null,agentBefore:impact.agentName?getCardAgentBalance(impact.agentName).value:null,moneyLabel:money?.entry[0]||null,requestedAt:new Date().toISOString()};
- const sign=impact.delta>0?'+':'';
- open(`<h2>مراجعة تعديل يدوي</h2><div class="reconMini"><div>وقت المراجعة <b>${esc(localStamp(pendingManualEdit.requestedAt))}</b></div><div>البند <b>${esc(old[0])} — ${esc(cols[i].name)}</b></div><div>القيمة القديمة <b>${fmt(num(old[1]))} ج.م</b></div><div>القيمة الجديدة <b>${fmt(newAmount)} ج.م</b></div><div>الفرق في البند <b>${delta>0?'+':''}${fmt(delta)} ج.م</b></div><div>تأثير الفلوس الأساسية <b>${impact.delta>0?'+':''}${fmt(impact.delta)} ج.م</b></div>${impact.agentName?`<div>المندوب ${esc(impact.agentName)} <b>${impact.agentDelta>0?'+':''}${fmt(impact.agentDelta)} ج.م</b></div>`:''}${money?`<div>الفلوس قبل <b>${fmt(num(money.entry[1]))} ج.م</b></div><div>الفلوس بعد <b>${fmt(num(money.entry[1])+impact.delta)} ج.م</b></div>`:''}</div><p class="small">${esc(impact.description)}</p><p class="small">دي مراجعة فقط. لن يتغير أي رقم قبل التأكيد.</p><div class="grid"><button class="primary" onclick="confirmManualEdit()">تأكيد وتنفيذ</button><button onclick="pendingManualEdit=null;editEntry(${i},${j})">رجوع</button></div>`);
+ const isLinkedOther=columnRole(cols[i])==='cards'&&(old[2]?.treatment==='other_company'||old[2]?.treatment==='service'||entryRole(cols[i],old)==='other-company'||entryRole(cols[i],old).startsWith('card-agent:')||!!old[2]?.linkedCompany||!!old[2]?.serviceAgent);
+ if(isLinkedOther&&delta>0){askCompanyRemittanceStatus();return;}
+ renderManualEditReview();
+}
+function askCompanyRemittanceStatus(){
+ const p=pendingManualEdit;if(!p)return;
+ open(`<h2>المندوب بعت حاجة؟</h2><p class="small">قيمة الزيادة في بند الشركة: <b>${fmt(p.delta)} ج.م</b></p><p class="small">اختار حالة التحويل عشان ضجّة توزّع الزيادة صح.</p><div class="grid"><button class="primary" onclick="companyRemittanceSent(true)">أيوه، بعت</button><button onclick="companyRemittanceSent(false)">لأ، مبعتش</button><button onclick="pendingManualEdit=null;editEntry(${p.i},${p.j})">رجوع</button></div>`);
+}
+function companyRemittanceSent(sent){
+ const p=pendingManualEdit;if(!p)return;
+ p.remittanceSent=!!sent;
+ if(!sent){applyCompanyIncreaseSettlement(false);return;}
+ open(`<h2>أنت حسبت المبلغ ده ولا لأ؟</h2><p class="small">المندوب بعت ${fmt(p.delta)} ج.م. هل ضفت المبلغ ده في حساب الفلوس بالفعل؟</p><div class="grid"><button class="primary" onclick="applyCompanyIncreaseSettlement(true)">أيوه، حسبته</button><button onclick="applyCompanyIncreaseSettlement(false)">لأ، لسه ما حسبتوش</button><button onclick="askCompanyRemittanceStatus()">رجوع</button></div>`);
+}
+function applyCompanyIncreaseSettlement(counted){
+ const p=pendingManualEdit;if(!p)return;
+ const money=findMoneyEntry(),agent=String(p.old[2]?.linkedCompany||p.old[2]?.serviceAgent||(entryRole(cols[p.i],p.old).startsWith('card-agent:')?entryRole(cols[p.i],p.old).slice(11):'')||serviceAgentForCardEntry(p.old[0])||'').trim();
+ if(!agent)return alert('مش لاقي اسم الشركة/المندوب المرتبط بالبند. لم يتغير أي رقم.');
+ p.impact=counted
+  ?{delta:-p.delta,agentDelta:0,agentName:null,description:'المندوب بعت والمبلغ اتحسب بالفعل: الفلوس الأساسية تقل بنفس قيمة الزيادة، ورصيد الشركة لا يتغير.'}
+  :{delta:0,agentDelta:p.delta,agentName:agent,agentLabel:p.old[0],description:'المبلغ لم يُحسب بعد: الزيادة تُضاف لرصيد الشركة في عمود الرصيد فقط، والفلوس الأساسية لا تتغير.'};
+ p.moneyBefore=money?num(money.entry[1]):null;
+ p.agentBefore=p.impact.agentName?getCardAgentBalance(p.impact.agentName).value:null;
+ p.settlementCounted=!!counted;
+ if(p.impact.delta!==0&&(!money||num(money.entry[1])+p.impact.delta<0))return alert('العملية هتخلي الفلوس الأساسية بالسالب أو بند الفلوس غير موجود. لم يتغير أي رقم.');
+ renderManualEditReview();
+}
+function renderManualEditReview(){
+ const p=pendingManualEdit;if(!p)return;const impact=p.impact,money=findMoneyEntry();
+ if(money&&num(money.entry[1])+impact.delta<0)return alert('التعديل هيخلي الفلوس الأساسية بالسالب. راجع القيمة قبل المتابعة.');
+ open(`<h2>مراجعة تعديل يدوي</h2><div class="reconMini"><div>وقت المراجعة <b>${esc(localStamp(p.requestedAt))}</b></div><div>البند <b>${esc(p.old[0])} — ${esc(cols[p.i].name)}</b></div><div>القيمة القديمة <b>${fmt(num(p.old[1]))} ج.م</b></div><div>القيمة الجديدة <b>${fmt(p.newAmount)} ج.م</b></div><div>الفرق في البند <b>${p.delta>0?'+':''}${fmt(p.delta)} ج.م</b></div><div>تأثير الفلوس الأساسية <b>${impact.delta>0?'+':''}${fmt(impact.delta)} ج.م</b></div>${impact.agentName?`<div>رصيد الشركة/المندوب ${esc(impact.agentName)} <b>+${fmt(impact.agentDelta)} ج.م</b></div>`:''}${money?`<div>الفلوس قبل <b>${fmt(num(money.entry[1]))} ج.م</b></div><div>الفلوس بعد <b>${fmt(num(money.entry[1])+impact.delta)} ج.م</b></div>`:''}</div><p class="small">${esc(impact.description)}</p><p class="small">دي مراجعة فقط. لن يتغير أي رقم قبل التأكيد.</p><div class="grid"><button class="primary" onclick="confirmManualEdit()">تأكيد وتنفيذ</button><button onclick="pendingManualEdit=null;editEntry(${p.i},${p.j})">رجوع</button></div>`);
 }
 async function confirmManualEdit(){
  const transactionBackup={cols:JSON.parse(JSON.stringify(cols)),ledger:JSON.parse(JSON.stringify(ledger)),closedDays:JSON.parse(JSON.stringify(closedDays))};
