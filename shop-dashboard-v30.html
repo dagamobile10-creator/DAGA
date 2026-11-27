@@ -191,17 +191,18 @@ function doDelete(i,j,impactDelta=0,moneyBefore=null){const e=cols[i].entries[j]
 function editEntry(i,j){const e=cols[i].entries[j];open(`<h2>تعديل البند</h2><p class="small">العمود: <b>${esc(cols[i].name)}</b></p><label>الاسم / البيان</label><input id="n" value="${esc(e[0])}"><label>المبلغ / القيمة</label><input id="a" value="${esc(e[1])}" inputmode="decimal"><p class="small">وقت طلب التعديل: ${esc(localStamp())}. قبل الحفظ هتظهر مراجعة بالفرق وتأثيره المتوقع على الفلوس الأساسية.</p><div class="grid"><button class="primary" onclick="saveEntry(${i},${j})">مراجعة التعديل</button><button onclick="deleteEntry(${i},${j})">حذف البند</button></div>`)}
 let pendingManualEdit=null;
 function moneyImpactForManualEdit(ci,entryName,delta){
- const col=cols[ci]?.name||'';
+ const column=cols[ci]||{},col=column.name||'';
+ const behavior=column.behavior||inferColumnBehavior(col);
  if(delta===0)return {delta:0,description:'لا يوجد فرق مالي؛ الاسم فقط سيتغير.'};
- if(col==='الكروت'){
+ if(behavior==='cards'||col==='الكروت'){
    const f=findMoneyEntry();
    if(f && f.entry[0]===entryName)return {delta:0,description:'ده بند الفلوس الأساسية نفسه؛ لن نعدّل الفلوس مرة ثانية.'};
    return {delta:-delta,description:'تغيير رصيد بند داخل الكروت يقابله تغيير عكسي في الفلوس الأساسية.'};
  }
- if(/^خارج/.test(col))return {delta:-delta,description:'زيادة المستحق/الخارج تقلل الفلوس الأساسية، وتقليله يزيدها.'};
- if(/^كاش/.test(col))return {delta:0,description:'الكاش رصيد تشغيل يومي؛ تعديله لا يغيّر الفلوس الأساسية فورًا. صافي الكاش يترحّل مرة واحدة عند «تسوية اليوم».'};
- if(normAccountingName(col)==='الاكسسوار')return {delta:0,description:'الأكسسوار رصيد تشغيل يومي؛ تعديله لا يغيّر الفلوس الأساسية فورًا. صافي الأكسسوار يترحّل مرة واحدة عند «تسوية اليوم».'};
- if(col==='الرصيد')return {delta:delta,description:'تغيير الرصيد ينعكس على الفلوس الأساسية بنفس مقدار الفرق حسب القاعدة المتفق عليها.'};
+ if(behavior==='outside')return {delta:-delta,description:'زيادة المستحق/الخارج تقلل الفلوس الأساسية، وتقليله يزيدها.'};
+ if(behavior==='cash')return {delta:0,description:'الكاش رصيد تشغيل يومي؛ تعديله لا يغيّر الفلوس الأساسية فورًا. يلزم ترحيله من تسوية اليوم.'};
+ if(behavior==='accessory')return {delta:0,description:'الإكسسوار رصيد تشغيل يومي؛ تعديله لا يغيّر الفلوس الأساسية فورًا. يلزم ترحيله من تسوية اليوم.'};
+ if(behavior==='balance')return {delta:delta,description:'تغيير الرصيد ينعكس على الفلوس الأساسية بنفس مقدار الفرق حسب القاعدة المتفق عليها.'};
  return {delta:0,description:'لم تُحدد قاعدة ربط تلقائية لهذا العمود؛ سيتم حفظ تعديل البند فقط.'};
 }
 function saveEntry(i,j){
