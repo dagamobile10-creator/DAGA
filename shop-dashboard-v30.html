@@ -447,7 +447,7 @@ function confirmDelete(i,j){
   const amount=num(e[1]),name=String((e[2]&&e[2].adminLabel)||e[0]);
   if(!money){alert('مش لاقي بند الفلوس الأساسية في عمود الكروت. لم يتم حذف أي حاجة.');return;}
   if(money.entry[1]!==undefined&&num(money.entry[1])-amount<0){alert('التسوية هتخلي الفلوس الأساسية بالسالب. راجع المبلغ قبل الحذف.');return;}
-  open(`<h2>تأكيد تسوية المندوب</h2><div class="reconMini"><div>حساب المندوب / الشركة <b>${esc(name)}</b></div><div>المبلغ المستحق <b>${fmt(amount)} ج.م</b></div><div>الفلوس الأساسية حاليًا <b>${fmt(num(money.entry[1]))} ج.م</b></div><div>الفلوس الأساسية بعد التسوية <b>${fmt(num(money.entry[1])-amount)} ج.م</b></div></div><p class="small">هل تم حساب المندوب وصرف مستحقاته بالفعل؟</p><div class="grid"><button class="primary" onclick="doDelete(${i},${j},-${amount},${num(money.entry[1]},'',0,null)">أيوه، اتحسب — احذف وسوّي</button><button onclick="closeModal()">لأ، لسه ما اتحسبش — احتفظ بالبند</button><button onclick="closeModal()">إلغاء</button></div>`);
+  open(`<h2>تأكيد تسوية المندوب</h2><div class="reconMini"><div>حساب المندوب / الشركة <b>${esc(name)}</b></div><div>المبلغ المستحق <b>${fmt(amount)} ج.م</b></div><div>الفلوس الأساسية حاليًا <b>${fmt(num(money.entry[1]))} ج.م</b></div><div>الفلوس الأساسية بعد التسوية <b>${fmt(num(money.entry[1])-amount)} ج.م</b></div></div><p class="small">هل تم حساب المندوب وصرف مستحقاته بالفعل؟</p><div class="grid"><button class="primary" onclick="doDelete(${i},${j},-${amount},${num(money.entry[1])},'',0,null)">أيوه، اتحسب — احذف وسوّي</button><button onclick="closeModal()">لأ، لسه ما اتحسبش — احتفظ بالبند</button><button onclick="closeModal()">إلغاء</button></div>`);
   return;
  }
  const impact=moneyImpactForManualEdit(i,e[0],-num(e[1]),e);
