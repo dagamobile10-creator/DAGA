@@ -89,7 +89,59 @@ function loadStoreData(storeId){
  cols=JSON.parse(JSON.stringify(defaultCols));ledger=[];closedDays=[];
  try{const saved=JSON.parse(localStorage.getItem(STORE_KEY)||'null');if(saved){if(Array.isArray(saved.cols)&&saved.cols.length>=1&&saved.cols.length<=30)cols=saved.cols;if(Array.isArray(saved.ledger))ledger=saved.ledger;if(Array.isArray(saved.closedDays))closedDays=saved.closedDays;}}catch(e){}
 }
-function persist(){try{localStorage.setItem(STORE_KEY,JSON.stringify({cols,ledger,closedDays}));return true}catch(e){alert('تعذر الحفظ على هذا الجهاز. صدّر نسخة احتياطية قبل المتابعة.');return false}}
+let dashboardSyncRevision=0,dashboardSyncReady=false,dashboardSyncConflict=false,dashboardSyncTimer=null;
+function dashboardSnapshot(){return {cols,ledger,closedDays}}
+function dashboardSyncMetaKey(){return STORE_KEY+'_central_sync_meta'}
+function setDashboardSyncNotice(message){let el=document.getElementById('dashboardSyncNotice');if(!el){el=document.createElement('div');el.id='dashboardSyncNotice';el.style.cssText='margin:8px 0;padding:8px 12px;border-radius:8px;background:#211b10;color:#f0cf86;font-size:12px';const h=document.querySelector('header.top');if(h)h.insertAdjacentElement('afterend',el);}el.textContent=message;}
+async function initializeRemoteDashboardState(){
+ dashboardSyncReady=false;dashboardSyncConflict=false;dashboardSyncRevision=0;
+ const localRaw=localStorage.getItem(STORE_KEY),metaRaw=localStorage.getItem(dashboardSyncMetaKey());
+ let meta=null;try{meta=JSON.parse(metaRaw||'null')}catch(_){}
+ const localState=(()=>{try{return localRaw?JSON.parse(localRaw):null}catch(_){return null}})();
+ const response=await fetch('/api/shop/dashboard/state',{headers:{Authorization:'Bearer '+window.DAGA_SESSION_TOKEN},cache:'no-store',credentials:'omit'});
+ const remote=await response.json().catch(()=>({}));
+ if(!response.ok)throw new Error(remote.error||'تعذر تحميل نسخة الدفتر المركزية');
+ if(!remote.exists){
+  const initial=localState||dashboardSnapshot();
+  const created=await fetch('/api/shop/dashboard/state',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+window.DAGA_SESSION_TOKEN},body:JSON.stringify({state:initial}),cache:'no-store',credentials:'omit'});
+  const result=await created.json().catch(()=>({}));
+  if(!created.ok)throw new Error(result.error||'تعذر إنشاء النسخة المركزية');
+  if(!localState)localStorage.setItem(STORE_KEY,JSON.stringify(initial));
+  dashboardSyncRevision=Number(result.revision||1);
+  localStorage.setItem(dashboardSyncMetaKey(),JSON.stringify({revision:dashboardSyncRevision,lastSnapshot:JSON.stringify(initial)}));
+  dashboardSyncReady=true;setDashboardSyncNotice('الدفتر محفوظ على الجهاز والسيرفر المركزي.');return;
+ }
+ const remoteText=JSON.stringify(remote.state);
+ if(!localState){
+  cols=remote.state.cols;ledger=remote.state.ledger;closedDays=remote.state.closedDays;
+  localStorage.setItem(STORE_KEY,remoteText);dashboardSyncRevision=Number(remote.revision);
+  localStorage.setItem(dashboardSyncMetaKey(),JSON.stringify({revision:dashboardSyncRevision,lastSnapshot:remoteText}));
+  dashboardSyncReady=true;setDashboardSyncNotice('تم تحميل بيانات الشركة المحفوظة مركزيًا.');return;
+ }
+ const localText=JSON.stringify(localState);
+ if(meta&&typeof meta.lastSnapshot==='string'){
+  const localUnchanged=localText===meta.lastSnapshot,remoteUnchanged=remoteText===meta.lastSnapshot;
+  if(localUnchanged){cols=remote.state.cols;ledger=remote.state.ledger;closedDays=remote.state.closedDays;localStorage.setItem(STORE_KEY,remoteText);dashboardSyncRevision=Number(remote.revision);}
+  else if(remoteUnchanged){dashboardSyncRevision=Number(remote.revision);dashboardSyncReady=true;await pushDashboardState();setDashboardSyncNotice('تم رفع تعديلات هذا الجهاز إلى الدفتر المركزي.');return;}
+  else {dashboardSyncConflict=true;setDashboardSyncNotice('فيه تعديلات مختلفة على الجهاز والسيرفر. احتفظنا بالنسختين وأوقفنا المزامنة لحماية الحسابات.');return;}
+ }else if(localText===remoteText){dashboardSyncRevision=Number(remote.revision);}
+ else {localStorage.setItem(STORE_KEY+'_legacy_backup_'+Date.now(),localText);dashboardSyncConflict=true;setDashboardSyncNotice('فيه بيانات محلية قديمة ونسخة مركزية مختلفة. احتفظنا بالنسخة المحلية وأوقفنا الاستبدال التلقائي لحماية الأرصدة.');return;}
+ localStorage.setItem(dashboardSyncMetaKey(),JSON.stringify({revision:dashboardSyncRevision,lastSnapshot:remoteText}));
+ dashboardSyncReady=true;setDashboardSyncNotice('المزامنة المركزية مفعّلة للشركة الحالية.');
+}
+async function pushDashboardState(){
+ if(!dashboardSyncReady||dashboardSyncConflict||!dashboardSyncRevision)return;
+ const snapshot=dashboardSnapshot();
+ const response=await fetch('/api/shop/dashboard/state',{method:'PUT',headers:{'Content-Type':'application/json',Authorization:'Bearer '+window.DAGA_SESSION_TOKEN},body:JSON.stringify({expectedRevision:dashboardSyncRevision,state:snapshot}),cache:'no-store',credentials:'omit'});
+ const result=await response.json().catch(()=>({}));
+ if(response.status===409){dashboardSyncConflict=true;dashboardSyncReady=false;setDashboardSyncNotice('اتوقف الحفظ المركزي بسبب تعديل متزامن من جهاز آخر. لم نستبدل أي بيانات.');return;}
+ if(!response.ok)throw new Error(result.error||'تعذر حفظ التعديلات مركزيًا');
+ dashboardSyncRevision=Number(result.revision);
+ localStorage.setItem(dashboardSyncMetaKey(),JSON.stringify({revision:dashboardSyncRevision,lastSnapshot:JSON.stringify(snapshot)}));
+ setDashboardSyncNotice('تم حفظ آخر تعديل على السيرفر المركزي.');
+}
+function scheduleDashboardSync(){if(!dashboardSyncReady||dashboardSyncConflict)return;if(dashboardSyncTimer)clearTimeout(dashboardSyncTimer);dashboardSyncTimer=setTimeout(()=>pushDashboardState().catch(()=>setDashboardSyncNotice('الحفظ المحلي شغال، لكن تعذر تأكيد المزامنة المركزية. راجع الاتصال قبل تبديل الجهاز.')),700);}
+function persist(){try{localStorage.setItem(STORE_KEY,JSON.stringify(dashboardSnapshot()));scheduleDashboardSync();return true}catch(e){alert('تعذر الحفظ على هذا الجهاز. صدّر نسخة احتياطية قبل المتابعة.');return false}}
 function num(v){return Number(String(v).replace(/[^0-9.-]/g,''))||0} function fmt(v){return Math.round(v).toLocaleString('en-US')} function esc(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
 function sumCol(name){const c=cols.find(x=>x.name===name);return c?c.entries.reduce((a,e)=>a+num(e[1]),0):0}
 function findMoneyEntry(){
@@ -701,6 +753,7 @@ async function bootAuthenticatedDashboard(token,selectedCompanyId){
   document.querySelectorAll('button[onclick="showReports()"]').forEach(b=>{b.hidden=false;b.disabled=!window.DAGA_AUTH_USER.historyEnabled;b.title=window.DAGA_AUTH_USER.historyEnabled?'':'تفاصيل الأيام السابقة متاحة في الاشتراك الذكي فقط';});
   loadStoreData(company.id);
   applyColumnDefinitions(company.columnDefinitions||[]);
+  await initializeRemoteDashboardState();
   const header=document.querySelector('header.top .row');
   if(header&&!document.getElementById('accountLogout')){const b=document.createElement('button');b.id='accountLogout';b.type='button';b.textContent='تسجيل الخروج';b.style.cssText='margin:0 10px;padding:8px 11px;border:1px solid #4a402c;border-radius:9px;background:#15120c;color:#d7ad57;font:inherit;font-size:12px;cursor:pointer';b.addEventListener('click',async()=>{b.disabled=true;try{await fetch('/api/shop/auth/logout',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:'{}',cache:'no-store',credentials:'omit'});}finally{window.location.replace('/shop-access/');}});header.insertBefore(b,header.lastElementChild);}
   render();
