@@ -126,7 +126,7 @@ export default {
       if (!owned) return json({ error: "company_membership_required" }, 403);
       const columns = body.columns;
       if (!Array.isArray(columns) || columns.length < 2 || columns.length > 30) return json({ error: "invalid_dashboard_columns" }, 400);
-      const allowedRoles = new Set(["cards","balance","expenses","cash","accessory"]);
+      const allowedRoles = new Set(["cards","balance","expenses","cash","accessory","custom"]);
       const ids = new Set(), names = new Set();
       const normalized = [];
       for (const column of columns) {
@@ -147,7 +147,9 @@ export default {
           if (treatment && !["asset","other_company","service"].includes(treatment)) return json({ error: "invalid_dashboard_entry_treatment" }, 400);
           safeEntries.push({ id: entryId, key: String(entry.key || entryId).slice(0,180), name: entryName, enabled: entry.enabled !== false, treatment, linkedCompany: String(entry.linkedCompany || "").slice(0,120) });
         }
-        normalized.push({ id, key: String(column.key || id).slice(0,160), name, role: String(column.role), enabled: true, entries: safeEntries });
+        const calculationMode = column.calculationMode == null ? "accounting" : String(column.calculationMode);
+        if (!["accounting","none"].includes(calculationMode) || (String(column.role) === "custom" && calculationMode !== "none") || (String(column.role) !== "custom" && calculationMode !== "accounting")) return json({ error: "invalid_dashboard_column_calculation_mode" }, 400);
+        normalized.push({ id, key: String(column.key || id).slice(0,160), name, role: String(column.role), calculationMode, enabled: true, entries: safeEntries });
       }
       if (!normalized.some(c => c.role === "cards") || !normalized.some(c => c.role === "balance")) return json({ error: "required_accounting_columns_missing" }, 400);
       const layout = { version: 1, columns: normalized };
