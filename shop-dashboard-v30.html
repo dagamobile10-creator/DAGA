@@ -361,7 +361,7 @@ function prepareNewEntry(i,n,amount,treatment,agent){
  if(money&&num(money.entry[1])+impact.delta<0){pendingCreate=null;return alert('إضافة البند هتخلي الفلوس الأساسية بالسالب. راجع القيمة.');}
  const duplicateState=pendingCreate&&pendingCreate.i===i&&pendingCreate.n===n?{mergeTarget:pendingCreate.mergeTarget,duplicateMode:pendingCreate.duplicateMode}:{};pendingCreate={i,n,amount,impact,entryMeta,moneyBefore:money?num(money.entry[1]):null,agentBefore:impact.agentName?getCardAgentBalance(impact.agentName).value:null,requestedAt:new Date().toISOString(),...duplicateState};
  const treatmentLabel=treatment==='service'?'رصيد خدمة مرتبط بـ '+agent:treatment==='asset'?'أصل — مرتبط عكسيًا بالفلوس الأساسية':'شركة أخرى — رصيد المندوب '+agent;
- open(`<h2>مراجعة إضافة بند</h2><div class="reconMini"><div>وقت المراجعة <b>${esc(localStamp(pendingCreate.requestedAt))}</b></div><div>العمود <b>${esc(cols[i].name)}</b></div><div>اسم البند <b>${esc(n)}</b></div><div>نوع المعاملة <b>${esc(treatmentLabel)}</b></div><div>المبلغ <b>${fmt(amount)} ج.م</b></div><div>تأثير الفلوس الأساسية <b>${impact.delta>0?'+':''}${fmt(impact.delta)} ج.م</b></div>${impact.agentName?`<div>المندوب ${esc(impact.agentName)} <b>+${fmt(impact.agentDelta)} ج.م</b></div>`:''}${money?`<div>الفلوس قبل <b>${fmt(num(money.entry[1]))} ج.م</b></div><div>الفلوس بعد <b>${fmt(num(money.entry[1])+impact.delta)} ج.م</b></div>`:''}</div><p class="small">${esc(impact.description)} لن يتم الحفظ قبل التأكيد.</p><div class="grid"><button class="primary" onclick="confirmCreateEntry()">تأكيد الإضافة</button><button onclick="pendingCreate=null;addEntry(${i})">رجوع</button></div>`);
+ open(`<h2>مراجعة إضافة بند</h2><div class="reconMini"><div>وقت المراجعة <b>${esc(localStamp(pendingCreate.requestedAt))}</b></div><div>العمود <b>${esc(cols[i].name)}</b></div><div>اسم البند <b>${esc(n)}</b></div><div>نوع المعاملة <b>${esc(treatmentLabel)}</b></div><div>المبلغ <b>${fmt(amount)} ج.م</b></div><div>${impact.directMoneyEdit?'تعديل مباشر في الفلوس الأساسية':'تأثير الفلوس الأساسية'} <b>${impact.directMoneyEdit?fmt(p.newAmount)+' ج.م (بدل '+fmt(num(p.old[1]))+' ج.م)':(impact.delta>0?'+':'')+fmt(impact.delta)+' ج.م'}</b></div>${impact.agentName?`<div>المندوب ${esc(impact.agentName)} <b>+${fmt(impact.agentDelta)} ج.م</b></div>`:''}${money?`<div>الفلوس قبل <b>${fmt(num(money.entry[1]))} ج.م</b></div><div>الفلوس بعد <b>${fmt(num(money.entry[1])+impact.delta)} ج.م</b></div>`:''}</div><p class="small">${esc(impact.description)} لن يتم الحفظ قبل التأكيد.</p><div class="grid"><button class="primary" onclick="confirmCreateEntry()">تأكيد الإضافة</button><button onclick="pendingCreate=null;addEntry(${i})">رجوع</button></div>`);
 }
 function confirmCreateEntry(){
  const p=pendingCreate;if(!p)return;const money=findMoneyEntry();
@@ -403,7 +403,7 @@ function moneyImpactForManualEdit(ci,entryName,delta,existingEntry=null){
  const role=columnRole(cols[ci]);
  if(delta===0)return {delta:0,agentDelta:0,agentName:null,description:'لا يوجد فرق مالي؛ الاسم فقط سيتغير.'};
  if(role==='cards'){
-  const f=findMoneyEntry();if(f&&f.entry===existingEntry)return {delta:0,agentDelta:0,agentName:null,description:'ده بند الفلوس الأساسية نفسه؛ لن نعدّل الفلوس مرة ثانية.'};
+  const f=findMoneyEntry();if(f&&f.entry===existingEntry)return {delta:0,agentDelta:0,agentName:null,directMoneyEdit:true,description:'تعديل مباشر لقيمة الفلوس الأساسية في عمود الكروت. سيتم حفظ الرقم الجديد كما أدخلته، دون أي تسوية تلقائية مع الشركات أو المندوبين.'};
   const savedRole=existingEntry?entryRole(cols[ci],existingEntry):'',treatment=existingEntry?.[2]?.treatment||'';
   if(savedRole==='asset'||treatment==='asset')return {delta:-delta,agentDelta:0,agentName:null,description:'الأصل مثل إنستا والمحفظة مرتبط عكسيًا بالفلوس الأساسية: الزيادة تخصم والنقص أو الحذف يضيف نفس القيمة.'};
   const linkedAgent=String(existingEntry?.[2]?.linkedCompany||existingEntry?.[2]?.serviceAgent|| (savedRole.startsWith('card-agent:')?savedRole.slice(11):'') || serviceAgentForCardEntry(entryName)||'').trim();
@@ -418,7 +418,7 @@ function moneyImpactForManualEdit(ci,entryName,delta,existingEntry=null){
  if(role==='balance'){
   const linkedBalance=(existingEntry&&entryRole(cols[ci],existingEntry).startsWith('agent:'))||!!canonicalServiceAgent(entryName);
   if(linkedBalance){
-   if(delta<0)return {delta:delta,agentDelta:0,agentName:null,description:'تسوية رصيد الشركة: أي نقص أو حذف من رصيد المندوب يخصم نفس المبلغ من الفلوس الأساسية في عمود الكروت. الزيادة في رصيد الشركة لا تغيّر الفلوس الأساسية.'};
+   if(delta<0)return {delta:-delta,agentDelta:0,agentName:null,description:'نقص أو حذف أي بند مرتبط بمعاملة شركة أخرى في عمود الرصيد يضيف نفس المبلغ إلى الفلوس الأساسية في عمود الكروت. لا يتم خصم أي مبلغ من الفلوس الأساسية.'};
    return {delta:0,agentDelta:0,agentName:null,description:'زيادة رصيد الشركة المرتبط لا تغيّر الفلوس الأساسية؛ التسوية النقدية تحصل فقط عند تقليل رصيد الشركة أو حذفه.'};
   }
   return {delta:delta,agentDelta:0,agentName:null,description:'البند العادي في عمود الرصيد مرتبط بالفلوس الأساسية بنفس الاتجاه.'};
