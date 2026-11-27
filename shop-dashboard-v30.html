@@ -293,7 +293,20 @@ async function confirmEditColumnName(i){const col=cols[i],input=document.getElem
 async function saveDashboardColumnLayout(){
  const user=window.DAGA_AUTH_USER||{};
  if(!user.storeId||!window.DAGA_SESSION_TOKEN)throw new Error('جلسة الشركة غير متاحة. سجّل الدخول من جديد.');
- const columns=cols.map((col,index)=>({id:String(col.id||'column-'+index),key:String(col.key||col.id||'column-'+index),name:String(col.adminLabel||col.name),role:String(col.role||'custom'),enabled:true,entries:(col.entries||[]).map((entry,j)=>({id:String(entry[2]?.id||'entry-'+col.id+'-'+j),key:String(entry[2]?.stableKey||entry[2]?.id||'entry-'+col.id+'-'+j),name:String(entry[0]),enabled:true,treatment:entry[2]?.treatment||null,linkedCompany:entry[2]?.linkedCompany||entry[2]?.serviceAgent||''}))}));
+ const columns=cols.map((col,index)=>{
+  const columnId=String(col.id||'column-'+index),usedEntryIds=new Set();
+  const entries=(col.entries||[]).map((entry,j)=>{
+   const meta=entry[2]&&typeof entry[2]==='object'?entry[2]:(entry[2]={});
+   const rawId=String(meta.id||'entry-'+columnId+'-'+j).trim();
+   let entryId=rawId||('entry-'+columnId+'-'+j),suffix=1;
+   while(usedEntryIds.has(entryId)){entryId='entry-'+columnId+'-'+j+'-'+suffix++; }
+   usedEntryIds.add(entryId);
+   meta.id=entryId;
+   const entryName=String((meta.adminLabel||entry[0]||'')).trim()||('بند '+(j+1));
+   return {id:entryId,key:String(meta.stableKey||entryId),name:entryName,enabled:true,treatment:meta.treatment||null,linkedCompany:meta.linkedCompany||meta.serviceAgent||''};
+  });
+  return {id:columnId,key:String(col.key||columnId),name:String(col.adminLabel||col.name||'').trim(),role:String(col.role||'custom'),enabled:true,entries};
+ });
  const response=await fetch('/api/company/dashboard-layout',{method:'PUT',headers:{'Content-Type':'application/json',Authorization:'Bearer '+window.DAGA_SESSION_TOKEN,'X-DAGA-Company-ID':user.storeId},body:JSON.stringify({storeId:user.storeId,columns}),cache:'no-store',credentials:'omit'});
  const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.error||'تعذر حفظ ترتيب الأعمدة');return data;
 }
