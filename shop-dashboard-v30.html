@@ -415,7 +415,11 @@ function moneyImpactForManualEdit(ci,entryName,delta,existingEntry=null){
   return {delta:-delta,agentDelta:0,agentName:null,description:'البند يعامل كأصل مرتبط عكسيًا بالفلوس الأساسية.'};
  }
  if(role==='balance'){
-  if((existingEntry&&entryRole(cols[ci],existingEntry).startsWith('agent:'))||canonicalServiceAgent(entryName))return {delta:0,agentDelta:0,agentName:null,description:'تعديل بند المندوب في الرصيد يظل داخل حسابه المرتبط ولا ينشئ حركة نقدية تلقائية.'};
+  const linkedBalance=(existingEntry&&entryRole(cols[ci],existingEntry).startsWith('agent:'))||!!canonicalServiceAgent(entryName);
+  if(linkedBalance){
+   if(delta<0)return {delta:delta,agentDelta:0,agentName:null,description:'تسوية رصيد الشركة: أي نقص أو حذف من رصيد المندوب يخصم نفس المبلغ من الفلوس الأساسية في عمود الكروت. الزيادة في رصيد الشركة لا تغيّر الفلوس الأساسية.'};
+   return {delta:0,agentDelta:0,agentName:null,description:'زيادة رصيد الشركة المرتبط لا تغيّر الفلوس الأساسية؛ التسوية النقدية تحصل فقط عند تقليل رصيد الشركة أو حذفه.'};
+  }
   return {delta:delta,agentDelta:0,agentName:null,description:'البند العادي في عمود الرصيد مرتبط بالفلوس الأساسية بنفس الاتجاه.'};
  }
  if(role==='expenses')return {delta:-delta,agentDelta:0,agentName:null,description:'أي إضافة أو نقص أو حذف في أعمدة الخارج ينعكس عكسيًا على الفلوس الأساسية فور التأكيد.'};
