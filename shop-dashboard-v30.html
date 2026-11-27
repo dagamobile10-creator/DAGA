@@ -658,11 +658,7 @@ function parseOrder(t){
  const paddedCommand=' '+cleaned+' ';
  const matches=[...allPeople.entries()].filter(([k])=>k && paddedCommand.includes(' '+k+' '));
  matches.sort((a,b)=>b[0].length-a[0].length);
- if(matches.length>1 && matches[0][0].length===matches[1][0].length){
-   const candidates=matches.filter(x=>x[0].length===matches[0][0].length).map(([key,value])=>({key,name:value.name}));
-   const newName=cleaned.replace(/(?:الخارج|برا|في|عمود|جنيه|جنيهات|ارفع|اكتب|تكتب|عايزك|عايز|سجل|ضيف|اضيف|حط|زود|دخل|على|عند)/g,' ').replace(/\\s+/g,' ').trim();
-   return {ambiguous:'لقيت أكتر من حساب محتمل. اختار الاسم الكامل الصحيح، أو سجّل الاسم اللي قلته كاسم جديد مستقل.',clarification:{type:'personNameChoice',candidates,newName,amount,raw}};
- }
+ if(matches.length>1 && matches[0][0].length===matches[1][0].length) return {ambiguous:'لقيت أكتر من اسم ممكن في الحسابات. حدّد الشخص المقصود عشان ما نغيّرش حساب غلط.'};
  const person=matches.length?matches[0][1]:null;
 
  // A payment/funding message from a service machine is a service-agent balance movement,
@@ -809,11 +805,7 @@ function review(){
  }
  const p=parseOrder(t);
  if(!p){out.innerHTML='<p class="small">مش قادر أحدد مبلغ واضح. جرّب تقول المبلغ أو تكتبه بشكل أوضح.</p>';return}
- if(p.ambiguous){if(p.clarification?.type==='personNameChoice'){
-   pendingClarification=p.clarification;
-   const choices=p.clarification.candidates.map((candidate,index)=>'<button type="button" onclick="answerPersonNameClarification('+index+')">استخدم الحساب: '+esc(candidate.name)+'</button>').join('');
-   out.innerHTML='<p class="small">'+esc(p.ambiguous)+'</p><p class="small">الاسم ممكن يكون ثنائي أو ثلاثي أو أكتر. ضجّة هتتعامل مع الاسم الكامل كهوية مستقلة، ومش هتخلط بين الأسماء لمجرد تشابه الاسم الأول.</p><div class="grid">'+choices+'<button class="primary" onclick="answerPersonNameClarification(-1)">سجّل «'+esc(p.clarification.newName)+'» كبند جديد مستقل</button><button onclick="answerClarification(\\'cancel\\')">إلغاء</button></div>';
-  }else if(p.clarification){pendingClarification=p.clarification;out.innerHTML='<p class="small">'+esc(p.ambiguous)+'</p><p class="small">رد بالمايك على نفس السؤال، أو اختار إجابة من هنا. الرد الصوتي هيتربط بالسؤال الحالي ومش هيبدأ أوردر جديد.</p><div class="grid"><button class="primary" onclick="answerClarification(\\'new\\')">مبلغ جديد مستقل</button><button onclick="answerClarification(\\'transfer\\')">تسوية من الرصيد</button><button onclick="answerClarification(\\'cancel\\')">إلغاء</button></div>';}else{out.innerHTML='<p class="small">'+esc(p.ambiguous)+'</p>';}return}
+ if(p.ambiguous){if(p.clarification){pendingClarification=p.clarification;out.innerHTML='<p class="small">'+esc(p.ambiguous)+'</p><p class="small">رد بالمايك على نفس السؤال، أو اختار إجابة من هنا. الرد الصوتي هيتربط بالسؤال الحالي ومش هيبدأ أوردر جديد.</p><div class="grid"><button class="primary" onclick="answerClarification(\'new\')">مبلغ جديد مستقل</button><button onclick="answerClarification(\'transfer\')">تسوية من الرصيد</button><button onclick="answerClarification(\'cancel\')">إلغاء</button></div>';}else{out.innerHTML='<p class="small">'+esc(p.ambiguous)+'</p>';}return}
  if(p.type==='namedEntrySet'){
   const ci=cols.findIndex(c=>c.name===p.column),entry=ci>=0?cols[ci].entries[p.index]:null;
   if(!entry||entry[0]!==p.entryName){out.innerHTML='<p class="small">البند اتغير من وقت قراءة الأمر. راجع البند وحاول تاني.</p>';return}
@@ -958,21 +950,6 @@ function answerClarificationFromText(text){
  if(/(سوي|سوى|تسويه|تسويه الحساب|من الرصيد|انقل|نقل|خصم من الرصيد|رصيده|رصيد جمال|سوّي القديم|سوي القديم|اه ايوه سوي|ايوه سوي|أيوه سوي|خصم القديم|سوّي الحساب|اشطب|شطب|شيل القديم|اشطب القديم|السبعمية|السبعميه|ال 700|الـ 700|خصم القديم)/.test(v)){answerClarification('transfer');return}
  if(/^(الغاء|الغي|بلاش|وقف|لا|لأ|مش عايز|مش قصدي|الغاء العملية|الغى العملية)$/.test(v)){answerClarification('cancel');return}
  const out=document.getElementById('orderPreview');if(out)out.innerHTML='<p class="small">لسه مش واضح قصدك إيه. السؤال الأصلي لسه مفتوح ومفيش أي تغيير اتسجل. قول «مبلغ جديد» لو ده مبلغ مستقل، أو «سوّي من الرصيد» لو تقصد التسويه، أو «إلغاء».</p><button class="primary" onclick="startVoice()">🎙️ رد على نفس السؤال بالمايك</button><button onclick="answerClarification(\'new\')">مبلغ جديد مستقل</button><button onclick="answerClarification(\'transfer\')">تسوية من الرصيد</button><button onclick="answerClarification(\'cancel\')">إلغاء</button>';
-}
-function answerPersonNameClarification(index){
- const q=pendingClarification;if(!q||q.type!=='personNameChoice')return;
- const chosen=index>=0?q.candidates[index]:null;
- const name=String(chosen?.name||q.newName||'').trim();
- if(!name){alert('اكتب الاسم الكامل الأول.');return;}
- const target=cols.map((c,i)=>({c,i})).find(x=>columnRole(x.c)==='expenses');
- const cardsIndex=cols.findIndex(c=>columnRole(c)==='cards'),money=findMoneyEntry();
- if(!target||!money){pendingClarification=null;alert('مش لاقي عمود الخارج أو بند الفلوس. لم يتغير أي رقم.');return;}
- const amount=Number(q.amount);
- if(!Number.isFinite(amount)||amount<=0){pendingClarification=null;alert('المبلغ غير واضح. راجع الأمر من جديد.');return;}
- pendingOrder={type:'outsideAdd',mode:'outsideAdd',name,amount,targetIndex:target.i,cardsIndex,clarificationAnswered:true};
- pendingClarification=null;
- const before=num(money.entry[1]);
- document.getElementById('orderPreview').innerHTML='<div class="reconMini"><div>الاسم الكامل <b>'+esc(name)+'</b></div><div>الاختيار <b>'+(chosen?'استخدام الحساب الموجود':'إنشاء بند جديد مستقل')+'</b></div><div>المبلغ <b>'+fmt(amount)+' جنيه</b></div><div>الفلوس الأساسية قبل <b>'+fmt(before)+' جنيه</b></div><div>الفلوس الأساسية بعد <b>'+fmt(before-amount)+' جنيه</b></div></div><p class="small">الاسم الكامل هو مفتاح التمييز. لن يتم دمج حسابين لمجرد تشابه الاسم الأول. راجع قبل التأكيد.</p><button class="primary" onclick="executeOrder()">تأكيد وتنفيذ</button><button onclick="pendingOrder=null;document.getElementById('orderPreview').innerHTML='تم إلغاء العملية.'">إلغاء</button>';
 }
 function answerClarification(choice){
  const q=pendingClarification;if(!q)return;
