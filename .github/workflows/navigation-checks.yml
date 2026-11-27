@@ -1,0 +1,42 @@
+name: DAGA V30 navigation checks
+
+on:
+  push:
+    branches:
+      - fix-daga-v30-navigation-flow
+    paths:
+      - "index.html"
+      - "go/index.html"
+      - "owner-console.html"
+      - "company/portal.html"
+      - "invite/index.html"
+      - "worker.js"
+      - "tests/test_navigation_routes.py"
+      - ".github/workflows/navigation-checks.yml"
+  pull_request:
+    branches:
+      - daga-v30-implementation
+    paths:
+      - "index.html"
+      - "go/index.html"
+      - "owner-console.html"
+      - "company/portal.html"
+      - "invite/index.html"
+      - "worker.js"
+      - "tests/test_navigation_routes.py"
+      - ".github/workflows/navigation-checks.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  navigation-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check route links and LIVE DAGA compatibility
+        run: python tests/test_navigation_routes.py -v
