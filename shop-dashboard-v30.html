@@ -19,7 +19,7 @@ th,td{border-left:1px solid #25231f;border-bottom:1px solid #25231f;vertical-ali
 th{background:#171611;color:#d7ae58;font-size:13px;padding:14px 10px;position:sticky;top:0;z-index:5;min-width:165px}
 th:first-child{position:sticky;right:0;z-index:7;min-width:130px}
 td{padding:8px;min-width:165px;height:520px}td:first-child{position:sticky;right:0;background:#10100f;z-index:4}
-.colhead{display:flex;justify-content:center;align-items:center;gap:6px}.edithead{background:transparent;border:0;color:#d7ae58;padding:3px;font-size:13px}
+.colAdminActions{display:flex;gap:5px;flex-wrap:wrap;margin-top:7px}.colAdminActions .miniBtn{font-size:11px;padding:5px 7px;white-space:nowrap}.colhead{display:flex;justify-content:center;align-items:center;gap:6px}.edithead{background:transparent;border:0;color:#d7ae58;padding:3px;font-size:13px}
 .entry{display:flex;justify-content:space-between;align-items:center;gap:7px;background:#11110f;border:1px solid #28261f;border-radius:12px;padding:12px 10px;margin:7px 0;cursor:pointer;min-height:58px}
 .entry:hover{border-color:#6a522b}.entry{touch-action:manipulation;user-select:none;-webkit-user-select:none}.entry.longpress-hint:after{content:'اضغط مطولًا للتفاصيل';font-size:10px;color:#bda36e}.entry .name{font-weight:700}.entry .amount{color:#e7e1d5;font-weight:800;font-size:16px}.entry .sub{display:block;color:#888;font-size:11px;margin-top:3px}.entry .tag{display:inline-block;color:#7f7768;font-size:10px;margin-top:4px}
 
@@ -47,7 +47,7 @@ button{cursor:pointer}button:disabled{opacity:.55;cursor:not-allowed}.removeRow{
 <button onclick="closeDay()">✓ تسوية اليوم</button>
 </div>
 </main>
-<nav class="bottom"><button class="active" onclick="showHome()">الرئيسية</button><button onclick="showTeam()">الفريق</button><button class="liveBtn" onclick="showLiveComingSoon()">LIVE DAGA</button><button onclick="voiceDaga()">🎙️ كلم ضجه</button><button onclick="showReports()">التقارير</button><button onclick="showSettings()">الإعدادات</button></nav>
+<nav class="bottom"><button class="active" onclick="showHome()">الرئيسية</button><button onclick="showTeam()">الفريق</button><button class="liveBtn" onclick="showLiveComingSoon()">LIVE DAGA</button><button onclick="voiceDaga()">🎙️ كلم ضجه</button><button onclick="showReports()">التقارير</button><button onclick="addDashboardColumn()">＋ إضافة عمود</button><button onclick="showSettings()">الإعدادات</button></nav>
 <div class="modal" id="modal"><div class="sheet"><button class="close" onclick="closeModal()">×</button><div id="sheet"></div></div></div>
 <script>
 const defaultCols=[
@@ -65,15 +65,83 @@ const defaultCols=[
 let STORE_KEY=''; let cols=JSON.parse(JSON.stringify(defaultCols)); let ledger=[],closedDays=[]; let pendingOrder=null,rec=null,pendingClarification=null;
 function applyColumnDefinitions(definitions){
  const byKey=new Map();
- (definitions||[]).forEach(def=>{if(def&&def.stable_key&&def.display_name)byKey.set(String(def.stable_key),String(def.display_name));});
- defaultCols.forEach((column,index)=>{const label=byKey.get('dashboard_col_'+(index+1));if(label&&cols[index])cols[index].name=label;});
+ (definitions||[]).forEach(def=>{if(def&&def.stable_key&&def.display_name)byKey.set(String(def.stable_key),def);});
+ defaultCols.forEach((column,index)=>{
+  const def=byKey.get('dashboard_col_'+(index+1));
+  if(def&&cols[index]){
+   cols[index].name=String(def.display_name);
+   let behavior={};try{behavior=JSON.parse(def.behavior_json||'{}')}catch(_){}
+   const kind=String(behavior.kind||behavior.behavior||'');
+   if(['balance','outside','cash','accessory','standard'].includes(kind))cols[index].behavior=kind;
+   cols[index].stableKey=String(def.stable_key);
+  }
+ });
+ // Custom server-defined columns are appended once, without touching existing entries or balances.
+ (definitions||[]).filter(def=>def&&def.is_enabled!==0&&String(def.stable_key||'').startsWith('dashboard_custom_')).forEach(def=>{
+  const key=String(def.stable_key);
+  const behavior=(()=>{try{return JSON.parse(def.behavior_json||'{}').kind||JSON.parse(def.behavior_json||'{}').behavior||'standard'}catch(_){return 'standard'}})();
+  if(!cols.some(c=>c.stableKey===key))cols.push({name:String(def.display_name||'عمود جديد'),stableKey:key,behavior,entries:[]});
+  else {const found=cols.find(c=>c.stableKey===key);if(found){found.name=String(def.display_name||found.name);found.behavior=behavior;}}
+ });
 }
 function loadStoreData(storeId){
  STORE_KEY='daga_dashboard_v30_store_'+encodeURIComponent(String(storeId));
  cols=JSON.parse(JSON.stringify(defaultCols));ledger=[];closedDays=[];
- try{const saved=JSON.parse(localStorage.getItem(STORE_KEY)||'null');if(saved){if(Array.isArray(saved.cols)&&saved.cols.length===10)cols=saved.cols;if(Array.isArray(saved.ledger))ledger=saved.ledger;if(Array.isArray(saved.closedDays))closedDays=saved.closedDays;}}catch(e){}
+ try{const saved=JSON.parse(localStorage.getItem(STORE_KEY)||'null');if(saved){if(Array.isArray(saved.cols)&&saved.cols.length>=1&&saved.cols.length<=30)cols=saved.cols;if(Array.isArray(saved.ledger))ledger=saved.ledger;if(Array.isArray(saved.closedDays))closedDays=saved.closedDays;}}catch(e){}
 }
-function persist(){try{localStorage.setItem(STORE_KEY,JSON.stringify({cols,ledger,closedDays}));return true}catch(e){alert('تعذر الحفظ على هذا الجهاز. صدّر نسخة احتياطية قبل المتابعة.');return false}}
+let dashboardSyncRevision=0,dashboardSyncReady=false,dashboardSyncConflict=false,dashboardSyncTimer=null;
+function dashboardSnapshot(){return {cols,ledger,closedDays}}
+function dashboardSyncMetaKey(){return STORE_KEY+'_central_sync_meta'}
+function setDashboardSyncNotice(message){let el=document.getElementById('dashboardSyncNotice');if(!el){el=document.createElement('div');el.id='dashboardSyncNotice';el.style.cssText='margin:8px 0;padding:8px 12px;border-radius:8px;background:#211b10;color:#f0cf86;font-size:12px';const h=document.querySelector('header.top');if(h)h.insertAdjacentElement('afterend',el);}el.textContent=message;}
+async function initializeRemoteDashboardState(){
+ dashboardSyncReady=false;dashboardSyncConflict=false;dashboardSyncRevision=0;
+ const localRaw=localStorage.getItem(STORE_KEY),metaRaw=localStorage.getItem(dashboardSyncMetaKey());
+ let meta=null;try{meta=JSON.parse(metaRaw||'null')}catch(_){}
+ const localState=(()=>{try{return localRaw?JSON.parse(localRaw):null}catch(_){return null}})();
+ const response=await fetch('/api/shop/dashboard/state',{headers:{Authorization:'Bearer '+window.DAGA_SESSION_TOKEN},cache:'no-store',credentials:'omit'});
+ const remote=await response.json().catch(()=>({}));
+ if(!response.ok)throw new Error(remote.error||'تعذر تحميل نسخة الدفتر المركزية');
+ if(!remote.exists){
+  const initial=localState||dashboardSnapshot();
+  const created=await fetch('/api/shop/dashboard/state',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+window.DAGA_SESSION_TOKEN},body:JSON.stringify({state:initial}),cache:'no-store',credentials:'omit'});
+  const result=await created.json().catch(()=>({}));
+  if(!created.ok)throw new Error(result.error||'تعذر إنشاء النسخة المركزية');
+  if(!localState)localStorage.setItem(STORE_KEY,JSON.stringify(initial));
+  dashboardSyncRevision=Number(result.revision||1);
+  localStorage.setItem(dashboardSyncMetaKey(),JSON.stringify({revision:dashboardSyncRevision,lastSnapshot:JSON.stringify(initial)}));
+  dashboardSyncReady=true;setDashboardSyncNotice('الدفتر محفوظ على الجهاز والسيرفر المركزي.');return;
+ }
+ const remoteText=JSON.stringify(remote.state);
+ if(!localState){
+  cols=remote.state.cols;ledger=remote.state.ledger;closedDays=remote.state.closedDays;
+  localStorage.setItem(STORE_KEY,remoteText);dashboardSyncRevision=Number(remote.revision);
+  localStorage.setItem(dashboardSyncMetaKey(),JSON.stringify({revision:dashboardSyncRevision,lastSnapshot:remoteText}));
+  dashboardSyncReady=true;setDashboardSyncNotice('تم تحميل بيانات الشركة المحفوظة مركزيًا.');return;
+ }
+ const localText=JSON.stringify(localState);
+ if(meta&&typeof meta.lastSnapshot==='string'){
+  const localUnchanged=localText===meta.lastSnapshot,remoteUnchanged=remoteText===meta.lastSnapshot;
+  if(localUnchanged){cols=remote.state.cols;ledger=remote.state.ledger;closedDays=remote.state.closedDays;localStorage.setItem(STORE_KEY,remoteText);dashboardSyncRevision=Number(remote.revision);}
+  else if(remoteUnchanged){dashboardSyncRevision=Number(remote.revision);dashboardSyncReady=true;await pushDashboardState();setDashboardSyncNotice('تم رفع تعديلات هذا الجهاز إلى الدفتر المركزي.');return;}
+  else {dashboardSyncConflict=true;setDashboardSyncNotice('فيه تعديلات مختلفة على الجهاز والسيرفر. احتفظنا بالنسختين وأوقفنا المزامنة لحماية الحسابات.');return;}
+ }else if(localText===remoteText){dashboardSyncRevision=Number(remote.revision);}
+ else {localStorage.setItem(STORE_KEY+'_legacy_backup_'+Date.now(),localText);dashboardSyncConflict=true;setDashboardSyncNotice('فيه بيانات محلية قديمة ونسخة مركزية مختلفة. احتفظنا بالنسخة المحلية وأوقفنا الاستبدال التلقائي لحماية الأرصدة.');return;}
+ localStorage.setItem(dashboardSyncMetaKey(),JSON.stringify({revision:dashboardSyncRevision,lastSnapshot:remoteText}));
+ dashboardSyncReady=true;setDashboardSyncNotice('المزامنة المركزية مفعّلة للشركة الحالية.');
+}
+async function pushDashboardState(){
+ if(!dashboardSyncReady||dashboardSyncConflict||!dashboardSyncRevision)return;
+ const snapshot=dashboardSnapshot();
+ const response=await fetch('/api/shop/dashboard/state',{method:'PUT',headers:{'Content-Type':'application/json',Authorization:'Bearer '+window.DAGA_SESSION_TOKEN},body:JSON.stringify({expectedRevision:dashboardSyncRevision,state:snapshot}),cache:'no-store',credentials:'omit'});
+ const result=await response.json().catch(()=>({}));
+ if(response.status===409){dashboardSyncConflict=true;dashboardSyncReady=false;setDashboardSyncNotice('اتوقف الحفظ المركزي بسبب تعديل متزامن من جهاز آخر. لم نستبدل أي بيانات.');return;}
+ if(!response.ok)throw new Error(result.error||'تعذر حفظ التعديلات مركزيًا');
+ dashboardSyncRevision=Number(result.revision);
+ localStorage.setItem(dashboardSyncMetaKey(),JSON.stringify({revision:dashboardSyncRevision,lastSnapshot:JSON.stringify(snapshot)}));
+ setDashboardSyncNotice('تم حفظ آخر تعديل على السيرفر المركزي.');
+}
+function scheduleDashboardSync(){if(!dashboardSyncReady||dashboardSyncConflict)return;if(dashboardSyncTimer)clearTimeout(dashboardSyncTimer);dashboardSyncTimer=setTimeout(()=>pushDashboardState().catch(()=>setDashboardSyncNotice('الحفظ المحلي شغال، لكن تعذر تأكيد المزامنة المركزية. راجع الاتصال قبل تبديل الجهاز.')),700);}
+function persist(){try{localStorage.setItem(STORE_KEY,JSON.stringify(dashboardSnapshot()));scheduleDashboardSync();return true}catch(e){alert('تعذر الحفظ على هذا الجهاز. صدّر نسخة احتياطية قبل المتابعة.');return false}}
 function num(v){return Number(String(v).replace(/[^0-9.-]/g,''))||0} function fmt(v){return Math.round(v).toLocaleString('en-US')} function esc(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
 function sumCol(name){const c=cols.find(x=>x.name===name);return c?c.entries.reduce((a,e)=>a+num(e[1]),0):0}
 function findMoneyEntry(){
@@ -114,7 +182,44 @@ function currentAccountRole(){const user=window.DAGA_AUTH_USER||window.dagaAuthe
 function refreshAccountRoleLabel(){applyAccountRole(currentAccountRole());}
 function isShopOwner(){return currentAccountRole()==='owner';}
 
-function render(){updateLiveDate();refreshAccountRoleLabel();const h=document.getElementById('headers'),c=document.getElementById('cells');h.innerHTML='';c.innerHTML='';cols.forEach((col,i)=>{const th=document.createElement('th');th.innerHTML='<div class="colhead"><span>'+esc(col.name)+'</span></div>';h.appendChild(th);const td=document.createElement('td');const list=document.createElement('div');list.className='entryList';col.entries.forEach((e,j)=>{const d=document.createElement('div');d.className='entry';d.innerHTML='<div><span class="name">'+esc(e[0])+'</span><span class="sub">ضغطة للتعديل · ضغطة مطوّلة للتفاصيل</span></div><span class="amount">'+fmt(num(e[1]))+'</span>';attachEntryGestures(d,i,j);list.appendChild(d)});const total=document.createElement('div');total.className='colTotal';total.innerHTML='<span>إجمالي العمود</span><b>'+fmt(sumCol(col.name))+' ج.م</b>';const footer=document.createElement('div');footer.className='colFooter';const add=document.createElement('button');add.className='miniBtn';add.textContent='＋ بند جديد';add.onclick=ev=>{ev.stopPropagation();addEntry(i)};const del=document.createElement('button');del.className='miniBtn danger';del.textContent='− حذف بند';del.onclick=ev=>{ev.stopPropagation();removeEntry(i)};footer.append(add,del);td.append(list,total,footer);c.appendChild(td)});updateRecon()}
+function render(){updateLiveDate();refreshAccountRoleLabel();const h=document.getElementById('headers'),c=document.getElementById('cells');h.innerHTML='';c.innerHTML='';cols.forEach((col,i)=>{const th=document.createElement('th');th.innerHTML='<div class="colhead"><span>'+esc(col.name)+'</span><div class="colAdminActions"><button type="button" class="miniBtn" onclick="renameDashboardColumn('+i+')">تغيير الاسم</button><button type="button" class="miniBtn danger" onclick="deleteDashboardColumn('+i+')">حذف العمود</button></div></div>';h.appendChild(th);const td=document.createElement('td');const list=document.createElement('div');list.className='entryList';col.entries.forEach((e,j)=>{const d=document.createElement('div');d.className='entry';d.innerHTML='<div><span class="name">'+esc(e[0])+'</span><span class="sub">ضغطة للتعديل · ضغطة مطوّلة للتفاصيل</span></div><span class="amount">'+fmt(num(e[1]))+'</span>';attachEntryGestures(d,i,j);list.appendChild(d)});const total=document.createElement('div');total.className='colTotal';total.innerHTML='<span>إجمالي العمود</span><b>'+fmt(sumCol(col.name))+' ج.م</b>';const footer=document.createElement('div');footer.className='colFooter';const add=document.createElement('button');add.className='miniBtn';add.textContent='＋ بند جديد';add.onclick=ev=>{ev.stopPropagation();addEntry(i)};const del=document.createElement('button');del.className='miniBtn danger';del.textContent='− حذف بند';del.onclick=ev=>{ev.stopPropagation();removeEntry(i)};footer.append(add,del);td.append(list,total,footer);c.appendChild(td)});updateRecon()}
+function columnBehaviorLabel(type){return ({balance:'الرصيد',outside:'الخارج',cash:'الكاش',accessory:'الإكسسوار',standard:'عادي'})[type]||'عادي'}
+function addDashboardColumn(){
+ if(cols.length>=30)return alert('وصلت للحد الأقصى المسموح به وهو 30 عمودًا.');
+ open('<h2>إضافة عمود جديد</h2><label>اسم العمود</label><input id="newColumnName" maxlength="60" placeholder="اكتب اسم العمود"><label>المعاملة المحاسبية للعمود</label><select id="newColumnBehavior"><option value="balance">معاملة الرصيد</option><option value="outside">معاملة الخارج</option><option value="cash">معاملة الكاش</option><option value="accessory">معاملة الإكسسوار</option></select><p class="small">اختيار المعاملة يحفظ نوع العمود مع بياناته، ولا يغيّر أي رصيد سابق تلقائيًا.</p><button class="primary" onclick="confirmAddDashboardColumn()">إضافة العمود</button>');
+}
+function confirmAddDashboardColumn(){
+ const input=document.getElementById('newColumnName');const name=String(input?.value||'').trim(),behavior=document.getElementById('newColumnBehavior')?.value||'standard';
+ if(!name)return alert('اكتب اسم العمود.');
+ if(cols.some(c=>String(c.name).trim()===name))return alert('فيه عمود بنفس الاسم بالفعل.');
+ if(cols.length>=30)return alert('وصلت للحد الأقصى.');
+ cols.push({name,entries:[],behavior});addLedger('إضافة عمود',name+' — المعاملة: '+columnBehaviorLabel(behavior),{column:name,behavior});persist();closeModal();render();
+}
+function renameDashboardColumn(i){
+ const col=cols[i];if(!col)return;
+ const behavior=col.behavior||inferColumnBehavior(col.name);
+ open('<h2>تعديل العمود</h2><label>اسم العمود</label><input id="renameColumnName" maxlength="60" value="'+esc(col.name)+'"><label>المعاملة المحاسبية</label><select id="renameColumnBehavior"><option value="balance" '+(behavior==='balance'?'selected':'')+'>معاملة الرصيد</option><option value="outside" '+(behavior==='outside'?'selected':'')+'>معاملة الخارج</option><option value="cash" '+(behavior==='cash'?'selected':'')+'>معاملة الكاش</option><option value="accessory" '+(behavior==='accessory'?'selected':'')+'>معاملة الإكسسوار</option><option value="standard" '+(behavior==='standard'?'selected':'')+'>عادي</option></select><p class="small">تغيير الاسم أو نوع المعاملة لا يعيد احتساب الحركات القديمة تلقائيًا.</p><button class="primary" onclick="confirmRenameDashboardColumn('+i+')">حفظ التعديلات</button>');
+}
+function inferColumnBehavior(name){const n=String(name||'');if(n==='الرصيد')return 'balance';if(/^خارج/.test(n))return 'outside';if(/^كاش/.test(n))return 'cash';if(/إكسسوار|اكسسوار/.test(n))return 'accessory';return 'standard'}
+function confirmRenameDashboardColumn(i){
+ const col=cols[i],input=document.getElementById('renameColumnName'),name=String(input?.value||'').trim(),behavior=document.getElementById('renameColumnBehavior')?.value||'standard';
+ if(!col||!name)return alert('اكتب اسمًا صحيحًا.');
+ if(cols.some((c,index)=>index!==i&&String(c.name).trim()===name))return alert('الاسم مستخدم في عمود آخر.');
+ const previous=col.name,previousBehavior=col.behavior||inferColumnBehavior(col.name);col.name=name;col.behavior=behavior;
+ addLedger('تعديل إعدادات عمود',previous+' ← '+name+'؛ '+columnBehaviorLabel(previousBehavior)+' ← '+columnBehaviorLabel(behavior),{oldColumnName:previous,newColumnName:name,oldBehavior:previousBehavior,behavior});
+ persist();closeModal();render();
+}
+function deleteDashboardColumn(i){
+ const col=cols[i];if(!col)return;
+ if(col.name==='الرصيد'||col.name==='الكروت')return alert('لا يمكن حذف عمود أساسي مرتبط بمعادلات الرصيد والتسوية.');
+ open('<h2>حذف عمود</h2><p class="small">العمود: <b>'+esc(col.name)+'</b><br>عدد البنود: '+col.entries.length+'<br>سيتم الاحتفاظ بسجل الحركات، لكن العمود وبنوده سيختفيان من الداشبورد.</p><p class="small">لو فيه بيانات مهمة، صدّر نسخة احتياطية قبل الحذف.</p><button class="danger" onclick="confirmDeleteDashboardColumn('+i+')">تأكيد حذف العمود</button><button onclick="closeModal()">إلغاء</button>');
+}
+function confirmDeleteDashboardColumn(i){
+ const col=cols[i];if(!col)return;
+ if(col.name==='الرصيد'||col.name==='الكروت')return alert('لا يمكن حذف عمود أساسي.');
+ addLedger('حذف عمود',col.name+' — '+col.entries.length+' بند',{deletedColumn:col.name,deletedEntries:col.entries});
+ cols.splice(i,1);persist();closeModal();render();
+}
 function getDayReconciliation(){
  const capitalCol=cols.find(c=>c.name==='الرصيد');
  const capital=capitalCol?capitalCol.entries.reduce((a,e)=>a+num(e[1]),0):0;
@@ -135,27 +240,28 @@ function updateRecon(){
   :(r.diff>0?'زيادة/مكسب محتمل '+fmt(r.diff)+' جنيه مقارنة بعمود الرصيد — راجع السبب قبل التأكيد.'
   :'عجز محتمل '+fmt(Math.abs(r.diff))+' جنيه مقارنة بعمود الرصيد — راجع السبب قبل التأكيد.');
 }
-function addEntry(i){open(`<h2>إضافة بند جديد</h2><p class="small">هيُضاف البند إلى عمود <b>${esc(cols[i].name)}</b>.</p><label>الاسم / البيان</label><input id="n" placeholder="اسم البند"><label>المبلغ بالجنيه</label><input id="a" inputmode="decimal" placeholder="مثال: 6000"><button class="primary" onclick="saveNewEntry(${i})">حفظ البند</button>`)}
+function addEntry(i){open(`<h2>إضافة بند جديد</h2><p class="small">هيُضاف البند إلى عمود <b>${esc(cols[i].name)}</b>.</p><label>نوع البند</label><select id="entryClassification"><option value="asset">أصل</option><option value="other_company">شركة أخرى</option></select><label>الاسم / البيان</label><input id="n" placeholder="اسم البند"><label>المبلغ بالجنيه</label><input id="a" inputmode="decimal" placeholder="مثال: 6000"><button class="primary" onclick="saveNewEntry(${i})">مراجعة الإضافة</button>`)}
 let pendingCreate=null;
-function saveNewEntry(i){const n=document.getElementById('n').value.trim(),a=document.getElementById('a').value.trim();if(!n||a===''||num(a)<0)return alert('اكتب الاسم ومبلغًا صحيحًا');const amount=num(a),money=findMoneyEntry();let impact=moneyImpactForManualEdit(i,n,amount);if(i===0&&/^(الفلوس|فلوس|الفلوس الأساسية|الفلوس الاساسية|الفلوس الموجودة|فلوس الشركة|فلوس الخزنة|فلوس الدرج|النقدية|النقد|فلوس الكروت)$/i.test(n)){if(money){return alert('بند الفلوس الأساسية موجود بالفعل. عدّل قيمته بدل إضافة بند مكرر.')}impact={delta:0,description:'ده بند الفلوس الأساسية نفسه؛ إضافته تنشئ نقطة الربط التي تعتمد عليها الحركات الأخرى.'}}else if(i===0&&money&&money.entry[0]===n){impact.delta=0;impact.description='ده بند الفلوس الأساسية نفسه، مش هنغيّر قيمته مرتين.'}if(impact.delta!==0&&!money)return alert('مش لاقي بند «فلوس» داخل عمود الكروت، فمش هقدر أضيف بند مرتبط بأمان. لم يتغير أي رقم.');if(money&&num(money.entry[1])+impact.delta<0)return alert('إضافة البند هتخلي الفلوس الأساسية بالسالب. راجع المبلغ.');pendingCreate={i,n,amount,impact,moneyBefore:money?num(money.entry[1]):null,requestedAt:new Date().toISOString()};open(`<h2>مراجعة إضافة بند</h2><div class="reconMini"><div>وقت المراجعة <b>${esc(localStamp(pendingCreate.requestedAt))}</b></div><div>العمود <b>${esc(cols[i].name)}</b></div><div>اسم البند <b>${esc(n)}</b></div><div>المبلغ <b>${fmt(amount)} ج.م</b></div><div>تأثير الفلوس الأساسية <b>${impact.delta>0?'+':''}${fmt(impact.delta)} ج.م</b></div>${money?`<div>الفلوس قبل <b>${fmt(num(money.entry[1]))} ج.م</b></div><div>الفلوس بعد <b>${fmt(num(money.entry[1])+impact.delta)} ج.م</b></div>`:''}</div><p class="small">${esc(impact.description)} لن يتم الحفظ قبل التأكيد.</p><div class="grid"><button class="primary" onclick="confirmCreateEntry()">تأكيد الإضافة</button><button onclick="pendingCreate=null;addEntry(${i})">رجوع</button></div>`)}
-function confirmCreateEntry(){const p=pendingCreate;if(!p)return;const money=findMoneyEntry();if(p.impact.delta!==0&&(!money||num(money.entry[1])!==p.moneyBefore)){pendingCreate=null;alert('الفلوس الأساسية اتغيرت من وقت المراجعة. راجع الإضافة من جديد.');render();return}if(p.impact.delta!==0)money.entry[1]=String(num(money.entry[1])+p.impact.delta);cols[p.i].entries.push([p.n,String(p.amount)]);addLedger('إضافة بند بعد مراجعة',`${p.n} — ${fmt(p.amount)} جنيه في ${cols[p.i].name}; تأثير الفلوس ${p.impact.delta>0?'+':''}${fmt(p.impact.delta)} جنيه.`,{column:cols[p.i].name,entryName:p.n,oldValue:null,newValue:p.amount,moneyDelta:p.impact.delta});pendingCreate=null;persist();closeModal();render();open(`<h2>تمت الإضافة</h2><p class="small">تم حفظ البند بعد التأكيد.</p><p class="status">${esc(localStamp())}</p><button class="primary" onclick="closeModal()">تمام</button>`)}
+function saveNewEntry(i){const n=document.getElementById('n').value.trim(),a=document.getElementById('a').value.trim();if(!n||a===''||num(a)<0)return alert('اكتب الاسم ومبلغًا صحيحًا');const amount=num(a),money=findMoneyEntry();let impact=moneyImpactForManualEdit(i,n,amount);if(i===0&&/^(الفلوس|فلوس|الفلوس الأساسية|الفلوس الاساسية|الفلوس الموجودة|فلوس الشركة|فلوس الخزنة|فلوس الدرج|النقدية|النقد|فلوس الكروت)$/i.test(n)){if(money){return alert('بند الفلوس الأساسية موجود بالفعل. عدّل قيمته بدل إضافة بند مكرر.')}impact={delta:0,description:'ده بند الفلوس الأساسية نفسه؛ إضافته تنشئ نقطة الربط التي تعتمد عليها الحركات الأخرى.'}}else if(i===0&&money&&money.entry[0]===n){impact.delta=0;impact.description='ده بند الفلوس الأساسية نفسه، مش هنغيّر قيمته مرتين.'}if(impact.delta!==0&&!money)return alert('مش لاقي بند «فلوس» داخل عمود الكروت، فمش هقدر أضيف بند مرتبط بأمان. لم يتغير أي رقم.');if(money&&num(money.entry[1])+impact.delta<0)return alert('إضافة البند هتخلي الفلوس الأساسية بالسالب. راجع المبلغ.');const classification=document.getElementById('entryClassification')?.value||'asset';pendingCreate={i,n,amount,impact,classification,moneyBefore:money?num(money.entry[1]):null,requestedAt:new Date().toISOString()};open(`<h2>مراجعة إضافة بند</h2><div class="reconMini"><div>وقت المراجعة <b>${esc(localStamp(pendingCreate.requestedAt))}</b></div><div>العمود <b>${esc(cols[i].name)}</b></div><div>اسم البند <b>${esc(n)}</b></div><div>تصنيف البند <b>${classification==='other_company'?'شركة أخرى':'أصل'}</b></div><div>المبلغ <b>${fmt(amount)} ج.م</b></div><div>تأثير الفلوس الأساسية <b>${impact.delta>0?'+':''}${fmt(impact.delta)} ج.م</b></div>${money?`<div>الفلوس قبل <b>${fmt(num(money.entry[1]))} ج.م</b></div><div>الفلوس بعد <b>${fmt(num(money.entry[1])+impact.delta)} ج.م</b></div>`:''}</div><p class="small">${esc(impact.description)} لن يتم الحفظ قبل التأكيد.</p><div class="grid"><button class="primary" onclick="confirmCreateEntry()">تأكيد الإضافة</button><button onclick="pendingCreate=null;addEntry(${i})">رجوع</button></div>`)}
+function confirmCreateEntry(){const p=pendingCreate;if(!p)return;const money=findMoneyEntry();if(p.impact.delta!==0&&(!money||num(money.entry[1])!==p.moneyBefore)){pendingCreate=null;alert('الفلوس الأساسية اتغيرت من وقت المراجعة. راجع الإضافة من جديد.');render();return}if(p.impact.delta!==0)money.entry[1]=String(num(money.entry[1])+p.impact.delta);cols[p.i].entries.push([p.n,String(p.amount),{classification:p.classification||'asset'}]);addLedger('إضافة بند بعد مراجعة',`${p.n} — ${fmt(p.amount)} جنيه في ${cols[p.i].name}; التصنيف: ${p.classification==='other_company'?'شركة أخرى':'أصل'}؛ تأثير الفلوس ${p.impact.delta>0?'+':''}${fmt(p.impact.delta)} جنيه.`,{column:cols[p.i].name,entryName:p.n,classification:p.classification||'asset',oldValue:null,newValue:p.amount,moneyDelta:p.impact.delta});pendingCreate=null;persist();closeModal();render();open(`<h2>تمت الإضافة</h2><p class="small">تم حفظ البند بعد التأكيد.</p><p class="status">${esc(localStamp())}</p><button class="primary" onclick="closeModal()">تمام</button>`)}
 function removeEntry(i){if(!cols[i].entries.length)return alert('مفيش بنود في العمود');open(`<h2>اختار البند للحذف</h2><p class="small">من عمود ${esc(cols[i].name)}. الحذف سيتسجل في سجل الحركات.</p>${cols[i].entries.map((e,j)=>`<button class="removeRow" onclick="confirmDelete(${i},${j})"><span>${esc(e[0])}</span><b>${fmt(num(e[1]))} ج.م</b></button>`).join('')}`)}
 function confirmDelete(i,j){const e=cols[i].entries[j],money=findMoneyEntry();let impact=moneyImpactForManualEdit(i,e[0],-num(e[1]));if(i===0&&!(money&&money.entry[0]===e[0]))impact={delta:0,description:'حذف بند من قائمة الكروت لا ينشئ حركة فلوس تلقائيًا؛ أي تسوية فعلية تُراجع وتسجل كعملية مستقلة.'};if(i===0&&money&&money.entry[0]===e[0]){open(`<h2>حذف بند الفلوس الأساسية؟</h2><p class="small">ده البند اللي باقي الحسابات مرتبطة بيه. حذفه هيوقف المزامنة المالية، لذلك مش هيتحذف من الشاشة دي. غيّر اسمه أو راجع إعدادات البند بدلًا من ذلك.</p><button class="primary" onclick="closeModal()">فهمت</button>`);return}if(impact.delta!==0&&!money){alert('مش لاقي بند الفلوس الأساسية؛ مش هحذف بندًا مرتبطًا ماليًا من غير ما أقدر أراجع أثره.');return}if(money&&num(money.entry[1])+impact.delta<0){alert('حذف البند هيخلي الفلوس الأساسية بالسالب. راجع الحساب.');return}open(`<h2>مراجعة حذف بند</h2><div class="reconMini"><div>وقت المراجعة <b>${esc(localStamp())}</b></div><div>البند <b>${esc(e[0])} — ${esc(cols[i].name)}</b></div><div>القيمة المراد حذفها <b>${fmt(num(e[1]))} ج.م</b></div><div>تأثير الفلوس الأساسية <b>${impact.delta>0?'+':''}${fmt(impact.delta)} ج.م</b></div>${money?`<div>الفلوس قبل <b>${fmt(num(money.entry[1]))} ج.م</b></div><div>الفلوس بعد <b>${fmt(num(money.entry[1])+impact.delta)} ج.م</b></div>`:''}</div><p class="small">سيختفي البند من العرض الحالي، مع الاحتفاظ بسجل الحذف في التاريخ. حذف بند من الكروت وحده لا يغيّر الفلوس تلقائيًا.</p><div class="grid"><button class="primary" onclick="doDelete(${i},${j},${impact.delta},${money?num(money.entry[1]):'null'})">تأكيد الحذف</button><button onclick="removeEntry(${i})">رجوع</button></div>`)}
 function doDelete(i,j,impactDelta=0,moneyBefore=null){const e=cols[i].entries[j];if(!e)return;const money=findMoneyEntry();if(impactDelta!==0&&(!money||num(money.entry[1])!==moneyBefore)){alert('الفلوس الأساسية اتغيرت من وقت المراجعة. راجع الحذف من جديد.');render();return}if(impactDelta!==0)money.entry[1]=String(num(money.entry[1])+impactDelta);const removed=cols[i].entries.splice(j,1)[0];addLedger('حذف بند بعد مراجعة',`${removed[0]} — ${fmt(num(removed[1]))} جنيه من ${cols[i].name}; تأثير الفلوس ${impactDelta>0?'+':''}${fmt(impactDelta)} جنيه.`,{column:cols[i].name,entryName:removed[0],oldValue:num(removed[1]),newValue:null,moneyDelta:impactDelta});closeModal();persist();render()}
 function editEntry(i,j){const e=cols[i].entries[j];open(`<h2>تعديل البند</h2><p class="small">العمود: <b>${esc(cols[i].name)}</b></p><label>الاسم / البيان</label><input id="n" value="${esc(e[0])}"><label>المبلغ / القيمة</label><input id="a" value="${esc(e[1])}" inputmode="decimal"><p class="small">وقت طلب التعديل: ${esc(localStamp())}. قبل الحفظ هتظهر مراجعة بالفرق وتأثيره المتوقع على الفلوس الأساسية.</p><div class="grid"><button class="primary" onclick="saveEntry(${i},${j})">مراجعة التعديل</button><button onclick="deleteEntry(${i},${j})">حذف البند</button></div>`)}
 let pendingManualEdit=null;
 function moneyImpactForManualEdit(ci,entryName,delta){
- const col=cols[ci]?.name||'';
+ const column=cols[ci]||{},col=column.name||'';
+ const behavior=column.behavior||inferColumnBehavior(col);
  if(delta===0)return {delta:0,description:'لا يوجد فرق مالي؛ الاسم فقط سيتغير.'};
- if(col==='الكروت'){
+ if(behavior==='cards'||col==='الكروت'){
    const f=findMoneyEntry();
    if(f && f.entry[0]===entryName)return {delta:0,description:'ده بند الفلوس الأساسية نفسه؛ لن نعدّل الفلوس مرة ثانية.'};
    return {delta:-delta,description:'تغيير رصيد بند داخل الكروت يقابله تغيير عكسي في الفلوس الأساسية.'};
  }
- if(/^خارج/.test(col))return {delta:-delta,description:'زيادة المستحق/الخارج تقلل الفلوس الأساسية، وتقليله يزيدها.'};
- if(/^كاش/.test(col))return {delta:0,description:'الكاش رصيد تشغيل يومي؛ تعديله لا يغيّر الفلوس الأساسية فورًا. صافي الكاش يترحّل مرة واحدة عند «تسوية اليوم».'};
- if(normAccountingName(col)==='الاكسسوار')return {delta:0,description:'الأكسسوار رصيد تشغيل يومي؛ تعديله لا يغيّر الفلوس الأساسية فورًا. صافي الأكسسوار يترحّل مرة واحدة عند «تسوية اليوم».'};
- if(col==='الرصيد')return {delta:delta,description:'تغيير الرصيد ينعكس على الفلوس الأساسية بنفس مقدار الفرق حسب القاعدة المتفق عليها.'};
+ if(behavior==='outside')return {delta:-delta,description:'زيادة المستحق/الخارج تقلل الفلوس الأساسية، وتقليله يزيدها.'};
+ if(behavior==='cash')return {delta:0,description:'الكاش رصيد تشغيل يومي؛ تعديله لا يغيّر الفلوس الأساسية فورًا. يلزم ترحيله من تسوية اليوم.'};
+ if(behavior==='accessory')return {delta:0,description:'الإكسسوار رصيد تشغيل يومي؛ تعديله لا يغيّر الفلوس الأساسية فورًا. يلزم ترحيله من تسوية اليوم.'};
+ if(behavior==='balance')return {delta:delta,description:'تغيير الرصيد ينعكس على الفلوس الأساسية بنفس مقدار الفرق حسب القاعدة المتفق عليها.'};
  return {delta:0,description:'لم تُحدد قاعدة ربط تلقائية لهذا العمود؛ سيتم حفظ تعديل البند فقط.'};
 }
 function saveEntry(i,j){
@@ -647,6 +753,7 @@ async function bootAuthenticatedDashboard(token,selectedCompanyId){
   document.querySelectorAll('button[onclick="showReports()"]').forEach(b=>{b.hidden=false;b.disabled=!window.DAGA_AUTH_USER.historyEnabled;b.title=window.DAGA_AUTH_USER.historyEnabled?'':'تفاصيل الأيام السابقة متاحة في الاشتراك الذكي فقط';});
   loadStoreData(company.id);
   applyColumnDefinitions(company.columnDefinitions||[]);
+  try{await initializeRemoteDashboardState()}catch(syncError){dashboardSyncReady=false;setDashboardSyncNotice('الدفتر المحلي متاح، لكن المزامنة المركزية غير متاحة حاليًا: '+String(syncError.message||'خطأ اتصال'));}
   const header=document.querySelector('header.top .row');
   if(header&&!document.getElementById('accountLogout')){const b=document.createElement('button');b.id='accountLogout';b.type='button';b.textContent='تسجيل الخروج';b.style.cssText='margin:0 10px;padding:8px 11px;border:1px solid #4a402c;border-radius:9px;background:#15120c;color:#d7ad57;font:inherit;font-size:12px;cursor:pointer';b.addEventListener('click',async()=>{b.disabled=true;try{await fetch('/api/shop/auth/logout',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:'{}',cache:'no-store',credentials:'omit'});}finally{window.location.replace('/shop-access/');}});header.insertBefore(b,header.lastElementChild);}
   render();

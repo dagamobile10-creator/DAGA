@@ -389,7 +389,9 @@ export async function handleOwnerAdmin(request, env, url) {
       const label=b.displayName===undefined?old.display_name:String(b.displayName).trim().slice(0,80);
       const enabled=b.isEnabled===undefined?old.is_enabled:(b.isEnabled?1:0);
       if(!label)return json(env,{error:"invalid_display_name"},400);
-      await db.prepare("UPDATE daga_column_definitions SET display_name=?,is_enabled=?,updated_by=?,updated_at=? WHERE id=?").bind(label,enabled,owner.id,new Date().toISOString(),old.id).run();
+      const prior=await db.prepare("SELECT behavior_json FROM daga_column_definitions WHERE id=?").bind(old.id).first();
+      const behavior=b.behavior===undefined?(prior?.behavior_json||"{}"):safeObjectJson(b.behavior);
+      await db.prepare("UPDATE daga_column_definitions SET display_name=?,is_enabled=?,behavior_json=?,updated_by=?,updated_at=? WHERE id=?").bind(label,enabled,behavior,owner.id,new Date().toISOString(),old.id).run();
       await audit(db,owner.id,"column_definition_updated","daga_column_definitions",old.id,{scope:old.scope,storeId:old.store_id,stableKey:old.stable_key});
       return json(env,{ok:true});
     }

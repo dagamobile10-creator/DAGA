@@ -22,6 +22,16 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn("loadStoreData(company.id)", dashboard)
         self.assertIn("daga_dashboard_v30_store_", dashboard)
 
+    def test_accounting_column_definitions_include_behavior_for_dashboard(self):
+        auth = (ROOT / "shop-auth.js").read_text(encoding="utf-8")
+        dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
+        admin = (ROOT / "owner-admin.js").read_text(encoding="utf-8")
+        console = (ROOT / "owner-console.html").read_text(encoding="utf-8")
+        self.assertIn("behavior_json,calculation_key,is_enabled,updated_at FROM daga_column_definitions", auth)
+        self.assertIn("JSON.parse(def.behavior_json", dashboard)
+        self.assertIn("cols[index].behavior=kind", dashboard)
+        self.assertIn("behavior:{...currentBehavior,kind:kinds[index]}", console)
+        self.assertIn("behavior_json", admin)
     def test_portal_passes_session_and_selected_company(self):
         portal = (ROOT / "company" / "portal.html").read_text(encoding="utf-8")
         self.assertIn('type:"DAGA_AUTH",token:sessionToken,companyId:activeCompany.id', portal)

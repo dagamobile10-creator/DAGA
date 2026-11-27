@@ -158,6 +158,8 @@ jobs:
           node --check /tmp/shop-dashboard-v30.js
       - name: Run V30 dashboard authentication bridge regression tests
         run: python3 tests/test_shop_dashboard_auth_bridge.py
+      - name: Run tenant-scoped dashboard state regression tests
+        run: python3 tests/test_shop_dashboard_state.py
       - name: Check official DAGA QR page JavaScript syntax
         run: |
           python3 - <<'PY'
