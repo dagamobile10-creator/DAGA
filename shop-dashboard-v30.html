@@ -410,7 +410,8 @@ function moneyImpactForManualEdit(ci,entryName,delta,existingEntry=null){
   const linked=savedRole==='other-company'||treatment==='other_company'||savedRole.startsWith('card-agent:')||treatment==='service'||!!linkedAgent;
   if(linked){
    if(!linkedAgent)return {delta:0,agentDelta:0,agentName:null,description:'البند مرتبط بحساب في عمود الرصيد لكن اسم الحساب المقابل غير محدد؛ أوقفنا الحركة لحين تحديده.'};
-   return {delta:0,agentDelta:delta,agentName:linkedAgent,agentLabel:entryName,description:'أي زيادة أو نقص أو حذف في بند الكروت المرتبط تُسجّل بنفس القيمة والاتجاه في بند الحساب المقابل بعمود الرصيد باسم المندوب المحفوظ.'};
+   const baseCashDelta=delta<0?-delta:0;
+   return {delta:baseCashDelta,agentDelta:delta,agentName:linkedAgent,agentLabel:entryName,description:delta>0?'زيادة بند الشركة في عمود الكروت ترفع رصيد الشركة المقابل في عمود الرصيد فقط، ولا تغيّر الفلوس الأساسية.':delta<0?'نقص بند الشركة في عمود الكروت يخفض رصيد الشركة المقابل، ويزيد الفلوس الأساسية في عمود الكروت بنفس قيمة النقص.':'لا يوجد فرق في رصيد الشركة أو الفلوس الأساسية.'};
   }
   return {delta:-delta,agentDelta:0,agentName:null,description:'البند يعامل كأصل مرتبط عكسيًا بالفلوس الأساسية.'};
  }
