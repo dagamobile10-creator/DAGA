@@ -65,8 +65,17 @@ const defaultCols=[
 let STORE_KEY=''; let cols=JSON.parse(JSON.stringify(defaultCols)); let ledger=[],closedDays=[]; let pendingOrder=null,rec=null,pendingClarification=null;
 function applyColumnDefinitions(definitions){
  const byKey=new Map();
- (definitions||[]).forEach(def=>{if(def&&def.stable_key&&def.display_name)byKey.set(String(def.stable_key),String(def.display_name));});
- defaultCols.forEach((column,index)=>{const label=byKey.get('dashboard_col_'+(index+1));if(label&&cols[index])cols[index].name=label;});
+ (definitions||[]).forEach(def=>{if(def&&def.stable_key&&def.display_name)byKey.set(String(def.stable_key),def);});
+ defaultCols.forEach((column,index)=>{
+  const def=byKey.get('dashboard_col_'+(index+1));
+  if(def&&cols[index])cols[index].name=String(def.display_name);
+ });
+ // Custom server-defined columns are appended once, without touching existing entries or balances.
+ (definitions||[]).filter(def=>def&&def.is_enabled!==0&&String(def.stable_key||'').startsWith('dashboard_custom_')).forEach(def=>{
+  const key=String(def.stable_key);
+  if(!cols.some(c=>c.stableKey===key))cols.push({name:String(def.display_name||'عمود جديد'),stableKey:key,entries:[]});
+  else {const found=cols.find(c=>c.stableKey===key);if(found)found.name=String(def.display_name||found.name);}
+ });
 }
 function loadStoreData(storeId){
  STORE_KEY='daga_dashboard_v30_store_'+encodeURIComponent(String(storeId));
