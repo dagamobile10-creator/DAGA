@@ -3,6 +3,7 @@ import { handleOwnerAdmin } from "./owner-admin.js";
 import { handleCompanyInvitations } from "./company-invitations.js";
 import { handleCompanyOrders } from "./company-orders.js";
 import { handleShopAuth } from "./shop-auth.js";
+import { handleShopDashboardState } from "./shop-dashboard-state.js";
 import { authenticatedAccount } from "./owner-auth.js";
 import inviteHtml from "./invite/index.html";
 import shopPortalHtml from "./company/portal.html";
@@ -104,6 +105,8 @@ export default {
     if (ownerAuthResponse) return ownerAuthResponse;
     const shopAuthResponse = await handleShopAuth(request, env, url);
     if (shopAuthResponse) return shopAuthResponse;
+    const shopDashboardStateResponse = await handleShopDashboardState(request, env, url);
+    if (shopDashboardStateResponse) return shopDashboardStateResponse;
     const ownerAdminResponse = await handleOwnerAdmin(request, env, url);
     if (ownerAdminResponse) return ownerAdminResponse;
     const invitationResponse = await handleCompanyInvitations(request, env, url);
