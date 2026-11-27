@@ -68,7 +68,13 @@ function applyColumnDefinitions(definitions){
  (definitions||[]).forEach(def=>{if(def&&def.stable_key&&def.display_name)byKey.set(String(def.stable_key),def);});
  defaultCols.forEach((column,index)=>{
   const def=byKey.get('dashboard_col_'+(index+1));
-  if(def&&cols[index])cols[index].name=String(def.display_name);
+  if(def&&cols[index]){
+   cols[index].name=String(def.display_name);
+   let behavior={};try{behavior=JSON.parse(def.behavior_json||'{}')}catch(_){}
+   const kind=String(behavior.kind||behavior.behavior||'');
+   if(['balance','outside','cash','accessory','standard'].includes(kind))cols[index].behavior=kind;
+   cols[index].stableKey=String(def.stable_key);
+  }
  });
  // Custom server-defined columns are appended once, without touching existing entries or balances.
  (definitions||[]).filter(def=>def&&def.is_enabled!==0&&String(def.stable_key||'').startsWith('dashboard_custom_')).forEach(def=>{
