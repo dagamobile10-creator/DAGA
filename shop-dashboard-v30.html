@@ -1384,16 +1384,25 @@ function getDailyClosePlan(){
  const outsideCols=cols.map((c,i)=>({c,i})).filter(x=>columnRole(x.c)==='expenses');
  const isCashName=n=>['كاش','الكاش','كاش اليوم','سحب كاش','الكاش اليوم'].includes(normAccountingName(n));
  const isAccessoryName=n=>['اكسسوار','الاكسسوار','اكسسوارات','اكسسوارات اليوم'].includes(normAccountingName(n));
- const sumRows=arr=>arr.reduce((sum,x)=>sum+x.c.entries.reduce((a,e)=>a+num(e[1]),0),0);
- const pendingAmount=e=>e[2]?.moneyPosted===true?0:num(e[1]);
- const cashGross=cashCols.reduce((sum,x)=>sum+x.c.entries.reduce((a,e)=>a+pendingAmount(e),0),0),accessoryGross=accessoryCols.reduce((sum,x)=>sum+x.c.entries.reduce((a,e)=>a+pendingAmount(e),0),0),cashRows=[],accessoryRows=[];
+ const amount=e=>num(e[1]),isPosted=e=>e[2]?.moneyPosted===true;
+ const cashGross=cashCols.reduce((sum,x)=>sum+x.c.entries.reduce((a,e)=>a+amount(e),0),0);
+ const accessoryGross=accessoryCols.reduce((sum,x)=>sum+x.c.entries.reduce((a,e)=>a+amount(e),0),0);
+ const cashPostedGross=cashCols.reduce((sum,x)=>sum+x.c.entries.reduce((a,e)=>a+(isPosted(e)?amount(e):0),0),0);
+ const accessoryPostedGross=accessoryCols.reduce((sum,x)=>sum+x.c.entries.reduce((a,e)=>a+(isPosted(e)?amount(e):0),0),0);
+ const cashPendingGross=cashGross-cashPostedGross,accessoryPendingGross=accessoryGross-accessoryPostedGross;
+ const cashRows=[],accessoryRows=[];
  outsideCols.forEach(({c,i})=>c.entries.forEach((e,j)=>{
-  if(isCashName(e[0])&&e[2]?.moneyPosted!==true)cashRows.push({ci:i,ei:j,name:e[0],amount:num(e[1])});
-  if(isAccessoryName(e[0])&&e[2]?.moneyPosted!==true)accessoryRows.push({ci:i,ei:j,name:e[0],amount:num(e[1])});
+  if(isCashName(e[0]))cashRows.push({ci:i,ei:j,name:e[0],amount:amount(e),posted:isPosted(e)});
+  if(isAccessoryName(e[0]))accessoryRows.push({ci:i,ei:j,name:e[0],amount:amount(e),posted:isPosted(e)});
  }));
  const cashWithdrawals=cashRows.reduce((a,x)=>a+x.amount,0),accessoryWithdrawals=accessoryRows.reduce((a,x)=>a+x.amount,0);
- const cashNet=cashGross-cashWithdrawals,accessoryNet=accessoryGross-accessoryWithdrawals,netToMoney=cashNet+accessoryNet;
- return {moneyBefore,cashCols,accessoryCols,cashGross,accessoryGross,cashRows,accessoryRows,cashWithdrawals,accessoryWithdrawals,cashNet,accessoryNet,netToMoney,reconciliation:getDayReconciliation()};
+ const cashPostedWithdrawals=cashRows.reduce((a,x)=>a+(x.posted?x.amount:0),0),accessoryPostedWithdrawals=accessoryRows.reduce((a,x)=>a+(x.posted?x.amount:0),0);
+ const cashPendingWithdrawals=cashWithdrawals-cashPostedWithdrawals,accessoryPendingWithdrawals=accessoryWithdrawals-accessoryPostedWithdrawals;
+ const cashNet=cashGross-cashWithdrawals,accessoryNet=accessoryGross-accessoryWithdrawals;
+ // Only unposted rows change the money balance at close. Posted rows already changed it when entered.
+ const cashPendingNet=cashPendingGross-cashPendingWithdrawals,accessoryPendingNet=accessoryPendingGross-accessoryPendingWithdrawals;
+ const netToMoney=cashPendingNet+accessoryPendingNet;
+ return {moneyBefore,cashCols,accessoryCols,cashGross,accessoryGross,cashPostedGross,accessoryPostedGross,cashPendingGross,accessoryPendingGross,cashRows,accessoryRows,cashWithdrawals,accessoryWithdrawals,cashPostedWithdrawals,accessoryPostedWithdrawals,cashPendingWithdrawals,accessoryPendingWithdrawals,cashNet,accessoryNet,cashPendingNet,accessoryPendingNet,netToMoney,reconciliation:getDayReconciliation()};
 }
 function closeDay(){
  const date=new Intl.DateTimeFormat('en-CA',{timeZone:'Africa/Cairo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
@@ -1406,9 +1415,9 @@ function closeDay(){
  open(`<h2>مراجعة «تسوية اليوم»</h2>
  <p class="small">التاريخ والوقت: ${esc(localStamp())}. الحركات الجديدة اتضافت للفلوس فور تسجيلها. هنرحّل هنا فقط أي أرصدة يومية قديمة غير مرحّلة، وبعدها نصفر أعمدة التشغيل.</p>
  <div class="reconMini"><div>عمود الرصيد — الإجمالي <b>${fmt(r.capital)} ج.م</b></div><div>كل الأعمدة الأخرى قبل التسويه <b>${fmt(r.otherTotal)} ج.م</b></div><div>الفرق العام (باقي الأعمدة − الرصيد) <b>${r.diff>0?'+':''}${fmt(r.diff)} ج.م — ${diffText}</b></div></div>
- <h3>تسوية الكاش</h3><div class="reconMini"><div>إجمالي عمود/أعمدة الكاش <b>${fmt(p.cashGross)} ج.م</b></div><div>المسجل في الخارج باسم كاش <b>−${fmt(p.cashWithdrawals)} ج.م</b></div><div>صافي الكاش للترحيل <b>${p.cashNet>0?'+':''}${fmt(p.cashNet)} ج.م</b></div></div>
+ <h3>تسوية الكاش</h3><div class="reconMini"><div>إجمالي الكاش المسجل خلال اليوم <b>${fmt(p.cashGross)} ج.م</b></div><div>اتضاف للفلوس بالفعل عند التسجيل <b>${fmt(p.cashPostedGross)} ج.م</b></div><div>لسه غير مرحّل من الكاش <b>${fmt(p.cashPendingGross)} ج.م</b></div><div>إجمالي الخارج باسم كاش <b>−${fmt(p.cashWithdrawals)} ج.م</b></div><div>اتخصم من الفلوس بالفعل <b>${fmt(p.cashPostedWithdrawals)} ج.م</b></div><div>لسه غير مرحّل من الخارج <b>−${fmt(p.cashPendingWithdrawals)} ج.م</b></div><div>صافي حركة الكاش خلال اليوم <b>${p.cashNet>0?'+':''}${fmt(p.cashNet)} ج.م</b></div><div>المطلوب ترحيله الآن فقط <b>${p.cashPendingNet>0?'+':''}${fmt(p.cashPendingNet)} ج.م</b></div></div>
  ${cashDetail?`<details><summary class="small">تفاصيل الخارج باسم كاش</summary><div class="reconMini">${cashDetail}</div></details>`:'<p class="small">مفيش مبالغ مطابقة لاسم «كاش» في أعمدة الخارج.</p>'}
- <h3>تسوية الأكسسوار</h3><div class="reconMini"><div>إجمالي عمود الأكسسوار <b>${fmt(p.accessoryGross)} ج.م</b></div><div>المسجل في الخارج باسم إكسسوار <b>−${fmt(p.accessoryWithdrawals)} ج.م</b></div><div>صافي الأكسسوار للترحيل <b>${p.accessoryNet>0?'+':''}${fmt(p.accessoryNet)} ج.م</b></div></div>
+ <h3>تسوية الأكسسوار</h3><div class="reconMini"><div>إجمالي الأكسسوار المسجل خلال اليوم <b>${fmt(p.accessoryGross)} ج.م</b></div><div>اتضاف للفلوس بالفعل عند التسجيل <b>${fmt(p.accessoryPostedGross)} ج.م</b></div><div>لسه غير مرحّل من الأكسسوار <b>${fmt(p.accessoryPendingGross)} ج.م</b></div><div>إجمالي الخارج باسم إكسسوار <b>−${fmt(p.accessoryWithdrawals)} ج.م</b></div><div>اتخصم من الفلوس بالفعل <b>${fmt(p.accessoryPostedWithdrawals)} ج.م</b></div><div>لسه غير مرحّل من الخارج <b>−${fmt(p.accessoryPendingWithdrawals)} ج.م</b></div><div>صافي حركة الأكسسوار خلال اليوم <b>${p.accessoryNet>0?'+':''}${fmt(p.accessoryNet)} ج.م</b></div><div>المطلوب ترحيله الآن فقط <b>${p.accessoryPendingNet>0?'+':''}${fmt(p.accessoryPendingNet)} ج.م</b></div></div>
  ${accessoryDetail?`<details><summary class="small">تفاصيل الخارج باسم إكسسوار</summary><div class="reconMini">${accessoryDetail}</div></details>`:'<p class="small">مفيش مبالغ مطابقة لاسم «إكسسوار» في أعمدة الخارج.</p>'}
  <div class="reconMini"><div>إجمالي صافي الكاش والأكسسوار اللي هيتضاف/يتخصم من الفلوس <b>${p.netToMoney>0?'+':''}${fmt(p.netToMoney)} ج.م</b></div><div>الفلوس الأساسية قبل التسويه <b>${fmt(p.moneyBefore)} ج.م</b></div><div>الفلوس الأساسية بعد التسويه <b>${fmt(p.moneyBefore+p.netToMoney)} ج.م</b></div></div>
  ${p.netToMoney<0?`<p class="status">صافي الكاش والأكسسوار سالب بمقدار ${fmt(Math.abs(p.netToMoney))} جنيه. هيتخصم من الفلوس الأساسية؛ لازم الرصيد يكفي، وراجع السبب قبل التأكيد.</p>`:''}
@@ -1427,8 +1436,8 @@ function confirmCloseDay(date){
  const snapshot={date:normalizedDate,closedAt:now.toISOString(),type:'daily-close-v30',
   totalsBefore:Object.fromEntries(cols.map(c=>[c.name,sumCol(c.name)])),
   reconciliation:{capital:p.reconciliation.capital,otherTotal:p.reconciliation.otherTotal,difference:p.reconciliation.diff,classification:p.reconciliation.diff===0?'متزن':(p.reconciliation.diff>0?'زيادة محتملة':'عجز محتمل')},
-  cash:{gross:p.cashGross,withdrawals:p.cashWithdrawals,net:p.cashNet,withdrawalRows:p.cashRows.map(x=>({...x}))},
-  accessory:{gross:p.accessoryGross,withdrawals:p.accessoryWithdrawals,net:p.accessoryNet,withdrawalRows:p.accessoryRows.map(x=>({...x}))},
+  cash:{gross:p.cashGross,postedGross:p.cashPostedGross,pendingGross:p.cashPendingGross,withdrawals:p.cashWithdrawals,postedWithdrawals:p.cashPostedWithdrawals,pendingWithdrawals:p.cashPendingWithdrawals,net:p.cashNet,pendingNet:p.cashPendingNet,withdrawalRows:p.cashRows.map(x=>({...x}))},
+  accessory:{gross:p.accessoryGross,postedGross:p.accessoryPostedGross,pendingGross:p.accessoryPendingGross,withdrawals:p.accessoryWithdrawals,postedWithdrawals:p.accessoryPostedWithdrawals,pendingWithdrawals:p.accessoryPendingWithdrawals,net:p.accessoryNet,pendingNet:p.accessoryPendingNet,withdrawalRows:p.accessoryRows.map(x=>({...x}))},
   moneyBefore:p.moneyBefore,moneyDelta:p.netToMoney,moneyAfter:p.moneyBefore+p.netToMoney,
   colsBefore:JSON.parse(JSON.stringify(cols)),ledgerBefore:JSON.parse(JSON.stringify(ledger))};
  try{
@@ -1437,6 +1446,8 @@ function confirmCloseDay(date){
   // Start the next day with empty item lists; the full pre-close rows remain in the close snapshot.
   p.cashCols.forEach(({c})=>{c.entries=[]});
   p.accessoryCols.forEach(({c})=>{c.entries=[]});
+  // Clear every matching daily withdrawal row, including rows already deducted from money.
+  // The moneyPosted flag prevents the close plan from applying those deductions a second time.
   [...p.cashRows,...p.accessoryRows].forEach(x=>{const row=cols[x.ci]?.entries[x.ei];if(row&&num(row[1])===x.amount){row[1]='0';row[2]={...(row[2]||{}),moneyPosted:true}}});
   closedDays.push({...snapshot,totalsAfter:Object.fromEntries(cols.map(c=>[c.name,sumCol(c.name)])),cleared:true});
   ledger.unshift({id:Date.now()+Math.random(),at:now.toISOString(),action:'تسوية اليوم — V30',details:`إقفال ${normalizedDate}: صافي الكاش ${fmt(p.cashNet)}، صافي الأكسسوار ${fmt(p.accessoryNet)}، ترحيل صافي ${fmt(p.netToMoney)} جنيه للفلوس الأساسية مرة واحدة. تم إفراغ بنود أعمدة الكاش والأكسسوار بالكامل ومبالغ الخارج المطابقة، مع حفظ صورة كاملة قبل التسويه.`,column:'قفل اليوم',moneyDelta:p.netToMoney});
