@@ -724,9 +724,19 @@ function saveNewEntry(i){
  const n=document.getElementById('n').value.trim(),a=document.getElementById('a').value.trim();
  if(!n||a===''||num(a)<0)return alert('اكتب الاسم ومبلغًا صحيحًا');
  const amount=num(a),money=findMoneyEntry(),role=columnRole(cols[i]);
- if(role==='balance'||role==='expenses'){
-  const matches=cols[i].entries.map((e,j)=>({e,j})).filter(x=>normAccountingName(x.e[0])===normAccountingName(n));
-  if(matches.length){pendingCreate={i,n,amount,requestedAt:new Date().toISOString(),duplicateMatches:matches.map(x=>x.j)};open(`<h2>الاسم موجود بالفعل</h2><p class="small">لقيت ${matches.length} بند باسم <b>${esc(n)}</b>. تحب الإضافة تبقى بند مستقل ولا تندمج مع الموجود؟</p><button class="primary" onclick="confirmDuplicateManualAdd('separate')">إضافة مستقلة</button><button onclick="confirmDuplicateManualAdd('merge')">دمج مع الموجود</button><button onclick="pendingCreate=null;closeModal()">إلغاء</button>`);return;}
+ {
+  const normalizeTokens=v=>normAccountingName(v).split(' ').filter(Boolean);
+  const requested=normalizeTokens(n);
+  const candidates=cols[i].entries.map((e,j)=>({e,j,name:String(e[0]||'')}))
+   .filter(x=>normAccountingName(x.name)!==normAccountingName(n) &&
+     normalizeTokens(x.name).some(token=>requested.includes(token)));
+  const exact=cols[i].entries.map((e,j)=>({e,j})).filter(x=>normAccountingName(x.e[0])===normAccountingName(n));
+  if(exact.length||candidates.length){
+    const chosen=exact.length?exact:candidates;
+    pendingCreate={i,n,amount,requestedAt:new Date().toISOString(),duplicateMatches:chosen.map(x=>x.j)};
+    const similarLabel=exact.length?'الاسم مطابق بالفعل':'فيه اسم مشابه في نفس العمود';
+    open(`<h2>${similarLabel}</h2><p class="small">الاسم المطلوب <b>${esc(n)}</b>. الاسم/الأسماء الموجودة: <b>${chosen.map(x=>esc(String(x.e[0]))).join('، ')}</b>. اختار بند مستقل أو دمج مع الموجود بعد مراجعة الاسم.</p><button class="primary" onclick="confirmDuplicateManualAdd('separate')">إضافة مستقلة بالاسم الكامل</button><button onclick="confirmDuplicateManualAdd('merge')">دمج مع الموجود</button><button onclick="pendingCreate=null;closeModal()">إلغاء</button>`);return;
+  }
  }
  if(role==='cards'&&!(money&&normAccountingName(money.entry[0])===normAccountingName(n))&&!/^(الفلوس|فلوس|الفلوس الاساسيه|الفلوس الموجوده|فلوس المحل|فلوس الخزنه|فلوس الدرج|النقديه|النقد|فلوس الكروت)$/.test(normAccountingName(n))){
   pendingCreate={i,n,amount,requestedAt:new Date().toISOString()};
@@ -1041,8 +1051,11 @@ function parseOrder(t){
  const paddedCommand=' '+cleaned+' ';
  const matches=[...allPeople.entries()].filter(([k])=>k && paddedCommand.includes(' '+k+' '));
  matches.sort((a,b)=>b[0].length-a[0].length);
- if(matches.length>1 && matches[0][0].length===matches[1][0].length) return {ambiguous:'لقيت أكتر من اسم ممكن في الحسابات. حدّد الشخص المقصود عشان ما نغيّرش حساب غلط.'};
- const person=matches.length?matches[0][1]:null;
+ // A full multi-word name wins over shorter component rows. Only tied longest names are ambiguous.
+ const longestLength=matches.length?matches[0][0].length:0;
+ const longestMatches=matches.filter(x=>x[0].length===longestLength);
+ if(longestMatches.length>1) return {ambiguous:'لقيت أكتر من حساب بنفس درجة تطابق الاسم. حدّد الاسم الكامل المقصود عشان ما نغيّرش حساب غلط.'};
+ const person=longestMatches.length?longestMatches[0][1]:null;
 
  // A payment/funding message from a service machine is a service-agent balance movement,
  // not cash received into the shop's main money row. Card labels map to their owning agent.
@@ -1064,7 +1077,10 @@ function parseOrder(t){
  const addIntent=/(ارفع|ضيف|اضيف|حط|سجل|اكتب|تكتب|عايزك|زود|دخل)/.test(cleaned);
  if(isCash && !receipt && !take) return {type:'cashAdd',amount,raw};
  if(saysOutside && addIntent && !receipt && !take){
-   const name=person?person.name:cleaned.replace(/(?:ارفع|اكتب|تكتب|عايزك|عايز|لي|سجل|ضيف|حط|زود|في|عمود|العمود|الخارج|خارج|جنيه|جنيهات)/g,' ').replace(/\s+/g,' ').trim();
+   // Preserve the complete name spoken by the user; do not replace it with a shorter matching row.
+   const requestedName=cleaned.replace(/(?:ارفع|اكتب|تكتب|عايزك|عايز|لي|سجل|ضيف|حط|زود|في|عمود|العمود|الخارج|خارج|جنيه|جنيهات|باسم)/g,' ').replace(/\s+/g,' ').trim();
+   const exactPerson=[...allPeople.values()].find(x=>norm(x.name)===norm(requestedName));
+   const name=exactPerson?exactPerson.name:(requestedName||(person?person.name:'مصروف'));
    const explicitTransfer=/(انقل|نقل|سوي|تسويه|خصم من الرصيد|حول من الرصيد|حول من الرصيد)/.test(cleaned);
    if(person && person.balance>0 && explicitTransfer) return {ambiguous:`لقيت ${person.name} مسجل في عمود الرصيد بمبلغ ${fmt(person.balance)} جنيه. حدّد مبلغ التسوية قبل النقل. لم يتم تغيير أي رقم.`,clarification:{type:'outsideBalanceChoice',person,amount,raw}};
    return {type:'outsideAdd',name:name||'مصروف',amount,raw};
@@ -1229,7 +1245,22 @@ function review(){
     pendingOrder=null;pendingClarification={type:'outsideAddDuplicate',order};
     out.innerHTML=`<div class="reconMini"><div>الاسم <b>${esc(p.name)}</b></div><div>الموجود في الخارج <b>${fmt(existingTotal)} جنيه</b></div><div>المبلغ الجديد <b>${fmt(p.amount)} جنيه</b></div></div><p class="small">الاسم موجود في الخارج. تحب تضيفه كبند مستقل ولا تدمجه مع الموجود؟</p><button class="primary" onclick="answerClarificationFromText('بند مستقل')">إضافة مستقلة</button><button onclick="answerClarificationFromText('ادمج على الموجود')">دمج مع الموجود</button><button onclick="answerClarificationFromText('إلغاء')">إلغاء</button>`;return;
    }
-   const balanceRows=(cols[balanceIndex]?.entries||[]).map(e=>({ci:balanceIndex,name:String(e[0]||''),amount:num(e[1])})).filter(r=>normAccountingName(r.name)===normAccountingName(p.name));
+   // Similar names are never silently merged. Offer the exact existing row as a choice.
+   const requestedTokens=normAccountingName(order.name).split(' ').filter(Boolean);
+   const similarRows=outsideCols.flatMap(x=>x.c.entries.map((e,ei)=>({ci:x.i,ei,name:String(e[0]||''),amount:num(e[1])})))
+     .filter(r=>normAccountingName(r.name)!==normAccountingName(order.name) &&
+       normAccountingName(r.name).split(' ').filter(Boolean).some(token=>requestedTokens.includes(token)));
+   const similarNames=[...new Set(similarRows.map(r=>r.name))];
+   if(similarNames.length){
+     const candidate=similarNames[0],candidateRows=similarRows.filter(r=>r.name===candidate);
+     order.similarCandidateName=candidate;
+     order.existingRows=candidateRows.map(r=>({ci:r.ci,name:r.name,amount:r.amount}));
+     order.existingTotal=candidateRows.reduce((sum,r)=>sum+r.amount,0);
+     order.targetIndex=candidateRows[0].ci;
+     pendingOrder=null;pendingClarification={type:'outsideAddDuplicate',order};
+     out.innerHTML=`<div class="reconMini"><div>الاسم اللي اتقال <b>${esc(p.name)}</b></div><div>اسم قريب موجود بالفعل <b>${esc(candidate)}</b></div><div>الموجود بالاسم القريب <b>${fmt(order.existingTotal)} جنيه</b></div><div>المبلغ الجديد <b>${fmt(p.amount)} جنيه</b></div></div><p class="small">الاسم الكامل مختلف. تحب تضيف على «${esc(candidate)}» الموجود، ولا تنشئ بندًا جديدًا باسم «${esc(p.name)}»؟</p><button class="primary" onclick="answerClarificationFromText('بند مستقل')">إنشاء بند جديد بالاسم الكامل</button><button onclick="answerClarificationFromText('ادمج على الموجود')">الإضافة على ${esc(candidate)}</button><button onclick="answerClarificationFromText('إلغاء')">إلغاء</button>`;return;
+   }
+   const balanceRows=(cols[balanceIndex]?.entries||[]).map(e=>({ci:balanceIndex,name:String(e[0]||''),amount:num(e[1])})).filter(r=>normAccountingName(r.name)===normAccountingName(order.name));
    const balanceTotal=balanceRows.reduce((sum,r)=>sum+r.amount,0);
    if(balanceTotal>0){
     pendingOrder=null;pendingClarification={type:'settlementOffer',person:{name:p.name},order,balanceRows,balanceTotal};
@@ -1274,7 +1305,13 @@ function answerClarificationFromText(text){
   const q=pendingClarification,makeSeparate=/(بند مستقل|اضافه مستقله|لوحده|منفصل)/.test(String(text||'')),merge=/(ادمج|دمج|على الموجود)/.test(String(text||''));
   if(/^(الغاء|الغي|وقف)$/i.test(String(text||'').trim())){pendingClarification=null;pendingOrder=null;const box=document.getElementById('orderPreview');if(box)box.innerHTML='<p class="status">تم إلغاء العملية؛ لم يتغير أي رصيد.</p>';return;}
   if(!makeSeparate&&!merge){const box=document.getElementById('orderPreview');if(box)box.innerHTML='<p class="small">اختار: بند مستقل ولا دمج مع الموجود؟</p><button class="primary" onclick="answerClarificationFromText(\'بند مستقل\')">إضافة مستقلة</button><button onclick="answerClarificationFromText(\'ادمج على الموجود\')">دمج مع الموجود</button><button onclick="answerClarificationFromText(\'إلغاء\')">إلغاء</button>';return;}
-  const order={...q.order,duplicateMode:makeSeparate?'separate':'merge'};pendingClarification=null;
+  const order={...q.order,duplicateMode:makeSeparate?'separate':'merge'};
+  if(q.order.similarCandidateName){
+    if(makeSeparate){order.existingRows=[];order.existingTotal=0;}
+    else {order.name=q.order.similarCandidateName;}
+    order.expectedAfter=(order.existingTotal||0)+order.amount;
+  }
+  pendingClarification=null;
   const balanceIndex=cols.findIndex(c=>columnRole(c)==='balance'),balanceRows=balanceIndex<0?[]:cols[balanceIndex].entries.map((e,index)=>({ci:balanceIndex,index,name:String(e[0]||''),amount:num(e[1])})).filter(r=>normAccountingName(r.name)===normAccountingName(order.name));
   const balanceTotal=balanceRows.reduce((sum,r)=>sum+r.amount,0),box=document.getElementById('orderPreview');
   if(balanceTotal>0){pendingClarification={type:'settlementOffer',person:{name:order.name},order,balanceRows,balanceTotal};if(box)box.innerHTML=`<div class="reconMini"><div>الاسم <b>${esc(order.name)}</b></div><div>طريقة الإضافة في الخارج <b>${makeSeparate?'بند مستقل':'دمج مع الموجود'}</b></div><div>رصيده في عمود الرصيد <b>${fmt(balanceTotal)} جنيه</b></div></div><p class="small">تحب تسوّي من رصيده مقابل الخارج، ولا تسيب الرصيد زي ما هو؟</p><button class="primary" onclick="answerClarificationFromText('أيوه سوي من الرصيد')">تسوية من الرصيد</button><button onclick="answerClarificationFromText('لا سيب الرصيد زي ما هو')">سيب الرصيد</button><button onclick="answerClarificationFromText('إلغاء')">إلغاء</button>`;return;}
