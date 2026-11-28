@@ -2,7 +2,7 @@ name: DAGA V30 owner-auth checks
 
 on:
   push:
-    branches: [daga-v30-implementation, daga-email-only-auth, fix/v31-daga-user-reported-blockers]
+    branches: [daga-v30-implementation, daga-email-only-auth, fix/v31-daga-user-reported-blockers, fix/v30-daily-close-cash-accessory-reconciliation]
   pull_request:
     branches: [main, daga-v30-implementation, daga-email-only-auth, release/v31-staging-android-candidate]
 
