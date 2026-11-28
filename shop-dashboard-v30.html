@@ -256,6 +256,100 @@ button{transition:filter .15s,transform .15s;border-radius:14px}button:active{tr
   .tablewrap table { width:100% !important; min-width:1550px !important; }
   .tablewrap th,.tablewrap td { width:auto !important; min-width:150px !important; max-width:none !important; }
 }
+
+/* DAGA shared modal system — match the approved black & gold dashboard.
+   Scoped only to dialogs; the dashboard layout above remains untouched. */
+#modal{
+  position:fixed!important;inset:0!important;z-index:300!important;
+  display:none;box-sizing:border-box!important;
+  padding:12px 10px calc(14px + env(safe-area-inset-bottom))!important;
+  overflow-y:auto!important;overscroll-behavior:contain!important;
+  background:rgba(0,0,0,.82)!important;
+  -webkit-backdrop-filter:blur(9px)!important;backdrop-filter:blur(9px)!important;
+}
+#modal[style*="display: block"],#modal[style*="display:block"]{
+  display:flex!important;align-items:flex-start!important;justify-content:center!important;
+}
+#modal #sheet{
+  box-sizing:border-box!important;width:min(100%,620px)!important;
+  max-width:620px!important;max-height:calc(100dvh - 26px - env(safe-area-inset-bottom))!important;
+  height:auto!important;min-height:0!important;overflow-y:auto!important;overflow-x:hidden!important;
+  margin:0 auto!important;padding:clamp(13px,3.5vw,20px)!important;
+  border:1px solid rgba(224,177,75,.72)!important;border-radius:21px!important;
+  background:radial-gradient(ellipse at 8% 0%,rgba(218,166,55,.15),transparent 48%),linear-gradient(155deg,#19170f 0%,#0c0c0a 60%,#080807 100%)!important;
+  color:#f5f0e5!important;
+  box-shadow:0 18px 60px #000e,0 0 24px rgba(218,166,55,.13),inset 0 1px rgba(255,237,186,.12)!important;
+  scrollbar-width:thin!important;scrollbar-color:#8e6b2d #111!important;
+  -webkit-overflow-scrolling:touch!important;
+}
+#modal #sheet h2{
+  margin:0 0 12px!important;padding:0 0 10px!important;
+  border-bottom:1px solid rgba(218,171,75,.34)!important;
+  color:#f5ce70!important;font-size:clamp(18px,4.7vw,22px)!important;
+  line-height:1.35!important;font-weight:900!important;
+}
+#modal #sheet h3{
+  margin:14px 0 8px!important;color:#f2cf7c!important;
+  font-size:clamp(15px,4vw,18px)!important;line-height:1.35!important;
+}
+#modal #sheet p,#modal #sheet .small{
+  margin:7px 0 11px!important;color:#c4bdad!important;
+  font-size:clamp(12px,3.25vw,14px)!important;line-height:1.65!important;
+}
+#modal #sheet label{
+  display:block!important;margin:10px 0 5px!important;
+  color:#e8c875!important;font-size:13px!important;font-weight:700!important;
+}
+#modal #sheet input,#modal #sheet select,#modal #sheet textarea{
+  box-sizing:border-box!important;width:100%!important;min-width:0!important;
+  min-height:43px!important;margin:4px 0 9px!important;padding:10px 12px!important;
+  border:1px solid #574526!important;border-radius:13px!important;
+  outline:none!important;background:#080807!important;color:#fff!important;
+  font-size:14px!important;line-height:1.45!important;
+}
+#modal #sheet input:focus,#modal #sheet select:focus,#modal #sheet textarea:focus{
+  border-color:#e5bd5e!important;box-shadow:0 0 0 2px rgba(229,189,94,.13)!important;
+}
+#modal #sheet button{
+  box-sizing:border-box!important;max-width:100%!important;min-height:42px!important;
+  margin:5px 4px 3px 0!important;padding:9px 13px!important;
+  border:1px solid #6d562c!important;border-radius:13px!important;
+  background:linear-gradient(145deg,#211b0e,#0b0a07)!important;
+  color:#f1d38b!important;font-size:clamp(12px,3.2vw,14px)!important;
+  line-height:1.35!important;font-weight:800!important;white-space:normal!important;
+  box-shadow:0 3px 12px rgba(0,0,0,.32),inset 0 1px rgba(255,236,183,.07)!important;
+}
+#modal #sheet button.primary{
+  border-color:#e1b858!important;
+  background:linear-gradient(135deg,#f1d17c 0%,#d9ad50 55%,#bd8e35 100%)!important;
+  color:#171107!important;font-weight:900!important;
+  box-shadow:0 5px 17px rgba(211,164,66,.2),inset 0 1px rgba(255,255,255,.3)!important;
+}
+#modal #sheet button:active{transform:translateY(1px)!important}
+#modal #sheet .status{
+  min-height:0!important;margin:9px 0!important;padding:9px 11px!important;
+  border:1px solid rgba(213,171,83,.25)!important;border-radius:12px!important;
+  background:rgba(213,171,83,.07)!important;color:#e8c875!important;
+  font-size:12px!important;line-height:1.5!important;
+}
+#modal #sheet table{width:100%!important;max-width:100%!important;border-collapse:separate!important;border-spacing:0 5px!important;font-size:13px!important}
+#modal #sheet th{color:#f0ce78!important;text-align:right!important}
+#modal #sheet td{padding:8px!important;background:#0b0b09!important;border-top:1px solid #302719!important;border-bottom:1px solid #302719!important}
+#modal #sheet .card,#modal #sheet .preview,#modal #sheet .reconMini{
+  box-sizing:border-box!important;max-width:100%!important;margin:9px 0!important;
+  padding:11px!important;border:1px solid #493b25!important;border-radius:15px!important;
+  background:linear-gradient(145deg,#12110d,#080807)!important;color:#f4eee1!important;
+}
+#modal #sheet .reconMini b,#modal #sheet strong{color:#f2d17c!important}
+@media(max-width:760px){
+  #modal{padding:9px 8px calc(10px + env(safe-area-inset-bottom))!important}
+  #modal #sheet{width:100%!important;max-height:calc(100dvh - 19px - env(safe-area-inset-bottom))!important;padding:13px!important;border-radius:18px!important}
+  #modal #sheet h2{font-size:18px!important;margin-bottom:9px!important;padding-bottom:8px!important}
+  #modal #sheet p,#modal #sheet .small{font-size:12px!important;line-height:1.55!important}
+  #modal #sheet label{font-size:12px!important;margin-top:8px!important}
+  #modal #sheet input,#modal #sheet select,#modal #sheet textarea{min-height:40px!important;padding:8px 10px!important;font-size:13px!important;margin-bottom:7px!important}
+  #modal #sheet button{min-height:39px!important;padding:8px 10px!important;font-size:12px!important;margin:4px 3px 2px 0!important}
+}
 </style>
 </head>
 <body>
