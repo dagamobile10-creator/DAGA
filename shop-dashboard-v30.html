@@ -133,6 +133,24 @@ td{border-color:#282319}
 }
 @media(max-width:360px){.capitalLiveRow .num{font-size:18px}.capitalLiveRow>.balance{padding:10px 8px}}
 
+
+/* Layout correction to match the approved DAGA concept */
+.capitalLiveRow{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;gap:12px!important;align-items:stretch!important;margin-top:14px!important}
+.capitalLiveRow>.balance{display:flex;flex-direction:column;justify-content:center;min-width:0;margin:0!important;min-height:126px;padding:17px 14px}
+.capitalLiveRow .label{font-size:clamp(10px,2.6vw,13px);line-height:1.55}
+.capitalLiveRow .num{font-size:clamp(19px,4.5vw,34px);line-height:1.25;overflow-wrap:anywhere}
+.capitalLiveRow .hint{display:none}
+.hero{min-height:112px;padding:13px 15px}
+.hero p{display:none!important}
+.hero h1{margin:0;font-size:clamp(17px,4vw,22px)}
+@media(max-width:520px){
+ .capitalLiveRow{grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;gap:8px!important}
+ .capitalLiveRow>.balance{min-height:118px;padding:13px 9px}
+ .capitalLiveRow .label{font-size:11px}
+ .capitalLiveRow .num{font-size:clamp(18px,5vw,27px)}
+ .hero{min-height:100px;padding:11px 12px}
+}
+
 </style>
 </head>
 <body>
