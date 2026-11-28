@@ -773,7 +773,7 @@ function confirmCreateEntry(){
 function removeEntry(i){if(!cols[i].entries.length)return alert('مفيش بنود في العمود');open(`<h2>اختار البند للحذف</h2><p class="small">من عمود ${esc(cols[i].name)}. الحذف سيتسجل في سجل الحركات.</p>${cols[i].entries.map((e,j)=>`<button class="removeRow" onclick="confirmDelete(${i},${j})"><span>${esc((e[2]&&e[2].adminLabel)||e[0])}</span><b>${fmt(num(e[1]))} ج.م</b></button>`).join('')}`)}
 function confirmDelete(i,j){
  const e=cols[i].entries[j],money=findMoneyEntry();
- const linkedBalanceEntry=columnRole(cols[i])==='balance'&&(((e[2]&&entryRole(cols[i],e).startsWith('agent:')))||!!canonicalServiceAgent(e[0]));
+ const balanceMeta=e[2]&&typeof e[2]==='object'?e[2]:{}; const linkedBalanceEntry=columnRole(cols[i])==='balance'&&(entryRole(cols[i],e).startsWith('agent:')||balanceMeta.role==='other-company'||balanceMeta.treatment==='other_company'||!!String(balanceMeta.linkedCompany||'').trim()||!!canonicalServiceAgent(e[0]));
  if(linkedBalanceEntry){
   const amount=num(e[1]),name=String((e[2]&&e[2].adminLabel)||e[0]);
   if(!money){alert('مش لاقي بند الفلوس الأساسية في عمود الكروت. لم يتم حذف أي حاجة.');return;}
