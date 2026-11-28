@@ -84,7 +84,56 @@ button{transition:filter .15s,transform .15s;border-radius:14px}button:active{tr
 #dagaLivePanel.docked .livePanelRestore{display:flex;width:58px;height:58px;align-items:center;justify-content:center;border:0;border-radius:50%;font-size:25px;background:transparent;color:#f0d28f}
 #dagaLivePanel.docked iframe{display:none}
 @media(min-width:700px){#dagaLivePanel.docked{right:20px;left:auto;bottom:90px;width:60px;height:60px}}
-\n.capitalLiveRow{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;align-items:stretch}.capitalLiveRow>.balance{margin-top:0;min-width:0}.capitalLiveRow .label{font-size:12px}.capitalLiveRow .num{font-size:clamp(19px,5vw,30px);overflow-wrap:anywhere}.capitalLiveRow .hint{font-size:10px;line-height:1.5}@media(max-width:360px){.capitalLiveRow{gap:6px}.capitalLiveRow>.balance{padding:10px}.capitalLiveRow .label{font-size:10px}.capitalLiveRow .num{font-size:18px}}\n</style>
+\n.capitalLiveRow{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;align-items:stretch}.capitalLiveRow>.balance{margin-top:0;min-width:0}.capitalLiveRow .label{font-size:12px}.capitalLiveRow .num{font-size:clamp(19px,5vw,30px);overflow-wrap:anywhere}.capitalLiveRow .hint{font-size:10px;line-height:1.5}@media(max-width:360px){.capitalLiveRow{gap:6px}.capitalLiveRow>.balance{padding:10px}.capitalLiveRow .label{font-size:10px}.capitalLiveRow .num{font-size:18px}}\n
+/* DAGA premium gold visual pass — CSS only; no accounting or interaction changes */
+:root{--daga-gold:#e7bd63;--daga-gold-bright:#ffd879;--daga-gold-dim:#8f6a2e;--daga-edge:rgba(231,189,99,.34)}
+body{background:radial-gradient(ellipse at 50% 0%,rgba(184,133,43,.14),transparent 34%),radial-gradient(ellipse at 50% 62%,rgba(110,79,24,.07),transparent 48%),#070706}
+.top{background:linear-gradient(105deg,rgba(8,8,7,.97),rgba(18,16,11,.97));border-bottom-color:var(--daga-edge)}
+.brand b{color:var(--daga-gold-bright);text-shadow:0 0 18px rgba(255,205,105,.28)}
+.hero{background:radial-gradient(ellipse at 8% 100%,rgba(202,145,43,.2),transparent 40%),linear-gradient(115deg,#17150f,#0c0c0a 68%);border-color:#65502c;box-shadow:inset 0 1px rgba(255,230,170,.08),0 12px 34px #0008}
+.hero:before{content:"";position:absolute;inset:auto auto -52px -30px;width:230px;height:105px;border-radius:50%;border-top:2px solid rgba(235,183,75,.42);filter:blur(3px);transform:rotate(-13deg);pointer-events:none}
+.avatar{border-color:#b58b42;box-shadow:0 0 0 3px rgba(221,172,77,.09),0 0 25px rgba(220,168,64,.18)}
+.capitalLiveRow{gap:12px;margin-top:14px}
+.capitalLiveRow>.balance{min-height:126px;display:flex;flex-direction:column;justify-content:center;padding:18px 16px;border-color:#68512d;background:radial-gradient(ellipse at 12% 100%,rgba(203,151,49,.16),transparent 45%),linear-gradient(145deg,#17150f,#0b0b09);box-shadow:inset 0 1px rgba(255,232,180,.08),0 12px 30px #0008}
+.capitalLiveRow>.balance:after{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;background:linear-gradient(90deg,transparent,var(--daga-gold-bright),transparent);opacity:.7}
+.capitalLiveRow .label{color:#c9bea7;font-weight:600}
+.capitalLiveRow .num{color:#fff1cf;text-shadow:0 0 18px rgba(245,197,99,.12)}
+.capitalLiveRow .num.gold{color:var(--daga-gold-bright)}
+#liveWordBalanceCard{background:radial-gradient(ellipse at 10% 100%,rgba(222,172,69,.18),transparent 50%),linear-gradient(145deg,#17140d,#0b0b09)}
+.recon{position:relative;overflow:hidden;border-color:#70572d;background:linear-gradient(145deg,rgba(37,30,16,.96),rgba(12,12,10,.98) 58%);box-shadow:inset 0 1px rgba(255,225,155,.07),0 14px 34px #0008}
+.reconTitle{font-size:19px;color:var(--daga-gold-bright);text-shadow:0 0 16px rgba(255,204,104,.13)}
+.reconGrid{gap:9px}
+.reconGrid div{min-height:88px;display:flex;flex-direction:column;justify-content:space-between;border-color:#443923;background:linear-gradient(145deg,#12110d,#080807);box-shadow:inset 0 1px rgba(255,255,255,.025)}
+.reconGrid span{color:#b8ad96;line-height:1.5}
+.reconGrid b{font-size:clamp(14px,3.5vw,19px);color:#fff0ca;letter-spacing:.1px}
+.title{font-size:20px;color:#f4eee1}
+.title:before{height:23px;width:5px;box-shadow:0 0 12px rgba(231,189,99,.3)}
+button{border-color:#69512b;background:linear-gradient(145deg,#1b180f,#100f0b);color:#f0d28f;box-shadow:inset 0 1px rgba(255,235,185,.05)}
+button.primary{background:linear-gradient(135deg,#f4d58b,#bd8e3c);color:#181207;border-color:#f4d58b}
+.tablewrap{border-color:#5b4727;background:#090908;box-shadow:0 16px 38px #0009}
+th{background:linear-gradient(180deg,#211c10,#15130d);color:#f0d28f;border-color:#3b3020;font-size:15px;padding:17px 10px}
+td{border-color:#282319}
+.entry{background:linear-gradient(145deg,#19170f,#0e0e0c);border-color:#403624;box-shadow:inset 0 1px rgba(255,255,255,.025),0 5px 12px #0005;border-radius:15px;min-height:64px;padding:13px 11px}
+.entry:hover{border-color:#b58b42;box-shadow:0 0 0 1px rgba(231,189,99,.12),0 7px 18px #0007}
+.entry .amount{color:#f6e6c3}
+.colTotal{border-color:#443722}
+.bottom{background:rgba(8,8,7,.97);border-top-color:rgba(231,189,99,.28);box-shadow:0 -12px 36px #000b}
+.bottom button{font-weight:700}
+.bottom button.active{background:linear-gradient(180deg,rgba(203,153,57,.2),rgba(203,153,57,.055));border-color:rgba(231,189,99,.34);box-shadow:inset 0 0 18px rgba(215,166,65,.08),0 0 15px rgba(215,166,65,.08)}
+.bottom button.liveBtn{border:1px solid #9a7638;box-shadow:inset 0 0 18px rgba(215,166,65,.12),0 0 18px rgba(215,166,65,.1)}
+@media(max-width:520px){
+ .capitalLiveRow{gap:8px}
+ .capitalLiveRow>.balance{min-height:116px;padding:14px 10px}
+ .capitalLiveRow .label{font-size:11px}
+ .capitalLiveRow .num{font-size:clamp(20px,5.7vw,29px)}
+ .reconGrid div{min-height:82px;padding:9px 6px}
+ .reconGrid b{font-size:clamp(13px,3.4vw,16px)}
+ th{font-size:14px;padding:15px 8px}
+ .entry{border-radius:13px}
+}
+@media(max-width:360px){.capitalLiveRow .num{font-size:18px}.capitalLiveRow>.balance{padding:10px 8px}}
+
+</style>
 </head>
 <body>
 <header class="top"><div class="row"><div><div class="brand"><b>ضجه</b> | DAGA</div><div class="company" id="accountRoleLabel">الشركة — مالك الشركة</div></div><div class="date" id="liveDate">توقيت مصر<br>—</div></div></header>
