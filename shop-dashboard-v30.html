@@ -469,6 +469,16 @@ function ensureStableIdentities(){
 function columnByRole(role){return cols.find(c=>c.role===role)||null}
 function columnRole(col){return col&&col.role?col.role:inferColumnRole(col,cols.indexOf(col))}
 function entryRole(col,entry){return entry&&entry[2]&&entry[2].role?entry[2].role:inferEntryRole(col,entry)}
+function isCompanyLinkedBalanceEntry(col,entry){
+ if(!col||columnRole(col)!=='balance'||!entry)return false;
+ const meta=entry[2]&&typeof entry[2]==='object'?entry[2]:{};
+ const role=String(entryRole(col,entry)||'').toLowerCase();
+ const treatment=String(meta.treatment||'').toLowerCase();
+ return role.startsWith('agent:')||role==='other-company'||role==='company'||role==='linked-company'||
+  ['other_company','service','company','linked_company'].includes(treatment)||
+  !!String(meta.linkedCompany||meta.serviceAgent||meta.companyId||meta.linkedCompanyId||'').trim()||
+  !!canonicalServiceAgent(entry[0]);
+}
 async function loadCompanyDashboardLayout(storeId,token){
  try{
   const r=await fetch('/api/company/dashboard-layout?storeId='+encodeURIComponent(storeId),{headers:{Authorization:'Bearer '+token,'X-DAGA-Company-ID':storeId},cache:'no-store',credentials:'omit'});
@@ -773,7 +783,7 @@ function confirmCreateEntry(){
 function removeEntry(i){if(!cols[i].entries.length)return alert('مفيش بنود في العمود');open(`<h2>اختار البند للحذف</h2><p class="small">من عمود ${esc(cols[i].name)}. الحذف سيتسجل في سجل الحركات.</p>${cols[i].entries.map((e,j)=>`<button class="removeRow" onclick="confirmDelete(${i},${j})"><span>${esc((e[2]&&e[2].adminLabel)||e[0])}</span><b>${fmt(num(e[1]))} ج.م</b></button>`).join('')}`)}
 function confirmDelete(i,j){
  const e=cols[i].entries[j],money=findMoneyEntry();
- const balanceMeta=e[2]&&typeof e[2]==='object'?e[2]:{}; const linkedBalanceEntry=columnRole(cols[i])==='balance'&&(entryRole(cols[i],e).startsWith('agent:')||balanceMeta.role==='other-company'||balanceMeta.treatment==='other_company'||!!String(balanceMeta.linkedCompany||'').trim()||!!canonicalServiceAgent(e[0]));
+ const linkedBalanceEntry=isCompanyLinkedBalanceEntry(cols[i],e);
  if(linkedBalanceEntry){
   const amount=num(e[1]),name=String((e[2]&&e[2].adminLabel)||e[0]);
   if(!money){alert('مش لاقي بند الفلوس الأساسية في عمود الكروت. لم يتم حذف أي حاجة.');return;}
@@ -821,7 +831,7 @@ function moneyImpactForManualEdit(ci,entryName,delta,existingEntry=null){
   return {delta:-delta,agentDelta:0,agentName:null,description:'البند يعامل كأصل مرتبط عكسيًا بالفلوس الأساسية.'};
  }
  if(role==='balance'){
-  const linkedBalance=(existingEntry&&entryRole(cols[ci],existingEntry).startsWith('agent:'))||!!canonicalServiceAgent(entryName);
+  const linkedBalance=isCompanyLinkedBalanceEntry(cols[ci],existingEntry)||!!canonicalServiceAgent(entryName);
   if(linkedBalance){
    if(delta<0)return {delta:delta,agentDelta:0,agentName:null,description:'نقص أو حذف بند شركة أخرى من عمود الرصيد يخصم نفس قيمة النقص من بند الفلوس الأساسي في عمود الكروت فقط، دون التأثير على باقي بنود الكروت.'};
    return {delta:0,agentDelta:0,agentName:null,description:'زيادة رصيد الشركة المرتبط لا تغيّر الفلوس الأساسية؛ التسوية النقدية تحصل فقط عند تقليل رصيد الشركة أو حذفه.'};
