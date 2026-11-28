@@ -1048,6 +1048,16 @@ function parseOrder(t){
    if(!allPeople.has(key))allPeople.set(key,{name:e[0],outside:0,outsideRows:[],balance:0,balanceRows:[]});
    const o=allPeople.get(key);o.balance+=num(e[1]);o.balanceRows.push({ci:cols.indexOf(balanceCol),name:e[0]});
  });
+ // Parse an explicit outside-add command from the spoken words before trying to
+ // identify an existing person. A shared first name (e.g. Mahmoud) is not a full identity.
+ const explicitOutsideAddIntent=/(?:الخارج|خارج|برا)/.test(cleaned) &&
+   /(?:اكتب|تكتب|عايزك|ارفع|حط|ضيف|اضيف|سجل|زود|دخل)/.test(cleaned);
+ if(explicitOutsideAddIntent){
+   const stopWords=new Set(['اكتب','تكتب','عايزك','عايز','ارفع','حط','ضيف','اضيف','سجل','زود','دخل','في','العمود','عمود','الخارج','خارج','برا','جنيه','جنيهات','باسم']);
+   const requestedName=cleaned.split(' ').filter(word=>word&&!stopWords.has(word)).join(' ').trim();
+   if(!requestedName)return {ambiguous:'قولّي الاسم الكامل اللي أضيفه في الخارج.'};
+   return {type:'outsideAdd',name:requestedName,amount,raw};
+ }
  const paddedCommand=' '+cleaned+' ';
  const matches=[...allPeople.entries()].filter(([k])=>k && paddedCommand.includes(' '+k+' '));
  matches.sort((a,b)=>b[0].length-a[0].length);
@@ -1253,13 +1263,16 @@ function review(){
        normAccountingName(r.name).split(' ').filter(Boolean).some(token=>requestedTokens.includes(token)));
    const similarNames=[...new Set(similarRows.map(r=>r.name))];
    if(similarNames.length){
-     const candidate=similarNames[0],candidateRows=similarRows.filter(r=>r.name===candidate);
-     order.similarCandidateName=candidate;
-     order.existingRows=candidateRows.map(r=>({ci:r.ci,name:r.name,amount:r.amount}));
-     order.existingTotal=candidateRows.reduce((sum,r)=>sum+r.amount,0);
-     order.targetIndex=candidateRows[0].ci;
+     const similarCandidates=similarNames.map(name=>{
+       const rows=similarRows.filter(r=>r.name===name);
+       return {name,rows:rows.map(r=>({ci:r.ci,name:r.name,amount:r.amount})),
+         total:rows.reduce((sum,r)=>sum+r.amount,0),targetIndex:rows[0].ci};
+     });
+     order.similarCandidates=similarCandidates;
      pendingOrder=null;pendingClarification={type:'outsideAddDuplicate',order};
-     out.innerHTML=`<div class="reconMini"><div>الاسم اللي اتقال <b>${esc(p.name)}</b></div><div>اسم قريب موجود بالفعل <b>${esc(candidate)}</b></div><div>الموجود بالاسم القريب <b>${fmt(order.existingTotal)} جنيه</b></div><div>المبلغ الجديد <b>${fmt(p.amount)} جنيه</b></div></div><p class="small">الاسم الكامل مختلف. تحب تضيف على «${esc(candidate)}» الموجود، ولا تنشئ بندًا جديدًا باسم «${esc(p.name)}»؟</p><button class="primary" onclick="answerClarificationFromText('بند مستقل')">إنشاء بند جديد بالاسم الكامل</button><button onclick="answerClarificationFromText('ادمج على الموجود')">الإضافة على ${esc(candidate)}</button><button onclick="answerClarificationFromText('إلغاء')">إلغاء</button>`;return;
+     const choices=similarCandidates.map((candidate,index)=>
+       `<button onclick="answerClarificationFromText('ادمج على الموجود رقم ${index}')">دمج على «${esc(candidate.name)}» — ${fmt(candidate.total)} جنيه</button>`).join('');
+     out.innerHTML=`<div class="reconMini"><div>الاسم الكامل المطلوب <b>${esc(p.name)}</b></div><div>المبلغ الجديد <b>${fmt(p.amount)} جنيه</b></div></div><p class="small">فيه أسماء بتشترك مع الاسم المطلوب. اختار بالاسم بالضبط: تدمج على أنهي بند، ولا تنشئ بند جديد مستقل؟ مفيش أي رصيد اتغير.</p><button class="primary" onclick="answerClarificationFromText('بند مستقل')">إنشاء بند جديد باسم «${esc(p.name)}»</button>${choices}<button onclick="answerClarificationFromText('إلغاء')">إلغاء</button>`;return;
    }
    const balanceRows=(cols[balanceIndex]?.entries||[]).map(e=>({ci:balanceIndex,name:String(e[0]||''),amount:num(e[1])})).filter(r=>normAccountingName(r.name)===normAccountingName(order.name));
    const balanceTotal=balanceRows.reduce((sum,r)=>sum+r.amount,0);
@@ -1303,11 +1316,19 @@ function review(){
 }
 function answerClarificationFromText(text){
  if(pendingClarification?.type==='outsideAddDuplicate'){
-  const q=pendingClarification,makeSeparate=/(بند مستقل|اضافه مستقله|لوحده|منفصل)/.test(String(text||'')),merge=/(ادمج|دمج|على الموجود)/.test(String(text||''));
+  const q=pendingClarification,answer=String(text||''),makeSeparate=/(بند مستقل|اضافه مستقله|لوحده|منفصل)/.test(answer),merge=/(ادمج|دمج|على الموجود)/.test(answer),mergeIndexMatch=answer.match(/ادمج على الموجود رقم (\\d+)/),mergeIndex=mergeIndexMatch?Number(mergeIndexMatch[1]):-1;
   if(/^(الغاء|الغي|وقف)$/i.test(String(text||'').trim())){pendingClarification=null;pendingOrder=null;const box=document.getElementById('orderPreview');if(box)box.innerHTML='<p class="status">تم إلغاء العملية؛ لم يتغير أي رصيد.</p>';return;}
   if(!makeSeparate&&!merge){const box=document.getElementById('orderPreview');if(box)box.innerHTML='<p class="small">اختار: بند مستقل ولا دمج مع الموجود؟</p><button class="primary" onclick="answerClarificationFromText(\'بند مستقل\')">إضافة مستقلة</button><button onclick="answerClarificationFromText(\'ادمج على الموجود\')">دمج مع الموجود</button><button onclick="answerClarificationFromText(\'إلغاء\')">إلغاء</button>';return;}
   const order={...q.order,duplicateMode:makeSeparate?'separate':'merge'};
-  if(q.order.similarCandidateName){
+  if(q.order.similarCandidates?.length){
+    if(makeSeparate){order.existingRows=[];order.existingTotal=0;}
+    else {
+      const candidate=q.order.similarCandidates[mergeIndex];
+      if(!candidate){const box=document.getElementById('orderPreview');if(box)box.innerHTML='<p class="small">اختار اسمًا محددًا من القائمة، أو أنشئ بندًا مستقلًا. لم يتغير أي رصيد.</p>';return;}
+      order.name=candidate.name;order.existingRows=candidate.rows;order.existingTotal=candidate.total;order.targetIndex=candidate.targetIndex;
+    }
+    order.expectedAfter=(order.existingTotal||0)+order.amount;
+  } else if(q.order.similarCandidateName){
     if(makeSeparate){order.existingRows=[];order.existingTotal=0;}
     else {order.name=q.order.similarCandidateName;}
     order.expectedAfter=(order.existingTotal||0)+order.amount;
