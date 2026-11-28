@@ -692,7 +692,7 @@ function moneyImpactForManualEdit(ci,entryName,delta,existingEntry=null){
  if(role==='balance'){
   const linkedBalance=(existingEntry&&entryRole(cols[ci],existingEntry).startsWith('agent:'))||!!canonicalServiceAgent(entryName);
   if(linkedBalance){
-   if(delta<0)return {delta:-delta,agentDelta:0,agentName:null,description:'نقص أو حذف أي بند مرتبط بمعاملة شركة أخرى في عمود الرصيد يضيف نفس المبلغ إلى الفلوس الأساسية في عمود الكروت. لا يتم خصم أي مبلغ من الفلوس الأساسية.'};
+   if(delta<0)return {delta:delta,agentDelta:0,agentName:null,description:'نقص أو حذف بند شركة أخرى من عمود الرصيد يخصم نفس قيمة النقص من بند الفلوس الأساسي في عمود الكروت فقط، دون التأثير على باقي بنود الكروت.'};
    return {delta:0,agentDelta:0,agentName:null,description:'زيادة رصيد الشركة المرتبط لا تغيّر الفلوس الأساسية؛ التسوية النقدية تحصل فقط عند تقليل رصيد الشركة أو حذفه.'};
   }
   return {delta:delta,agentDelta:0,agentName:null,description:'البند العادي في عمود الرصيد مرتبط بالفلوس الأساسية بنفس الاتجاه.'};
