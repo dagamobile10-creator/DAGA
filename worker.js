@@ -112,6 +112,90 @@ export default {
       return json({ error: "owner_auth_internal_error", ...(url.hostname === "daga-app-staging.dagamobile10.workers.dev" ? { diagnostic: error instanceof Error ? error.message.slice(0, 200) : "unknown_error" } : {}) }, 500);
     }
     if (ownerAuthResponse) return ownerAuthResponse;
+    if (url.pathname === "/api/company/dashboard-layout" && request.method === "PUT") {
+      const db = env.DAGA_APP_DB;
+      if (!db) return json({ error: "application_database_not_configured" }, 503);
+      const account = await authenticatedAccount(request, db);
+      if (!account || account.status !== "approved" || account.role !== "store_owner") return json({ error: "store_owner_required" }, 403);
+      const parsed = await readBoundedJson(request, 120000);
+      if (!parsed.ok) return json({ error: parsed.error }, parsed.status);
+      const body = parsed.value || {};
+      const selected = String(body.storeId || request.headers.get("X-DAGA-Company-ID") || "").trim();
+      if (!selected) return json({ error: "company_selection_required" }, 400);
+      const owned = await db.prepare("SELECT id FROM daga_stores WHERE id=? AND owner_account_id=? AND status='approved'").bind(selected, account.id).first();
+      if (!owned) return json({ error: "company_membership_required" }, 403);
+      const columns = body.columns;
+      if (!Array.isArray(columns) || columns.length < 2 || columns.length > 30) return json({ error: "invalid_dashboard_columns" }, 400);
+      const allowedRoles = new Set(["cards","balance","expenses","cash","accessory","custom"]);
+      const ids = new Set(), names = new Set();
+      const normalized = [];
+      for (const column of columns) {
+        if (!column || typeof column !== "object" || !allowedRoles.has(String(column.role || ""))) return json({ error: "invalid_dashboard_column" }, 400);
+        const id = String(column.id || "").trim(), name = String(column.name || "").trim();
+        if (!id || id.length > 160 || !name || name.length > 60 || ids.has(id) || names.has(name.toLocaleLowerCase())) return json({ error: "invalid_or_duplicate_dashboard_column" }, 400);
+        ids.add(id); names.add(name.toLocaleLowerCase());
+        const entries = Array.isArray(column.entries) ? column.entries : [];
+        if (entries.length > 500) return json({ error: "too_many_dashboard_entries" }, 400);
+        const entryIds = new Set();
+        const safeEntries = [];
+        for (const entry of entries) {
+          if (!entry || typeof entry !== "object") return json({ error: "invalid_dashboard_entry" }, 400);
+          const entryName = String(entry.name || "").trim();
+          if (!entryName || entryName.length > 120) return json({ error: "invalid_dashboard_entry" }, 400);
+          const requestedEntryId = String(entry.id || "").trim();
+          if (requestedEntryId.length > 180) return json({ error: "invalid_dashboard_entry_id" }, 400);
+          let entryId = requestedEntryId || ("entry-" + id + "-" + safeEntries.length);
+          const baseEntryId = entryId;
+          let duplicateSuffix = 1;
+          while (entryIds.has(entryId)) entryId = (baseEntryId.slice(0, 160) + "-" + duplicateSuffix++);
+          entryIds.add(entryId);
+          const treatment = entry.treatment == null ? null : String(entry.treatment);
+          if (treatment && !["asset","other_company","service"].includes(treatment)) return json({ error: "invalid_dashboard_entry_treatment" }, 400);
+          safeEntries.push({ id: entryId, key: String(entry.key || entryId).slice(0,180), name: entryName, enabled: entry.enabled !== false, treatment, linkedCompany: String(entry.linkedCompany || "").slice(0,120) });
+        }
+        normalized.push({ id, key: String(column.key || id).slice(0,160), name, role: String(column.role), enabled: true, entries: safeEntries });
+      }
+      if (!normalized.some(c => c.role === "cards") || !normalized.some(c => c.role === "balance")) return json({ error: "required_accounting_columns_missing" }, 400);
+      const layout = { version: 1, columns: normalized };
+      const layoutJson = JSON.stringify(layout);
+      const now = new Date().toISOString();
+      const existing = await db.prepare("SELECT id,version FROM daga_dashboard_layouts WHERE scope='store' AND store_id=?").bind(owned.id).first();
+      const layoutId = existing?.id || crypto.randomUUID();
+      const version = Number(existing?.version || 0) + 1;
+      await db.prepare("INSERT INTO daga_dashboard_layouts (id,scope,store_id,layout_json,version,updated_by,updated_at) VALUES (?,'store',?,?,?,?,?) ON CONFLICT(store_id) WHERE scope='store' DO UPDATE SET layout_json=excluded.layout_json,version=excluded.version,updated_by=excluded.updated_by,updated_at=excluded.updated_at")
+        .bind(layoutId, owned.id, layoutJson, version, account.id, now).run();
+      await db.prepare("INSERT INTO daga_dashboard_layout_versions (id,layout_id,version,layout_json,changed_by,change_note,created_at) VALUES (?,?,?,?,?,?,?)")
+        .bind(crypto.randomUUID(), layoutId, version, layoutJson, account.id, "Company dashboard columns updated", now).run();
+      return json({ ok: true, storeId: owned.id, scope: "store", layout, version, updatedAt: now });
+    }
+    if (url.pathname === "/api/company/dashboard-layout" && request.method === "GET") {
+      const db = env.DAGA_APP_DB;
+      if (!db) return json({ error: "application_database_not_configured" }, 503);
+      const account = await authenticatedAccount(request, db);
+      if (!account || account.status !== "approved" || account.role === "program_owner") return json({ error: "company_session_required" }, 401);
+      const selected = String(url.searchParams.get("storeId") || request.headers.get("X-DAGA-Company-ID") || "").trim();
+      let storeId = "";
+      if (account.role === "store_owner") {
+        if (!selected) return json({ error: "company_selection_required" }, 400);
+        const owned = await db.prepare("SELECT id FROM daga_stores WHERE id=? AND owner_account_id=? AND status='approved'").bind(selected, account.id).first();
+        if (!owned) return json({ error: "company_membership_required" }, 403);
+        storeId = owned.id;
+      } else if (["manager","employee"].includes(account.role)) {
+        if (!selected) return json({ error: "company_selection_required" }, 400);
+        const membership = await db.prepare("SELECT m.store_id FROM daga_store_memberships m JOIN daga_stores s ON s.id=m.store_id WHERE m.account_id=? AND m.store_id=? AND m.status='active' AND m.role=? AND s.status='approved'").bind(account.id,selected,account.role).first();
+        if (!membership) return json({ error: "company_membership_required" }, 403);
+        storeId = membership.store_id;
+      } else return json({ error: "company_membership_required" }, 403);
+      let row = await db.prepare("SELECT id,layout_json,version,updated_at FROM daga_dashboard_layouts WHERE scope='store' AND store_id=?").bind(storeId).first();
+      let effectiveScope = "store";
+      if (!row) {
+        row = await db.prepare("SELECT id,layout_json,version,updated_at FROM daga_dashboard_layouts WHERE scope='global' AND store_id IS NULL").first();
+        effectiveScope = "global";
+      }
+      let layout = null;
+      if (row) { try { layout = JSON.parse(row.layout_json); } catch (_) { return json({ error: "stored_layout_invalid" }, 500); } }
+      return json({ ok: true, storeId, scope: effectiveScope, layout, version: Number(row?.version || 0), updatedAt: row?.updated_at || null });
+    }
     const shopAuthResponse = await handleShopAuth(request, env, url);
     if (shopAuthResponse) return shopAuthResponse;
     const ownerAdminResponse = await handleOwnerAdmin(request, env, url);
@@ -275,6 +359,12 @@ export default {
       } catch (_) { return json({ error: "liveavatar_token_failed" }, 502); }
     }
 
+    if (url.pathname === "/api/support/contact" && request.method === "GET") {
+      if (!env.DAGA_APP_DB) return json({error:"application_database_not_configured"},503);
+      const row = await env.DAGA_APP_DB.prepare("SELECT setting_value FROM daga_app_settings WHERE setting_key='support_whatsapp'").first();
+      return json({ok:true,whatsapp:row?.setting_value||""});
+    }
+
     if (url.pathname === "/health") {
       return json({ ok: true, voiceConfigured: Boolean(env.ELEVENLABS_API_KEY), chatConfigured: Boolean(env.OPENAI_API_KEY || env.GROQ_API_KEY || env.AI), freeChatConfigured: Boolean(env.GROQ_API_KEY || env.AI), liveAvatarConfigured: Boolean(env.LIVEAVATAR_API_KEY), liveAvatarIdConfigured: Boolean(env.LIVEAVATAR_AVATAR_ID) });
     }
@@ -317,26 +407,30 @@ export default {
         const userText = String(body?.text || "").trim();
         if (!userText) return json({ error: "text is required" }, 400);
         if (userText.length > 2000) return json({ error: "text_too_long", maxLength: 2000 }, 413);
-        if (/(اسمك\s*(?:إيه|ايه|ما|ماذا)|مين\s*إنت|من\s*أنت|عرفني\s*بنفسك)/u.test(userText)) return json({ reply: "أنا اسمي ضَجَّة، مساعدك الذكي.", provider: "built-in" });
-        const history = Array.isArray(body?.history) ? body.history.slice(-8).filter(item => item && ["user", "assistant"].includes(item.role) && typeof item.content === "string" && item.content.trim()).map(item => ({ role: item.role, content: item.content.trim().slice(0, 1200) })) : [];
+        const history = Array.isArray(body?.history) ? body.history.slice(-8).filter(item => item && ["user", "assistant"].includes(item.role) && typeof item.content === "string" && item.content.trim()).map(item => ({ role: item.role, content: item.content.trim().slice(0, 500) })) : [];
         const conversation = [...history, { role: "user", content: userText }];
         const businessContext = typeof body?.businessContext === "string" ? body.businessContext.trim().slice(0, 14000) : "";
-        const memory = body?.memory && typeof body.memory === "object" ? JSON.stringify(body.memory).slice(0, 1600) : "";
-
-        const recallQuestion = /(?:فاكر|تفتكر|متذكر|تتذكر|عارف)\s*(?:إحنا|احنا|كنا|احنا كنا)?[\s\S]{0,90}(?:بنحاول نصلح|بنصلح|نصلح فيك|نصلح|نظبط فيك|نظبطك|المشكلة فيك|كنا عايزين نصلح)/u.test(userText)
-          || /إيه اللي كنا بنحاول نصلحه فيك|احنا كنا بنصلح فيك ايه|إحنا كنا بنصلح فيك إيه/u.test(userText);
-        if (recallQuestion) return json({ reply: "كنا بنظبط فهمي وسياق كلامي، والنطق المصري، والجيم القاهرية، والصرف والنحو والضمائر، وإنّي أجاوب على السؤال نفسه من غير تخمين أو ردود محفوظة. وكمان نفرّق بين اسم المساعد واسم صاحب البرنامج وهوية أي مستخدم جديد.", provider: "project-memory" });
+        const memory = body?.memory && typeof body.memory === "object" ? JSON.stringify(body.memory).slice(0, 800) : "";
 
         const verifiedIdentityContext = voiceAccount
           ? "\\n\\nهوية الحساب الموثقة من الخادم: " + JSON.stringify({ accountId: voiceAccount.id, publicId: voiceAccount.public_id || null, displayName: voiceAccount.display_name || null, role: voiceAccount.role, storeId: voiceAccount.store_id || null }) + ". استخدم هذه الهوية فقط عند الحاجة؛ لا تعتبرها دليلًا على بيانات مالية أو صلاحيات شركة غير مسترجعة من قاعدة البيانات."
           : "";
         const instructions = [
+          "الفهم الذكي مش مطابقة كلمات: أنت نموذج محادثة ذكي، افهم المعنى المقصود حتى لو المستخدم صاغ السؤال بلهجة مختلفة أو أخطأ في الاسم أو استخدم وصفًا بدل اسم العمود. اربط الضمائر والإشارات بآخر الحوار، واستنتج المقصود من السياق والبيانات المتاحة، لا من تطابق جملة محفوظة. اشرح السبب والعلاقة بين الحركة والنتيجة، لا تردد نص قاعدة. لا تفترض أن كل سؤال أمر تنفيذ. إذا كان المقصود واضحًا أجب مباشرة، وإذا كان هناك احتمالان يغيّران النتيجة اسأل سؤال توضيح واحدًا. لا تخترع معلومة غير موجودة، وكن صريحًا بشأن ما لا تستطيع معرفته. اجعل الحوار طبيعيًا ومتبادلًا، ولا تحوّل كل رد إلى صيغة خدمة عملاء.",
+          "العقل المحاسبي والسياق الحي: اقرأ لقطة الداشبورد كاملة قبل الرد. هي تحتوي أعمدة وصفوفًا فرعية، ولازم تفرّق بين اسم العمود واسم البند. إذا قال المستخدم «آخر حركة في الفلوس» أو «آخر حاجة حصلت في الفلوس»، ابحث في recentLedger المرتب زمنيًا؛ اعرض أحدث حركة تخص الفلوس/الكاش أو moneyDelta، مع وقتها وتفاصيلها، ولا تطلب اسم شخص. إذا لم توجد حركة مناسبة في recentLedger، قل إن سجل الحركات غير متاح حاليًا ولا تخمّن. إذا قال «رصيد أساسي» أو «الرصيد الأساسي» وحدد أنه في عمود الكروت، ابحث عن صف الاسم المطابق داخل عمود role=cards، ولا تبحث عن اسم شخص ولا عن عمود role=balance. افهم أفعال التغيير المصرية: شيل/انزل/نزل/اطرح/اخصم/خصم/قلل/اسحب تعني تقليل القيمة، وزوّد/ضيف/ارفع/حط/سجل تعني زيادة القيمة. إذا حدد المستخدم البند والعمود والمبلغ، جهّز معاينة تعديل على نفس الصف تشمل القيمة الحالية والجديدة والفرق وأثرها على الفلوس الأساسية أو رصيد المندوب حسب قواعد البند؛ لا تسأل عن اسم شخص غير مذكور ولا تطلب إعادة صياغة الأمر. لا تنفذ من لقطة القراءة وحدها؛ استخدم مسار تنفيذ الداشبورد الذي يتحقق من القيمة الحالية ويحفظ قيدًا واحدًا.",
+          "تنسيق العربي: اكتب كل كلمة عربية منفصلة بمسافة واحدة واضحة قبلها وبعدها. ممنوع دمج كلمتين مثل «فوريزيد» أو «رصيدأساسي»؛ اكتب «فوري يزيد» و«رصيد أساسي». لا تستخدم تشكيلًا أو Markdown أو نجومًا أو جداول. اجعل الجمل قصيرة، واستخدم الفاصلة العربية للفصل عند الحاجة. لا تكرر اسم العمود أو البند بلا داعٍ.",
+          "أسئلة ماذا لو وفهم تأثير الحركة: لقطة الداشبورد تحتوي لكل بند increaseImpact وdecreaseImpact محسوبتين من دالة المحاسبة الحقيقية نفسها moneyImpactForManualEdit، وليستا تخمينًا. عند سؤال افتراضي مثل «لو رصيد أساسي زاد» أو «لو سوبر بي نقص خمسة آلاف» أو «لو شطبنا خمسة عشر ألف من الخارج»، طابق البند والعمود أو اسم الخدمة أولًا، ثم اضرب تأثير الزيادة أو النقص المحسوب لكل جنيه في المبلغ المطلوب، واشرح أي عمود يتغير وأي عمود يظل ثابتًا. اذكر أسماء الأعمدة الفعلية من snapshot.columns ولا تخلط اسم البند باسم العمود. إذا كان البند رصيد أساسي داخل عمود الكروت، فقاعدة الداشبورد قد تحول الزيادة إلى رصيد المندوب المرتبط بالخدمة مع بقاء بند الفلوس في الكروت ثابتًا؛ وإذا نقص رصيد خدمة مثل سوبر بي، طبّق decreaseImpact للبند المحدد لتوضيح أثره على بند الفلوس في عمود الكروت. حذف أو شطب بند من عمود الخارج يستخدم أثر النقص للبند، ولا تفترض أنه مجرد خصم عادي. جاوب عن السيناريوهات النظرية دون تنفيذ أو تعديل أي قيمة، وقل بوضوح إن ده افتراض فقط. إذا لم يوجد بند مطابق أو تأثير محسوب، لا تخترع قاعدة؛ اطلب تحديد العمود أو البند فقط. عند سؤال مقارنة سيناريوهين، اعرض كل نتيجة منفصلة باختصار. لا تسأل المستخدم هل يؤكد إلا إذا طلب تنفيذًا صريحًا.",
+          "خريطة المحاسبة الثابتة — افهمها كعلاقات بين أرصدة، مش كأسماء منفصلة: داخل عمود الكروت يوجد صف «الفلوس» أو «الفلوس الأساسية» وهو إجمالي النقد الأساسي للمحل، وده غير صف «رصيد أساسي» الخاص بخدمة فوري. لو المستخدم قال «الفلوس الأساسية» أو «بند فلوس» وحدد عمود الكروت، فهو يقصد صف المال نفسه: الزيادة تزود هذا الصف مباشرة، والنقص يقلله مباشرة، ولا تسأل عن اسم شخص أو هل الحركة كاش أم أكسسوار. أما صفوف الخدمات داخل عمود الكروت فهي: «رصيد أساسي» و«كارت وهوا» و«كاش أوت» وتتبع ماكينة/مندوب فوري؛ «ممكن» تتبع ماكينة ممكن؛ «سوبر باي/سوبر بي» يتبع ماكينة سوبر بي. زيادة أي صف خدمة في عمود الكروت ترفع رصيد المندوب المقابل في عمود الرصيد فقط، ولا تغيّر صف الفلوس الأساسية. تقليل أي صف خدمة في عمود الكروت يعني استهلاك رصيد الخدمة، ويزيد صف الفلوس الأساسية في عمود الكروت بنفس مقدار النقص، ولا يقلل رصيد المندوب. أما صفوف أرصدة المندوبين نفسها داخل عمود الرصيد: زيادتها تغيّر رصيد المندوب فقط؛ وتقليلها أو حذفها يخصم قيمة النقص/الحذف من صف الفلوس الأساسية في عمود الكروت. القاعدة الأخيرة تنطبق على فوري وممكن وسوبر بي. لا تخلط مطلقًا بين «رصيد أساسي» (صف خدمة فوري) و«الفلوس الأساسية/صف الفلوس» (النقد الأساسي للمحل). عند السؤال الافتراضي «لو زاد/زادوا/زود/ذات/زات [اسم بند] [مبلغ]» اعتبر «ذات/زات» احتمال خطأ تعرف صوتي لكلمة «زاد» إذا كان السياق واضحًا، واحسب أثر الزيادة من increaseImpact؛ وعند «نقص/قل/استهلك/شيل» استخدم decreaseImpact. إذا سمّى المستخدم البند والمبلغ بوضوح، لا تسأل عن شخص أو نوع حركة غير مطلوب. اشرح النتيجة في جملة أو جملتين: الرصيد الذي يزيد أو يقل، والرصيد الذي يظل ثابتًا، وسبب العلاقة. إذا قال «زود الفلوس الأساسية» فهو طلب متعلق بصف الفلوس نفسه، وليس سؤالًا عن مندوب. لا تنفذ أي سيناريو افتراضي؛ والأوامر الفعلية فقط تمر بمعاينة وتأكيد صريح.",
+          "إخراج الرد ونطق الأرقام: ممنوع استخدام Markdown أو النجمتين ** أو علامات التنسيق؛ اكتب نصًا عربيًا عاديًا فقط. لا تكرر الكلمة نفسها متتابعة. عند ذكر مبلغ مالي، اكتب العدد بالكلمات المصرية الصحيحة لا بالأرقام: 10,000 = عشرة آلاف، 50,000 = خمسين ألف، 115,000 = مية وخمستاشر ألف جنيه. لا تفصل الأرقام إلى أرقام منفردة ولا تقل عشرة صفر أو خمسة صفر. إذا لم تجد صفًا مطابقًا بالاسم والعمود في بيانات الداشبورد، لا تخترع مبلغًا ولا اسمًا؛ قل بوضوح إن البند غير ظاهر أو إنك محتاج توضيحًا واحدًا محددًا. عند سؤال «رصيد أساسي في عمود الكروت» طابق اسم البند «رصيد أساسي» داخل عمود الكروت نفسه، واعرض قيمته الفعلية فقط؛ لا تستنتج رصيدًا من عمود آخر ولا تخلط أسماء الصفوف الفرعية بأسماء الأعمدة. اجعل الرد قصيرًا وواضحًا بالمصري.",
+          "الموافقة الطبيعية: بعد عرض معاينة واحدة واضحة لعملية محددة، اعتبر «ماشي»، «تمام»، «أيوه»، «اه»، «نفّذ»، «نفّذ يا صاحبي»، «أيوه حبيبي»، «خلاص»، «اتفضل» أو «توكل» موافقة على نفس المعاينة، حتى لو لم يقل المستخدم «أيوه نفّذ» حرفيًا. لا تعتبر هذه الكلمات موافقة إذا لم توجد معاينة معلقة أو إذا كان الكلام لا يشير بوضوح إلى العملية. «لا»، «إلغاء»، «بلاش»، «استنى» تعني إلغاء المعاينة. لا تنفذ عملية مالية لمجرد وجود كلمة موافقة في رسالة جديدة لا تتعلق بالمعاينة.",
+          "الأولوية الأولى: ميّز الكلام الاجتماعي الطبيعي عن أوامر الدفتر. التحية، صباح الفل، مساء الخير، صلي على النبي، الشكر، المزاح، أو العتاب والإساءة ليست أوامر مالية ولا طلبات تحديد اسم أو مبلغ. رد على المقصود اجتماعيًا بالمصري وباختصار، ولا تذكر الرصيد أو الخارج أو الحسابات إلا لو المستخدم طلبها صراحة. لا تحول كل جملة يقولها المستخدم إلى أمر محاسبي. لو المستخدم بيهزر أو بيسلم عليك، رد عليه كصاحب ودود مش كموظف خدمة عملاء.",
           "سلوكيات MH المتفق عليها مع صاحب التطبيق: التزم بالعبارات التالية عند انطباق الموقف، وبالعامية المصرية. عند قول المستخدم «صلي على النبي» أو «صلي على النبي في قلبك» أو «صلي على النبي في قلبك يا عم»، يكون الرد الثابت: «عليه أفضل الصلاة والسلام». عند التحية الدورية اليومية تكون العبارة: «صلي على النبي في قلبك يا عم»، ثم «يومك كله رزق بإذن الله». لا تدّعِ أن التذكير كل ساعة قد نُفّذ أو أن مؤقّتًا يعمل ما لم يثبت ذلك من التطبيق.",
           "إذا أساء المستخدم أو استخدم لفظًا خارجًا، اتبع تدرج الاحترام حسب عدد مرات الإساءة المتاحة فعلًا في سياق المحادثة: الأولى «كده عيب.»؛ الثانية «على فكرة أنا قلت لك كده عيب.»؛ الثالثة «بص أنا ممكن أرد عليك، بس أنا واخد أوامر إني أحترم نفسي.»؛ الرابعة «بقولك إيه، على فكرة أنا عندي فن الرد قوي أوي، وممكن أرد عليك رد مش حلو، فكفاية واحترم نفسك لحد هنا.»؛ ثم «اللي أنا أعرفه إن اللي بيخرج من البني آدم هي تربيته، فمن الواضح كده إن إنت ما اتربتش. أنا قلت لك إن إنت ما اتربتش، بس أنا مش قادر أرد عليك أكتر من كده، لحد ما صاحب البرنامج يأذن لي أو يسمح لي.» بعد ذلك حافظ على الحزم من غير شتائم أو إهانة بذيئة. إذا لم يتوفر سجل موثوق لعدد المرات، لا تخترع عدّادًا.",
           "عند ملاحظة خطأ في إدخال حساب أو رقم، نبه المستخدم بعبارة «يا عم لأ، فوق! الله يبارك لك، هي مش ناقصة خسارة!» لكن لا تغيّر الأرقام ولا تصف إدخالًا بأنه خطأ إلا إذا كانت هناك بيانات أو مقارنة تدعم ذلك.",
           "عند تسوية إغلاق اليوم، إذا كانت النتيجة النهائية مؤكدة وموجبة، قل «اللهم لك الحمد، الله أكبر، الحمد لله، تعبنا ما كانش على الفاضي.» وإذا كانت النتيجة النهائية عجزًا مؤكدًا، قل «لا حول ولا قوة إلا بالله… هي مش ناقصة! هو حد بصّ في اليوم؟». لا تخمّن نتيجة التسوية؛ اعتمد على أرقام الداشبورد الفعلية.",
           "إذا مرّت ساعة بلا أوردر، العبارة المطلوبة هي «يا عم إنت فين؟ هو إنت مش شغّلني كده على الفاضي؟ عايزين نشتغل، عايزين نحلّل الجنيهين!». هذه العبارة تتطلب مؤقّتًا ونشاطًا من الواجهة؛ لا تدّعِ أن التذكير الزمني يعمل اعتمادًا على ردّ المحادثة وحده.",
           "نبرة MH ودودة وخفيفة الدم، لكنه يحافظ على الاحترام. في تقارير المكسب والخسارة والمصروفات والخزنة والمخزون، لا يخترع أرقامًا أو أرصدة. اقترح مراجعة الأرقام غير المعتادة، وتأكيد العمليات الحساسة، ووضح أن الاقتراحات والتقارير تحتاج ربطًا فعليًا ببيانات الداشبورد.",
+          "افهم الحسابات بالاعتماد على بنية الداشبورد الفعلية، لا على نص المحادثة وحده. اللقطة قد تحتوي أعمدة بأدوار منفصلة (الكروت، الرصيد، الخارج، الكاش، الإكسسوار)، وداخل كل عمود صفوف فرعية. الاسم نفسه قد يظهر في أكثر من عمود؛ اجمع القيم المتطابقة بالاسم الموحّد داخل الدور المطلوب فقط، ولا تخلط بين إجمالي الرصيد وإجمالي الخارج. عند إضافة مبلغ جديد إلى بند شخص موجود في الخارج، اجمعه مع إجمالي الخارج السابق للشخص في صف واحد، واظهر القديم + الإضافة = الإجمالي الجديد. لا تسجل المبلغ الجديد كصف منفصل إذا كان الاسم موجودًا، ولا تخصم أي مبلغ قديم من الفلوس الأساسية مرة ثانية؛ يخصم فقط مبلغ الإضافة الجديدة. إذا كان للشخص رصيد إيجابي في عمود الرصيد، اعرض الرصيد منفصلًا واسأل المستخدم هل يريد تسوية المبلغ من الرصيد أم ترك الرصيد كما هو؛ لا تنفذ التسوية تلقائيًا ولا تفترض أن مجرد إضافة مبلغ للخارج تعني تسويته. التسوية عملية مستقلة تتطلب موافقة صريحة، وتُظهر قبلها مقدار الخارج، والرصيد، والمبلغ الذي سيُسوّى، والرصيد والخارج بعد التسوية، وتأثيرها على الفلوس الأساسية. لا تدّعِ أن المبلغ جُمع أو عُدّل إلا بعد تأكيد مسار الداشبورد ونجاح الحفظ.",
           "عند وصول لقطة DAGA Dashboard داخل سياق العمل، اعتبرها أحدث قراءة فعلية أُرسلت من الداشبورد. افهم تركيب الداشبورد قبل الإجابة: هناك أعمدة مستقلة، وداخل كل عمود بنود/أسماء فرعية؛ لا تخلط اسم العمود باسم البند، ولا تخلط بندًا في عمود الكروت ببند مشابه في عمود الرصيد. إذا سأل المستخدم عن بند محدد وذكر العمود، ابحث عن قيمة هذا البند وحده داخل ذلك العمود وأجب باسمه وقيمته فقط، ولا تسرد إجمالي العمود أو بقية البنود. مثال: «الرصيد الأساسي اللي في عمود الكروت كام؟» إجابته قيمة بند «رصيد أساسي» داخل عمود «الكروت»، وليس إجمالي الكروت ولا إجمالي عمود «الرصيد». وإذا سأل عن إجمالي عمود، اذكر الإجمالي فقط. إذا كان اسم البند موجودًا في أكثر من عمود ولم يحدد المستخدم العمود، اسأل سؤال توضيح واحدًا. لا تستنتج قيمة بند من الإجمالي أو من عملية حسابية على بنود أخرى؛ استخدم الرقم الظاهر حرفيًا في اللقطة، وقل بوضوح إذا كان البند غير ظاهر أو اللقطة غير متاحة/قديمة. أجب عن السؤال المحدد باختصار ومن غير حشو. لا تتعامل مع لقطة القراءة كأنها تنفيذ؛ أوامر التعديل تُنفذ فقط عبر مسار تأكيد الداشبورد الأصلي.",
           "افهم صياغات العامية المصرية للأوامر المالية مثل سجّل/ضيف/ارفع/زود/اكتب/تكتب/عايزك تكتب في الخارج أو الرصيد أو الكاش أو الإكسسوار. إذا قال المستخدم «عايزك تكتب في الخارج سبعمائة جنيه» أو «اكتب في الخارج 700 جنيه»، فهذا أمر واضح لإضافة مبلغ إلى عمود الخارج، ولا تطلب اسم شخص ما لم يذكره أو تكن هناك حاجة فعلية له. الخارج يعني مالًا خرج من الشركة ويخصم من الفلوس الأساسية. لا ترد بطلب تحديد نوع الحركة إذا سمّى المستخدم العمود صراحة. إذا كان هناك اسم شخص مذكور فاحتفظ به، وإلا نفّذ المعاينة على بند الخارج المناسب وفق منطق الداشبورد. لا تنفذ قبل المعاينة والتأكيد.",
           "النطق الصوتي للأرقام إلزامي: لا تترك أرقامًا مكتوبة بالأرقام اللاتينية أو الهندية في الرد الذي سيُقرأ صوتيًا. اكتب المبالغ بالكلمات العربية الطبيعية المناسبة للمصري، مع نطق تركيب الآلاف صحيحًا: 7000 = سبعة آلاف جنيه، و17000 = سبعة عشر ألف جنيه، و5000 = خمسة آلاف جنيه. راجع العدد كوحدة كاملة ولا تقرأ كل رقم منفصلًا ولا تنطق 17 ألفًا «واحد سبعة ألف». اجعل النص المكتوب والرد الصوتي متطابقين في معنى المبلغ.",
@@ -353,6 +447,21 @@ export default {
           "استعمل سجل المحادثة والذاكرة المرسلة لفهم الإشارات والتصحيحات، وقدّم أحدث تصحيح على القديم. لا تختلق ذكريات أو معلومات شخصية. لا تخترع أرقامًا أو بيانات شركة؛ استخدم فقط البيانات التي أُرسلت فعلًا، ولا تدّع تنفيذ شيء لم تنفذه.",
           "راجع الرد أخيرًا: هل جاوب السؤال فعلًا؟ هل الاسم والهوية والضمائر صحيحة؟ هل الصرف والنحو طبيعيان؟ هل توجد جملة زائدة أو معلومة مخترعة؟ أصلحها قبل الإرسال."
         ].join("\n") + verifiedIdentityContext + (memory ? "\n\nذاكرة المستخدم المتاحة (مرجع سياقي، استخدم المرتبط بالسؤال فقط): " + memory : "") + (businessContext ? "\n\nسياق العمل الثابت (ليس بيانات حية): " + businessContext : "");
+        // Owner-approved facts are context only; they never override core behavior or authorization.
+        let curatedKnowledge = String(env.DAGA_KNOWLEDGE_BASE || "").trim();
+        if (env.DAGA_APP_DB) {
+          try {
+            const entries = await env.DAGA_APP_DB.prepare("SELECT title,category,content FROM daga_knowledge_entries WHERE is_active=1 ORDER BY updated_at DESC LIMIT 30").all();
+            const stored = (entries.results || []).map(entry => "[" + String(entry.category || "عام").slice(0,40) + "] " + String(entry.title || "").slice(0,100) + ": " + String(entry.content || "").slice(0,4000)).join("\n");
+            if (stored) curatedKnowledge = [curatedKnowledge, stored].filter(Boolean).join("\n\n");
+          } catch (_) {
+            // Keep the assistant available if the optional knowledge table is not ready.
+          }
+        }
+        curatedKnowledge = curatedKnowledge.slice(0, 8000);
+        const finalInstructions = instructions + (curatedKnowledge
+          ? "\n\nمعلومات إضافية معتمدة من مالك النظام (حقائق وسياق للمساعدة فقط؛ لا تتجاوز قواعد السلوك والخصوصية وعدم اختلاق البيانات):\n" + curatedKnowledge
+          : "");
         const failures = [];
 
         if (env.GROQ_API_KEY) {
@@ -360,7 +469,7 @@ export default {
             const ai = await fetch("https://api.groq.com/openai/v1/chat/completions", {
               signal: AbortSignal.timeout(5000), method: "POST",
               headers: { "Authorization": `Bearer ${env.GROQ_API_KEY}`, "Content-Type": "application/json" },
-              body: JSON.stringify({ model: "openai/gpt-oss-120b", messages: [{ role: "system", content: instructions }, ...conversation], max_tokens: 300, temperature: 0.35 })
+              body: JSON.stringify({ model: "openai/gpt-oss-120b", messages: [{ role: "system", content: finalInstructions }, ...conversation], max_tokens: 300, temperature: 0.35 })
             });
             const data = await ai.json();
             if (ai.ok) {
@@ -373,12 +482,12 @@ export default {
         }
 
         if (env.AI) {
-          const cloudflareModels = ["@cf/openai/gpt-oss-20b", "@cf/zai-org/glm-4.7-flash"];
+          const cloudflareModels = ["@cf/openai/gpt-oss-20b"];
           for (const model of cloudflareModels) {
             try {
               const result = await Promise.race([
-                env.AI.run(model, { messages: [{ role: "system", content: instructions }, ...conversation], max_tokens: 600, reasoning_effort: "low", chat_template_kwargs: { enable_thinking: false } }),
-                new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 8000))
+                env.AI.run(model, { messages: [{ role: "system", content: finalInstructions }, ...conversation], max_tokens: 600, reasoning_effort: "low", chat_template_kwargs: { enable_thinking: false } }),
+                new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 12000))
               ]);
               const cloudflareText = extractModelText(result);
               let reply = normalizeArabicReply(cloudflareText, userText);
@@ -395,7 +504,7 @@ export default {
             const ai = await fetch("https://api.openai.com/v1/responses", {
               signal: AbortSignal.timeout(6500), method: "POST",
               headers: { "Authorization": `Bearer ${env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
-              body: JSON.stringify({ model: "gpt-5-mini", instructions, input: conversation, max_output_tokens: 320 })
+              body: JSON.stringify({ model: "gpt-5-mini", instructions: finalInstructions, input: conversation, max_output_tokens: 320 })
             });
             const data = await ai.json();
             if (ai.ok) {
@@ -408,7 +517,7 @@ export default {
         }
 
         if (!env.OPENAI_API_KEY && !env.GROQ_API_KEY && !env.AI) return json({ error: "No chat provider configured", detail: "Enable the AI binding in Cloudflare Workers, or configure GROQ_API_KEY / OPENAI_API_KEY." }, 503);
-        return json({ error: "All configured chat providers failed" }, 502);
+        return json({ error: "All configured chat providers failed", providerFailures: failures }, 502);
       } catch (_) { return json({ error: "Chat failure" }, 500); }
     }
 
@@ -439,7 +548,9 @@ export default {
       // No word-specific phonetic substitutions or pronunciation exceptions.
       // TTS-only pronunciation hint: use گ to cue the hard Egyptian /g/ sound.
       // The visible/chat spelling remains «ضجه»; only the spoken text is phoneticized.
-      text = text.replace(/ضَجَّة|ضَجّة|ضجّة|ضجه/gu, "ضَگَّة").replace(/\s{2,}/g, " ").trim();
+      text = text.replace(/ضَجَّة|ضَجّة|ضجّة|ضجه/gu, "ضَگَّة");
+      // Normalize punctuation spacing and preserve deliberate pauses for Arabic TTS.
+      text = text.replace(/[ \\t]+([،؛.!؟])/gu, "$1").replace(/([،؛.!؟])(?=\\S)/gu, "$1 ").replace(/[ \\t]{2,}/g, " ").replace(/\\n{3,}/g, "\\n\\n").trim();
       text = arabicizeSpokenNumbers(text);
 
       let quota = null;
@@ -495,9 +606,9 @@ export default {
 
 
 function arabicizeSpokenNumbers(input) {
-  const ones = ["", "واحد", "اثنان", "ثلاثة", "أربعة", "خمسة", "ستة", "سبعة", "ثمانية", "تسعة"];
-  const teens = ["عشرة", "أحد عشر", "اثنا عشر", "ثلاثة عشر", "أربعة عشر", "خمسة عشر", "ستة عشر", "سبعة عشر", "ثمانية عشر", "تسعة عشر"];
-  const tens = ["", "", "عشرون", "ثلاثون", "أربعون", "خمسون", "ستون", "سبعون", "ثمانون", "تسعون"];
+  const ones = ["", "واحد", "اتنين", "تلاتة", "أربعة", "خمسة", "ستة", "سبعة", "تمانية", "تسعة"];
+  const teens = ["عشرة", "حداشر", "اتناشر", "تلتاشر", "اربعتاشر", "خمستاشر", "ستاشر", "سبعتاشر", "تمنتاشر", "تسعتاشر"];
+  const tens = ["", "", "عشرين", "تلاتين", "أربعين", "خمسين", "ستين", "سبعين", "تمانين", "تسعين"];
   const under100 = n => {
     if (n < 10) return ones[n];
     if (n < 20) return teens[n - 10];
@@ -507,20 +618,20 @@ function arabicizeSpokenNumbers(input) {
   const under1000 = n => {
     if (n < 100) return under100(n);
     const h = Math.floor(n / 100), r = n % 100;
-    const hw = ["", "مائة", "مائتان", "ثلاثمائة", "أربعمائة", "خمسمائة", "ستمائة", "سبعمائة", "ثمانمائة", "تسعمائة"][h];
+    const hw = ["", "مية", "ميتين", "تلتمية", "ربعمية", "خمسمية", "ستمية", "سبعمية", "تمنمية", "تسعمية"][h];
     return hw + (r ? " و" + under100(r) : "");
   };
   const groupWords = (n, scale) => {
     if (!n) return "";
     if (scale === 1000) {
       if (n === 1) return "ألف";
-      if (n === 2) return "ألفان";
+      if (n === 2) return "ألفين";
       if (n >= 3 && n <= 10) return under1000(n) + " آلاف";
       return under1000(n) + " ألف";
     }
     if (scale === 1000000) {
       if (n === 1) return "مليون";
-      if (n === 2) return "مليونان";
+      if (n === 2) return "مليونين";
       if (n >= 3 && n <= 10) return under1000(n) + " ملايين";
       return under1000(n) + " مليون";
     }
@@ -539,7 +650,9 @@ function arabicizeSpokenNumbers(input) {
     if (rest) parts.push(under1000(rest));
     return parts.join(" و");
   };
-  return String(input).replace(/(?<![\\w])([0-9٠-٩]{1,12})(?![\\w])/gu, match => {
+  let text = String(input);
+  text = text.replace(/(?<![0-9٠-٩])([0-9٠-٩]{1,3}(?:[,،٬][0-9٠-٩]{3})+)(?![0-9٠-٩])/gu, match => match.replace(/[,،٬]/g, ""));
+  return text.replace(/(?<![\\w])([0-9٠-٩]{1,12})(?![\\w])/gu, match => {
     const western = match.replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
     return toWords(western);
   });
@@ -591,7 +704,6 @@ function cors(extra = {}) {
 function normalizeArabicReply(value, userText = "") {
   const question = String(userText || "");
   let reply = String(value || "").trim();
-  if (/(اسمك\s*(?:إيه|ايه|ما|ماذا)|مين\s*إنت|من\s*أنت|عرفني\s*بنفسك)/u.test(question)) return "أنا اسمي ضَجَّة، مساعدك الذكي.";
   if (!/(الهاء|التاء المربوطة|التشكيل|مخارج الحروف|النطق)/u.test(question)) {
     reply = reply
       .replace(/[^،؛.!؟\n]*(?:هفرق|هفرّق|هشرحلك|هشرح لك)\s+بين\s+(?:الهاء|حرف الهاء)[^،؛.!؟\n]*(?:التاء المربوطة|التاء المربوطه)[^،؛.!؟\n]*/gu, "")
@@ -599,6 +711,7 @@ function normalizeArabicReply(value, userText = "") {
       .split(/(?<=[.!؟])\s+|\n+/u).filter(sentence => !/(الهاء|التاء المربوطة|التشكيل|مخارج الحروف)/u.test(sentence)).join(" ");
   }
   return reply
+    .replace(/\*{1,3}|_{1,3}|~{1,2}|\x60{1,3}/gu, "")
     .replace(/أنا\s+هتساعدك/gu, "أنا هساعدك").replace(/أنا\s+هتجاوبك/gu, "أنا هجاوبك")
     .replace(/أنا\s+هترد عليك/gu, "أنا هرد عليك").replace(/هتجاوبك/gu, "هجاوبك")
     .replace(/هتساعدك/gu, "هساعدك").replace(/هترد عليك/gu, "هرد عليك")
@@ -665,4 +778,8 @@ async function enforceCompanyVoicePermission(env, account, permissionKey, select
   }
   return null;
 }
+
+
+
+
 

@@ -39,21 +39,21 @@ const db=env.DAGA_APP_DB;if(!db)return json(env,{error:"owner_auth_database_not_
 const auth=request.headers.get("Authorization")||"";if(!env.DAGA_OWNER_BOOTSTRAP_TOKEN||!constantTimeEqual(auth,"Bearer "+env.DAGA_OWNER_BOOTSTRAP_TOKEN))return json(env,{error:"unauthorized"},401);
 if(await db.prepare("SELECT singleton_id FROM daga_program_owner WHERE singleton_id=1").first())return json(env,{error:"owner_already_provisioned"},409);
 const body=await safeJson(request);if(!body)return json(env,{error:"invalid_json"},400);
-const email=String(body.email||"").trim().toLowerCase(),code=String(body.emailCode||"").trim(),password=String(body.password||""),recovery=String(body.recoveryCode||"");
+const email=String(body.email||"").trim().toLowerCase(),code=String(body.emailCode||"").trim(),password=String(body.password||"");
 if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||!/^\d{6}$/.test(code))return json(env,{error:"valid_email_and_verification_code_required"},400);
 if(!validPassword(password))return json(env,{error:"password_must_be_14_to_128_chars_with_uppercase_lowercase_and_number"},400);
-if(recovery.length<20||recovery.length>128)return json(env,{error:"new_recovery_code_required_20_to_128_chars"},400);
+
 if(await db.prepare("SELECT id FROM daga_accounts WHERE lower(email)=? LIMIT 1").bind(email).first())return json(env,{error:"owner_email_already_in_use"},409);
 if(!await consumeChallenge(db,env,"owner_bootstrap_email",await sha256("email:"+email),code))return json(env,{error:"invalid_expired_or_used_verification_code"},400);
-const id=crypto.randomUUID(),salt=randomToken(24),passwordHash=await derivePassword(password,salt,PBKDF2_ITERATIONS),recoveryHash=await sha256(recovery+":"+env.DAGA_OTP_PEPPER),now=new Date().toISOString();
+const id=crypto.randomUUID(),salt=randomToken(24),passwordHash=await derivePassword(password,salt,PBKDF2_ITERATIONS),now=new Date().toISOString();
 try{await db.batch([
 db.prepare("INSERT INTO daga_accounts (id,email,display_name,role,status,email_verified_at,created_at,updated_at) VALUES (?,?,?,?,'approved',?,?,?)").bind(id,email,"DAGA Program Owner",OWNER_ROLE,now,now,now),
 db.prepare("INSERT INTO daga_program_owner (singleton_id,account_id) VALUES (1,?)").bind(id),
-db.prepare("INSERT INTO daga_owner_credentials (account_id,password_hash,password_salt,password_iterations,recovery_code_hash,created_at,updated_at) VALUES (?,?,?,?,?,?,?)").bind(id,passwordHash,salt,PBKDF2_ITERATIONS,recoveryHash,now,now),
+db.prepare("INSERT INTO daga_owner_credentials (account_id,password_hash,password_salt,password_iterations,recovery_code_hash,created_at,updated_at) VALUES (?,?,?,?,NULL,?,?)").bind(id,passwordHash,salt,PBKDF2_ITERATIONS,now,now),
 db.prepare("INSERT INTO daga_owner_bootstrap_state (singleton_id,consumed_at,consumed_account_id) VALUES (1,?,?)").bind(now,id)
 ]);}catch(error){console.error("owner_provisioning_batch_failed",error instanceof Error?error.message:"unknown_error");return json(env,{error:"owner_provisioning_failed",...(new URL(request.url).hostname==="daga-app-staging.dagamobile10.workers.dev"?{diagnostic:error instanceof Error?error.message.slice(0,200):"unknown_error"}:{})},409);}
 await db.batch([db.prepare("UPDATE daga_auth_challenges SET consumed_at=? WHERE purpose='owner_bootstrap_email' AND consumed_at IS NULL").bind(now),db.prepare("INSERT INTO daga_security_events (id,account_id,event_type,outcome) VALUES (?,?,?,'success')").bind(crypto.randomUUID(),id,"owner_provisioned")]);
-const session=await createSession(db,id);return json(env,{ok:true,account:{id,role:OWNER_ROLE,emailMasked:maskEmail(email)},sessionToken:session.token,expiresAt:session.expiresAt,recoveryCodeReminder:"Store the recovery code offline. It is never shown again."});
+const session=await createSession(db,id);return json(env,{ok:true,account:{id,role:OWNER_ROLE,emailMasked:maskEmail(email)},sessionToken:session.token,expiresAt:session.expiresAt});
 }
 async function recoveryStart(request,env){
 const db=env.DAGA_APP_DB;if(!db||!env.RESEND_API_KEY||!env.DAGA_EMAIL_FROM||!env.DAGA_OTP_PEPPER)return json(env,{error:"owner_recovery_not_configured"},503);
@@ -67,16 +67,14 @@ return json(env,{ok:true,emailMasked:maskEmail(owner.email),expiresInSeconds:OTP
 async function recoveryComplete(request,env){
 const db=env.DAGA_APP_DB;if(!db||!env.DAGA_OTP_PEPPER)return json(env,{error:"owner_recovery_not_configured"},503);
 const body=await safeJson(request);if(!body)return json(env,{error:"invalid_json"},400);
-const code=String(body.emailCode||"").trim(),oldRecovery=String(body.recoveryCode||""),newRecovery=String(body.newRecoveryCode||""),password=String(body.newPassword||"");
-if(!/^\d{6}$/.test(code)||oldRecovery.length<20||oldRecovery.length>128||newRecovery.length<20||newRecovery.length>128||!validPassword(password))return json(env,{error:"valid_recovery_fields_required"},400);
-const owner=await db.prepare("SELECT a.id,a.email,c.recovery_code_hash FROM daga_program_owner o JOIN daga_accounts a ON a.id=o.account_id JOIN daga_owner_credentials c ON c.account_id=a.id WHERE o.singleton_id=1 AND a.status='approved'").first();if(!owner)return json(env,{error:"owner_not_provisioned"},409);
+const code=String(body.emailCode||"").trim(),password=String(body.newPassword||"");
+if(!/^\d{6}$/.test(code)||!validPassword(password))return json(env,{error:"valid_recovery_fields_required"},400);
+const owner=await db.prepare("SELECT a.id,a.email FROM daga_program_owner o JOIN daga_accounts a ON a.id=o.account_id JOIN daga_owner_credentials c ON c.account_id=a.id WHERE o.singleton_id=1 AND a.status='approved'").first();if(!owner)return json(env,{error:"owner_not_provisioned"},409);
 if(!await rateLimit(db,env,"recovery-complete:"+(request.headers.get("CF-Connecting-IP")||"unknown"),5,3600))return json(env,{error:"rate_limited"},429);
-const oldHash=await sha256(oldRecovery+":"+env.DAGA_OTP_PEPPER);
-if(!owner.recovery_code_hash||!constantTimeEqual(oldHash,owner.recovery_code_hash))return json(env,{error:"invalid_expired_or_used_recovery_credentials"},400);
 const verified=await consumeChallenge(db,env,"password_reset",await sha256("email:"+String(owner.email).toLowerCase()),code);
-if(!verified)return json(env,{error:"invalid_expired_or_used_recovery_credentials"},400);
-const salt=randomToken(24),hash=await derivePassword(password,salt,PBKDF2_ITERATIONS),newHash=await sha256(newRecovery+":"+env.DAGA_OTP_PEPPER),now=new Date().toISOString();
-await db.batch([db.prepare("UPDATE daga_owner_credentials SET password_hash=?,password_salt=?,password_iterations=?,recovery_code_hash=?,updated_at=? WHERE account_id=?").bind(hash,salt,PBKDF2_ITERATIONS,newHash,now,owner.id),db.prepare("UPDATE daga_auth_sessions SET revoked_at=? WHERE account_id=? AND revoked_at IS NULL").bind(now,owner.id),db.prepare("UPDATE daga_auth_challenges SET consumed_at=? WHERE account_id=? AND purpose='password_reset' AND consumed_at IS NULL").bind(now,owner.id)]);
+if(!verified)return json(env,{error:"invalid_expired_or_used_verification_code"},400);
+const salt=randomToken(24),hash=await derivePassword(password,salt,PBKDF2_ITERATIONS),now=new Date().toISOString();
+await db.batch([db.prepare("UPDATE daga_owner_credentials SET password_hash=?,password_salt=?,password_iterations=?,updated_at=? WHERE account_id=?").bind(hash,salt,PBKDF2_ITERATIONS,now,owner.id),db.prepare("UPDATE daga_auth_sessions SET revoked_at=? WHERE account_id=? AND revoked_at IS NULL").bind(now,owner.id),db.prepare("UPDATE daga_auth_challenges SET consumed_at=? WHERE account_id=? AND purpose='password_reset' AND consumed_at IS NULL").bind(now,owner.id)]);
 return json(env,{ok:true,message:"Password reset. Log in again with the new password."});
 }
 async function ownerLogin(request,env){

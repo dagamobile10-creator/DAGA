@@ -1,4 +1,5 @@
 import pathlib
+import re
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -192,3 +193,8 @@ class NavigationRouteTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+    def test_live_navigation_escapes_embedded_dashboard_frame(self):
+        for path in ("/", "/go/", "/company/", "/owner-console/"):
+            with self.subTest(path=path):
+                self.assertRegex(self.live, r'<a href="' + re.escape(path) + r'" target="_top"')

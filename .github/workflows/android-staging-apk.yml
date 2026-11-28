@@ -1,0 +1,97 @@
+name: Build DAGA Android staging APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - release/v31-staging-android-candidate
+    paths:
+      - "package.json"
+      - "capacitor.config.ts"
+      - "www/**"
+      - ".github/workflows/android-staging-apk.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-debug-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout approved staging candidate
+        uses: actions/checkout@v4
+
+      - name: Verify staging application routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://daga-app-staging.dagamobile10.workers.dev"
+          for path in /health / /go/ /company/ /invite/ /owner-console/ /shop/ /live/; do
+            code="$(curl -sS -o /tmp/route-response -w '%{http_code}' --max-time 20 "$base$path")"
+            if [ "$code" != "200" ]; then
+              echo "::error::Staging route $path returned HTTP $code"
+              head -c 500 /tmp/route-response || true
+              exit 1
+            fi
+          done
+          curl -fsS "$base/health" | grep -q '"ok":true'
+          echo "All required staging routes responded successfully."
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install Capacitor toolchain
+        run: npm install
+
+      - name: Generate Android project
+        run: npx cap add android
+
+      - name: Add Android microphone and camera permissions
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("android/app/src/main/AndroidManifest.xml")
+          s = p.read_text()
+          marker = '<manifest'
+          root_start = s.find(marker)
+          i = s.find('>', root_start) if root_start >= 0 else -1
+          if i < 0:
+              raise SystemExit("Invalid Android manifest: missing manifest root element")
+          permissions = [
+              '    <uses-permission android:name="android.permission.INTERNET" />',
+              '    <uses-permission android:name="android.permission.RECORD_AUDIO" />',
+              '    <uses-permission android:name="android.permission.CAMERA" />',
+          ]
+          for line in permissions:
+              if line not in s:
+                  s = s[:i+1] + '\n' + line + s[i+1:]
+                  i += len(line) + 1
+          p.write_text(s)
+          PY
+
+      - name: Sync Android project
+        run: npx cap sync android
+
+      - name: Build debug APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleDebug
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: DAGA-Android-Staging-Debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14

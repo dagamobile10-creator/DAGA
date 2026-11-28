@@ -15,7 +15,8 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
         self.assertIn("DAGA_SHOP_READY", dashboard)
         self.assertIn("bootAuthenticatedDashboard(event.data.token,event.data.companyId)", dashboard)
-        self.assertNotIn("sessionStorage", dashboard)
+        self.assertIn("sessionStorage.getItem('DAGA_SHOP_AUTH_BRIDGE')", dashboard)
+        self.assertIn("sessionStorage.removeItem('DAGA_SHOP_AUTH_BRIDGE')", dashboard)
         self.assertIn("fetch('/api/company/auth/me'", dashboard)
         self.assertIn("window.location.replace('/shop-access/')", dashboard)
         self.assertIn("if(window.opener)", dashboard)
@@ -24,11 +25,10 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
 
     def test_portal_passes_session_and_selected_company(self):
         portal = (ROOT / "company" / "portal.html").read_text(encoding="utf-8")
-        self.assertIn('type:"DAGA_AUTH",token:sessionToken,companyId:activeCompany.id', portal)
-        self.assertNotIn("sessionStorage", portal)
-        self.assertIn('window.open("about:blank","_blank")', portal)
-        self.assertIn('shopWindow.location.assign("/shop/")', portal)
-        self.assertIn('event.source!==shopWindow', portal)
+        self.assertIn("DAGA_SHOP_AUTH_BRIDGE", portal)
+        self.assertIn("sessionStorage.setItem", portal)
+        self.assertIn("companyId:activeCompany.id", portal)
+        self.assertIn('window.location.assign("/shop/")', portal)
 
     def test_role_is_normalized_and_not_used_as_security_boundary(self):
         dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
@@ -36,13 +36,13 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn("Authorization:'Bearer '+token", dashboard)
         self.assertIn("api/company/auth/logout", dashboard)
 
-    def test_store_plan_tier_is_saved_and_editable(self):
+    def test_store_plan_is_single_tier_with_full_company_features(self):
         admin = (ROOT / "owner-admin.js").read_text(encoding="utf-8")
         console = (ROOT / "owner-console.html").read_text(encoding="utf-8")
-        self.assertIn("normalizeStoreFeatures(b.features)", admin)
+        self.assertIn("normalizeStoreFeatures({})", admin)
         self.assertIn("features_json=?,is_active=?", admin)
-        self.assertIn("features={tier:smart?'smart':'standard',smartAssistantEnabled:smart,historyEnabled:smart}", console)
-        self.assertIn("مستوى اشتراك الشركه:", console)
+        self.assertIn("features={tier:'single',smartAssistantEnabled:true,historyEnabled:true}", console)
+        self.assertNotIn("مستوى اشتراك الشركه:", console)
 
 
     def test_team_invites_use_email_only_and_real_invitation_api(self):
@@ -55,33 +55,30 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn("window.DAGA_SESSION_TOKEN=token", dashboard)
         self.assertIn('path === "/api/company/invitations" && request.method === "POST"', invitations)
 
-    def test_live_daga_requires_smart_plan_and_word_balance(self):
+    def test_company_plan_and_live_character_quota_are_distinct_gates(self):
         worker = (ROOT / "worker.js").read_text(encoding="utf-8")
-        self.assertIn("smart_store_subscription_required", worker)
+        self.assertIn("store_or_live_subscription_required", worker)
         self.assertNotIn("store_subscription_required", worker)
         tts = worker[worker.index('if (url.pathname !== "/tts"'):]
-        self.assertIn("smart_store_subscription_required", tts)
+        self.assertIn("live_daga_quota_insufficient", tts)
         self.assertIn("live_daga_quota_insufficient", tts)
         self.assertIn('resolveCompanyVoiceContext(env, account, request.headers.get("X-DAGA-Company-ID") || "")', tts)
         self.assertIn("live_daga_quota_insufficient", worker)
 
-    def test_standard_plan_overrides_legacy_smart_flags(self):
+    def test_company_plan_is_single_tier_with_assistant_and_history(self):
         admin = (ROOT / "owner-admin.js").read_text(encoding="utf-8")
-        self.assertIn('source.tier !== "standard" && (source.smartAssistantEnabled === true || source.historyEnabled === true)', admin)
+        self.assertIn('return JSON.stringify({ tier: "single", smartAssistantEnabled: true, historyEnabled: true })', admin)
 
-    def test_smart_entitlement_enables_assistant_and_history_separately_from_live_daga(self):
+    def test_company_subscription_includes_smart_assistant_history_and_live_is_addon(self):
         auth = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
         dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
-        self.assertIn("storeEntitlement.name ||", auth)
-        self.assertIn("smartAssistantEnabled: smartEnabled", auth)
-        self.assertIn('features.historyEnabled === true || features.tier === "smart"', auth)
-        self.assertIn("smartAssistantEnabled:company.smartAssistantEnabled===true&&(role==='store_owner'||company.permissions?.useSmartAssistant===true)", dashboard)
-        self.assertIn("historyEnabled:company.historyEnabled===true", dashboard)
+        self.assertIn("smartAssistantEnabled: storeEnabled", auth)
+        self.assertIn("historyEnabled: storeEnabled", auth)
+        self.assertIn("liveDagaEnabled: remainingWords > 0", auth)
         self.assertIn("b.hidden=!smartAllowed;b.disabled=!smartAllowed", dashboard)
         self.assertIn("b.hidden=!liveAllowed;b.disabled=!liveAllowed", dashboard)
-        self.assertIn("const liveAllowed=window.DAGA_AUTH_USER.smartAssistantEnabled===true&&window.DAGA_AUTH_USER.liveDagaEnabled===true", dashboard)
-        self.assertIn("اشحن رصيد حروف LIVE DAGA لتفعيل الزر.", dashboard)
-        self.assertIn("window.DAGA_AUTH_USER.smartAssistantEnabled===true&&window.DAGA_AUTH_USER.liveDagaEnabled===true", dashboard)
+        self.assertIn("const liveAllowed=window.DAGA_AUTH_USER.liveDagaEnabled===true&&(role==='store_owner'||company.permissions?.useLiveDaga===true)", dashboard)
+        self.assertIn("liveDagaEnabled:company.liveDagaEnabled===true&&(role==='store_owner'||company.permissions?.useLiveDaga===true)", dashboard)
 
 
     
@@ -89,9 +86,9 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         auth = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
         portal = (ROOT / "company" / "portal.html").read_text(encoding="utf-8")
         dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
-        self.assertIn('const accountPaths = ["/api/company/auth/me", "/api/company/auth/logout"]', auth)
+        self.assertIn('const accountPaths = ["/api/company/auth/me", "/api/company/auth/logout", "/api/company/layout-labels"]', auth)
         self.assertIn('return json(env, { ok: true, account:', auth)
-        self.assertIn('ledgerEnabled: Boolean(storeEntitlement)', auth)
+        self.assertIn('ledgerEnabled: storeEnabled', auth)
         self.assertIn('activeCompany.ledgerEnabled===true', portal)
         self.assertIn('لوحة الشركة هتفتح بعد ما مالك التطبيق يأكد الدفع.', portal)
         self.assertIn('company.ledgerEnabled!==true', dashboard)
@@ -100,7 +97,7 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         auth = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
         worker = (ROOT / "worker.js").read_text(encoding="utf-8")
         live = (ROOT / "index.html").read_text(encoding="utf-8")
-        self.assertIn('liveDagaEnabled: smartEnabled && remainingWords > 0', auth)
+        self.assertIn('liveDagaEnabled: remainingWords > 0', auth)
         self.assertIn('liveWordsRemaining: remainingWords', auth)
         self.assertIn('body:JSON.stringify({mode:\'live_daga\',text})', live)
         self.assertIn('if (liveMode) {', worker)
@@ -108,13 +105,13 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn("LIVE DAGA generated text characters", worker)
         self.assertIn('const voiceIdentityRequired = true;', worker)
         self.assertIn("liveDagaEligible=company.smartAssistantEnabled===true&&Number(company.liveWordsRemaining||0)>0&&company.liveDagaEnabled===true", live)
-    def test_only_smart_store_entitlement_enables_kallim_daga(self):
+    def test_company_subscription_enables_kallim_daga(self):
         auth = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
         dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
-        self.assertIn('smartAssistantEnabled: smartEnabled', auth)
+        self.assertIn('smartAssistantEnabled: storeEnabled', auth)
         self.assertIn('b.hidden=!smartAllowed;b.disabled=!smartAllowed', dashboard)
-        self.assertIn('ميزة كلم ضجه متاحة في الاشتراك الذكي المؤكد والمدفوع فقط.', dashboard)
-        self.assertNotIn('ميزة كلم ضجه متاحة بعد تأكيد الاشتراك العادي أو الذكي للشركة.', dashboard)
+        self.assertIn('زر كلم ضجة متاح بعد تفعيل اشتراك DAGA للشركة.', dashboard)
+        
     def test_company_owner_can_list_members_and_update_individual_permissions(self):
         invitations = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
         dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
@@ -149,7 +146,7 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn("body?.mode === \"live_daga\"", chat)
         self.assertIn('permission = liveMode ? "useLiveDaga" : "useSmartAssistant"', chat)
         self.assertIn("live_daga_quota_insufficient", chat)
-        self.assertIn("smart_store_subscription_required", chat)
+        self.assertIn("store_or_live_subscription_required", chat)
         self.assertIn("mode:'live_daga'", live)
         self.assertIn("liveDagaEligible", live)
     def test_voice_routes_enforce_member_permissions_independently(self):
@@ -168,38 +165,83 @@ class ShopDashboardAuthBridgeTests(unittest.TestCase):
         self.assertIn("رقم واتساب الشركة للتواصل والدعم (اختياري)", portal)
         self.assertNotIn('id="onboardingContactPhone" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" required', portal)
 
-    def test_company_support_whatsapp_uses_selected_company_contact_not_app_owner(self):
+    def test_company_support_whatsapp_uses_owner_configured_support_contact(self):
         profile = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
         self.assertIn("s.contact_phone", profile)
         self.assertIn("contactPhone: row.contact_phone || \"\"", profile)
         dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
         self.assertIn("contactPhone:company.contactPhone||''", dashboard)
-        self.assertIn("String(user.contactPhone||\"\")", dashboard)
-        self.assertIn('const url="https://wa.me/"+phone', dashboard)
+        self.assertIn('location.origin+"/api/support/contact"', dashboard)
+        self.assertIn('const phone=String(data.whatsapp||"").replace', dashboard)
+        self.assertNotIn('const phone="201020124846"', dashboard)
+        owner = (ROOT / "owner-console.html").read_text(encoding="utf-8")
+        self.assertIn("/owner/admin/support-contact", owner)
 
-    def test_live_page_uses_shop_owner_login_and_resolves_store_identity(self):
+    def test_live_page_uses_authenticated_company_session_and_selected_store(self):
         live = (ROOT / "index.html").read_text(encoding="utf-8")
-        self.assertIn("تسجيل دخول المحل", live)
-        self.assertIn("/api/shop/auth/login", live)
-        self.assertIn("/api/shop/auth/me", live)
-        self.assertNotIn("/api/company/auth/login", live)
-        self.assertIn("sessionStorage.setItem('daga_company_id_v1',shop.id)", live)
+        portal = (ROOT / "company" / "portal.html").read_text(encoding="utf-8")
+        self.assertIn("DAGA_API_BASE+'/chat'", live)
+        self.assertIn("sessionStorage.getItem(DAGA_SESSION_KEY)", live)
+        self.assertIn("sessionStorage.getItem('daga_company_id_v1')", live)
+        self.assertIn("DAGA_SHOP_AUTH_BRIDGE", portal)
+        self.assertIn("companyId:activeCompany.id", portal)
 
-    def test_smart_plan_detection_supports_plan_name_when_feature_flags_are_legacy(self):
+
+    def test_company_subscription_includes_smart_assistant_and_history(self):
         auth = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
         worker = (ROOT / "worker.js").read_text(encoding="utf-8")
-        self.assertIn("storeEntitlement.name ||", auth)
-        self.assertIn("LIKE '%smart%'", worker)
-        self.assertIn("LIKE '%ذكي%'", worker)
+        self.assertIn("smartAssistantEnabled: storeEnabled", auth)
+        self.assertIn("historyEnabled: storeEnabled", auth)
+        self.assertIn('store_or_live_subscription_required', worker)
 
+    def test_live_order_balance_commands_are_not_misclassified_as_balance_questions(self):
+        dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
+        self.assertIn("const columnQuestion=/(كام|مجموع|اجمالي|إجمالي|قد ايه|قد إيه|حساب|الموجود|عليه كام|رصيده كام)/u", dashboard)
+        self.assertIn("!/(اكتب|تكتب|عايزك|سجل|ضيف|اضيف|زود|ارفع|حط|نفذ|نفّذ)/u.test(text)", dashboard)
+        self.assertIn("balanceWrite", dashboard)
+        self.assertIn("|عمود|العمود|الخارج|خارج|جنيه|جنيهات)", dashboard)
 
-    def test_explicit_standard_tier_overrides_legacy_smart_flags(self):
-        auth = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
+    def test_owner_can_revoke_manager_or_employee_access_and_sessions(self):
+        invitations = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
+        dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
+        self.assertIn("isMemberRemovalPath", invitations)
+        self.assertIn('request.method === "DELETE"', invitations)
+        self.assertIn("removeCompanyMember(request, env, db, account", invitations)
+        self.assertIn("SET status='removed'", invitations)
+        self.assertIn("UPDATE daga_auth_sessions SET revoked_at=?", invitations)
+        self.assertIn("data-remove-team-member", dashboard)
+        self.assertIn("حذف العضو وإلغاء الوصول", dashboard)
+
+    def test_company_subscription_is_single_tier_and_live_daga_is_character_addon(self):
+        portal = (ROOT / "company" / "portal.html").read_text(encoding="utf-8")
+        owner = (ROOT / "owner-console.html").read_text(encoding="utf-8")
+        self.assertIn('option value="store">اشتراك الشركة — النظام الكامل', portal)
+        self.assertIn('option value="live_daga">إضافة LIVE ضجّة — رصيد حروف', portal)
+        self.assertIn("features={tier:'single',smartAssistantEnabled:true,historyEnabled:true}", owner)
+        self.assertNotIn("مستوى اشتراك الشركه:", owner)
+
+    def test_support_whatsapp_uses_owner_configured_contact_not_company_number(self):
         worker = (ROOT / "worker.js").read_text(encoding="utf-8")
-        self.assertIn('explicitTier === "smart"', auth)
-        self.assertIn('!["standard", "smart"].includes(explicitTier)', auth)
-        self.assertIn("COALESCE(json_extract(p.features_json,'$.tier'),'') NOT IN ('standard','smart')", worker)
-        self.assertIn("json_extract(p.features_json,'$.historyEnabled')=1", worker)
+        admin = (ROOT / "owner-admin.js").read_text(encoding="utf-8")
+        dashboard = (ROOT / "shop-dashboard-v30.html").read_text(encoding="utf-8")
+        self.assertIn('url.pathname === "/api/support/contact"', worker)
+        self.assertIn('/owner/admin/support-contact', admin)
+        self.assertIn('location.origin+"/api/support/contact"', dashboard)
+        self.assertNotIn('const phone="201020124846"', dashboard)
+
+    def test_company_password_recovery_uses_email_otp_and_new_password_only(self):
+        invitations = (ROOT / "company-invitations.js").read_text(encoding="utf-8")
+        owner_auth = (ROOT / "owner-auth.js").read_text(encoding="utf-8")
+        portal = (ROOT / "company" / "portal.html").read_text(encoding="utf-8")
+        owner_console = (ROOT / "owner-console.html").read_text(encoding="utf-8")
+        self.assertIn('emailCode=String(body.emailCode||"").trim(),newPassword=String(body.newPassword||"")', invitations)
+        self.assertNotIn("recoveryCode.length", invitations)
+        self.assertNotIn("oldRecovery", owner_auth)
+        self.assertNotIn("newRecovery", owner_auth)
+        self.assertNotIn('id="recoveryOldCode"', portal)
+        self.assertNotIn('id="recoveryNewCode"', portal)
+        self.assertNotIn('id="recoveryOldCode"', owner_console)
+        self.assertNotIn('id="recoveryNewCode"', owner_console)
 
 if __name__ == "__main__":
     unittest.main()

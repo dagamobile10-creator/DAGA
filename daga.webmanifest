@@ -1,0 +1,16 @@
+{
+  "name": "ضجّة",
+  "short_name": "ضجّة",
+  "start_url": "/go/",
+  "display": "standalone",
+  "background_color": "#070706",
+  "theme_color": "#070706",
+  "icons": [
+    {
+      "src": "/daga-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

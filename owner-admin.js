@@ -11,6 +11,20 @@ export async function handleOwnerAdmin(request, env, url) {
 
   try {
     const path = url.pathname.replace(/\/+$/, "");
+    if (path === "/owner/admin/support-contact" && request.method === "GET") {
+      const row = await db.prepare("SELECT setting_value FROM daga_app_settings WHERE setting_key='support_whatsapp'").first();
+      return json(env,{ok:true,whatsapp:row?.setting_value||""});
+    }
+    if (path === "/owner/admin/support-contact" && request.method === "PUT") {
+      const b = await readJson(request); if (!b) return json(env,{error:"invalid_json"},400);
+      const phone = String(b.whatsapp||"").replace(/[^0-9]/g,"");
+      if (phone.length < 10 || phone.length > 15) return json(env,{error:"valid_support_whatsapp_required"},400);
+      const now = new Date().toISOString();
+      await db.prepare("INSERT INTO daga_app_settings (setting_key,setting_value,updated_by,updated_at) VALUES ('support_whatsapp',?,?,?) ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value,updated_by=excluded.updated_by,updated_at=excluded.updated_at").bind(phone,owner.id,now).run();
+      await audit(db,owner.id,"support_whatsapp_updated","daga_app_settings","support_whatsapp",{configured:true});
+      return json(env,{ok:true,whatsapp:phone});
+    }
+
     if (path === "/owner/admin/overview" && request.method === "GET") {
       const [stores, pendingAccounts, plans, pendingPayments, activeEntitlements, wordBalance] = await Promise.all([
         db.prepare("SELECT status,COUNT(*) AS count FROM daga_stores WHERE owner_list_removed_at IS NULL GROUP BY status").all(),
@@ -21,6 +35,46 @@ export async function handleOwnerAdmin(request, env, url) {
         db.prepare("SELECT COALESCE(SUM(CASE WHEN event_type IN ('credit','adjustment','refund') THEN words ELSE -words END),0) AS remaining FROM daga_live_word_ledger").first()
       ]);
       return json(env, { ok: true, stores: stores.results || [], accounts: pendingAccounts.results || [], activePlans: plans.results || [], pendingPaymentReviews: pendingPayments?.count || 0, activeEntitlements: activeEntitlements.results || [], liveWordsOutstanding: wordBalance?.remaining || 0 });
+    }
+
+    if (path === "/owner/admin/knowledge" && request.method === "GET") {
+      await ensureKnowledgeTable(db);
+      const rows = await db.prepare("SELECT id,title,category,content,is_active,created_at,updated_at FROM daga_knowledge_entries ORDER BY updated_at DESC LIMIT 200").all();
+      return json(env, { ok: true, entries: rows.results || [] });
+    }
+    if (path === "/owner/admin/knowledge" && request.method === "POST") {
+      await ensureKnowledgeTable(db);
+      const b = await readJson(request); if (!b) return json(env, { error: "invalid_json" }, 400);
+      const title = String(b.title || "").trim().slice(0, 100);
+      const category = String(b.category || "عام").trim().slice(0, 40);
+      const content = String(b.content || "").trim();
+      if (!title || !category || !content) return json(env, { error: "knowledge_title_category_content_required" }, 400);
+      if (content.length > 4000) return json(env, { error: "knowledge_content_too_long", maxLength: 4000 }, 413);
+      const count = await db.prepare("SELECT COUNT(*) AS count FROM daga_knowledge_entries").first();
+      if (Number(count?.count || 0) >= 200) return json(env, { error: "knowledge_entry_limit_reached", maxEntries: 200 }, 409);
+      const id = crypto.randomUUID(), now = new Date().toISOString();
+      await db.prepare("INSERT INTO daga_knowledge_entries (id,title,category,content,is_active,created_by,updated_by,created_at,updated_at) VALUES (?,?,?,?,1,?,?,?,?)")
+        .bind(id,title,category,content,owner.id,owner.id,now,now).run();
+      await audit(db,owner.id,"knowledge_entry_created","daga_knowledge_entries",id,{title,category});
+      return json(env,{ok:true,id},201);
+    }
+    const knowledgeMatch = path.match(/^\/owner\/admin\/knowledge\/([a-f0-9-]{36})$/i);
+    if (knowledgeMatch && request.method === "PATCH") {
+      await ensureKnowledgeTable(db);
+      const b = await readJson(request); if (!b) return json(env, { error: "invalid_json" }, 400);
+      const old = await db.prepare("SELECT id,title,category,content,is_active FROM daga_knowledge_entries WHERE id=?").bind(knowledgeMatch[1]).first();
+      if (!old) return json(env,{error:"knowledge_entry_not_found"},404);
+      const title = b.title === undefined ? old.title : String(b.title).trim().slice(0,100);
+      const category = b.category === undefined ? old.category : String(b.category).trim().slice(0,40);
+      const content = b.content === undefined ? old.content : String(b.content).trim();
+      const active = b.isActive === undefined ? old.is_active : (b.isActive ? 1 : 0);
+      if (!title || !category || !content) return json(env,{error:"knowledge_title_category_content_required"},400);
+      if (content.length > 4000) return json(env,{error:"knowledge_content_too_long",maxLength:4000},413);
+      const now = new Date().toISOString();
+      await db.prepare("UPDATE daga_knowledge_entries SET title=?,category=?,content=?,is_active=?,updated_by=?,updated_at=? WHERE id=?")
+        .bind(title,category,content,active,owner.id,now,knowledgeMatch[1]).run();
+      await audit(db,owner.id,"knowledge_entry_updated","daga_knowledge_entries",knowledgeMatch[1],{title,category,isActive:!!active});
+      return json(env,{ok:true});
     }
 
     if(path==="/owner/admin/audit-log"&&request.method==="GET"){
@@ -213,9 +267,12 @@ export async function handleOwnerAdmin(request, env, url) {
       if(pendingReview)return json(env,{error:"payment_review_must_be_resolved_before_removal"},409);
       await db.batch([
         db.prepare("UPDATE daga_plan_orders SET status='cancelled',updated_at=? WHERE store_id=? AND status='awaiting_payment'").bind(now,store.id),
-        db.prepare("UPDATE daga_stores SET owner_list_removed_at=?,updated_at=? WHERE id=?").bind(now,now,store.id)
+        db.prepare("UPDATE daga_entitlements SET status='revoked' WHERE store_id=? AND service='store' AND status='active'").bind(store.id),
+        db.prepare("UPDATE daga_auth_sessions SET revoked_at=? WHERE account_id=(SELECT owner_account_id FROM daga_stores WHERE id=?) AND revoked_at IS NULL").bind(now,store.id),
+        db.prepare("UPDATE daga_accounts SET status='suspended',updated_at=? WHERE id=(SELECT owner_account_id FROM daga_stores WHERE id=?) AND role='store_owner'").bind(now,store.id),
+        db.prepare("UPDATE daga_stores SET owner_list_removed_at=?,status='suspended',updated_at=? WHERE id=?").bind(now,now,store.id)
       ]);
-      await audit(db,owner.id,"store_removed_from_owner_list","daga_stores",store.id,{archived:true,cancelledUnpaidOrders:true});
+      await audit(db,owner.id,"store_access_revoked_and_archived","daga_stores",store.id,{archived:true,ownerAccountDisabled:true,sessionsRevoked:true,cancelledUnpaidOrders:true});
       return json(env,{ok:true,status:"archived"});
     }
 
@@ -405,6 +462,54 @@ export async function handleOwnerAdmin(request, env, url) {
       return json(env, {ok:true,entryId:id},201);
     }
 
+    if(path==="/owner/admin/dashboard-layout"&&request.method==="GET"){
+      const storeId=String(url.searchParams.get("storeId")||"").trim();
+      if(storeId){
+        const store=await db.prepare("SELECT id FROM daga_stores WHERE id=? AND status='approved'").bind(storeId).first();
+        if(!store)return json(env,{error:"company_not_found"},404);
+      }
+      const row=storeId
+        ? await db.prepare("SELECT id,scope,store_id,layout_json,version,updated_at FROM daga_dashboard_layouts WHERE scope='store' AND store_id=?").bind(storeId).first()
+        : await db.prepare("SELECT id,scope,store_id,layout_json,version,updated_at FROM daga_dashboard_layouts WHERE scope='global' AND store_id IS NULL").first();
+      let layout=null;
+      if(row){try{layout=JSON.parse(row.layout_json)}catch(_){return json(env,{error:"stored_layout_invalid"},500)}}
+      return json(env,{ok:true,scope:storeId?"store":"global",storeId:storeId||null,layout,version:Number(row?.version||0),updatedAt:row?.updated_at||null});
+    }
+    if(path==="/owner/admin/dashboard-layout"&&request.method==="PUT"){
+      const b=await readJson(request);if(!b)return json(env,{error:"invalid_json"},400);
+      const storeId=b.storeId?String(b.storeId).trim():null;
+      if(storeId&&!/^[a-f0-9-]{36}$/i.test(storeId))return json(env,{error:"invalid_company_id"},400);
+      if(storeId){
+        const store=await db.prepare("SELECT id FROM daga_stores WHERE id=? AND status='approved'").bind(storeId).first();
+        if(!store)return json(env,{error:"company_not_found"},404);
+      }
+      const checked=validateDashboardLayout(b.layout);
+      if(!checked.ok)return json(env,{error:"invalid_dashboard_layout",detail:checked.error},400);
+      const scope=storeId?"store":"global",now=new Date().toISOString(),id=crypto.randomUUID();
+      const existing=storeId
+        ? await db.prepare("SELECT id,version FROM daga_dashboard_layouts WHERE scope='store' AND store_id=?").bind(storeId).first()
+        : await db.prepare("SELECT id,version FROM daga_dashboard_layouts WHERE scope='global' AND store_id IS NULL").first();
+      const layoutId=existing?.id||id,nextVersion=Number(existing?.version||0)+1,layoutJson=JSON.stringify(checked.layout);
+      const note=String(b.changeNote||"Owner dashboard layout update").trim().slice(0,240);
+      const statements=[
+        db.prepare("INSERT INTO daga_dashboard_layouts (id,scope,store_id,layout_json,version,updated_by,updated_at) VALUES (?,?,?,?,?,?,?) ON CONFLICT DO UPDATE SET layout_json=excluded.layout_json,version=excluded.version,updated_by=excluded.updated_by,updated_at=excluded.updated_at").bind(layoutId,scope,storeId,layoutJson,nextVersion,owner.id,now),
+        db.prepare("INSERT INTO daga_dashboard_layout_versions (id,layout_id,version,layout_json,changed_by,change_note,created_at) VALUES (?,?,?,?,?,?,?)").bind(crypto.randomUUID(),layoutId,nextVersion,layoutJson,owner.id,note,now)
+      ];
+      await db.batch(statements);
+      await audit(db,owner.id,"dashboard_layout_saved","daga_dashboard_layouts",layoutId,{scope,storeId,version:nextVersion,columnCount:checked.layout.columns.length});
+      return json(env,{ok:true,id:layoutId,scope,storeId,version:nextVersion,layout:checked.layout});
+    }
+    if(path==="/owner/admin/dashboard-layout/history"&&request.method==="GET"){
+      const storeId=String(url.searchParams.get("storeId")||"").trim()||null;
+      const row=storeId
+        ? await db.prepare("SELECT id FROM daga_dashboard_layouts WHERE scope='store' AND store_id=?").bind(storeId).first()
+        : await db.prepare("SELECT id FROM daga_dashboard_layouts WHERE scope='global' AND store_id IS NULL").first();
+      if(!row)return json(env,{ok:true,versions:[]});
+      const limit=Math.max(1,Math.min(50,Number(url.searchParams.get("limit")||20)));
+      const versions=await db.prepare("SELECT version,change_note,created_at FROM daga_dashboard_layout_versions WHERE layout_id=? ORDER BY version DESC LIMIT ?").bind(row.id,limit).all();
+      return json(env,{ok:true,versions:versions.results||[]});
+    }
+
     if(path==="/owner/admin/store-labels"&&request.method==="GET"){
       const storeId=String(url.searchParams.get("storeId")||"").trim();
       if(!storeId)return json(env,{error:"storeId_required"},400);
@@ -459,12 +564,44 @@ export async function handleOwnerAdmin(request, env, url) {
   }
 }
 
+function validateDashboardLayout(value){
+  if(!value||typeof value!=="object"||Array.isArray(value))return {ok:false,error:"layout_object_required"};
+  const raw=Array.isArray(value.columns)?value.columns:null;
+  if(!raw||raw.length<1||raw.length>30)return {ok:false,error:"columns_count_out_of_range"};
+  const ids=new Set(),keys=new Set(),columns=[];
+  for(const col of raw){
+    if(!col||typeof col!=="object"||Array.isArray(col))return {ok:false,error:"column_object_required"};
+    const id=String(col.id||"").trim(),key=String(col.key||"").trim(),name=String(col.name||"").trim();
+    if(!/^[A-Za-z0-9_-]{3,100}$/.test(id)||! /^[a-z][a-z0-9_-]{1,63}$/.test(key)||!name||name.length>80)return {ok:false,error:"invalid_column_identity_or_name"};
+    if(ids.has(id)||keys.has(key))return {ok:false,error:"duplicate_column_identity"};
+    ids.add(id);keys.add(key);
+    const entries=Array.isArray(col.entries)?col.entries:[];
+    if(entries.length>200)return {ok:false,error:"too_many_entries"};
+    const entryIds=new Set();
+    const safeEntries=[];
+    for(const entry of entries){
+      if(!entry||typeof entry!=="object"||Array.isArray(entry))return {ok:false,error:"entry_object_required"};
+      const eid=String(entry.id||"").trim(),ekey=String(entry.key||"").trim(),ename=String(entry.name||"").trim();
+      const treatment=String(entry.treatment||"standard");
+      if(!/^[A-Za-z0-9_-]{3,120}$/.test(eid)||! /^[a-z][a-z0-9_-]{1,63}$/.test(ekey)||!ename||ename.length>80||entryIds.has(eid))return {ok:false,error:"invalid_entry_identity_or_name"};
+      if(!["standard","asset","other_company","service"].includes(treatment))return {ok:false,error:"invalid_accounting_treatment"};
+      entryIds.add(eid);
+      safeEntries.push({id:eid,key:ekey,name:ename,enabled:entry.enabled!==false,treatment,linkedCompany:String(entry.linkedCompany||"").trim().slice(0,100),calculationKey:String(entry.calculationKey||"").trim().slice(0,80)});
+    }
+    columns.push({id,key,name,enabled:col.enabled!==false,role:String(col.role||"custom").slice(0,40),entries:safeEntries});
+  }
+  return {ok:true,layout:{version:1,columns}};
+}
 async function readJson(request){try{return await request.json()}catch(_){return null}}
 function normalizeStoreFeatures(value) {
   void value;
   return JSON.stringify({ tier: "single", smartAssistantEnabled: true, historyEnabled: true });
 }
 function safeObjectJson(value){return JSON.stringify(value&&typeof value==="object"&&!Array.isArray(value)?value:{}) .slice(0,10000)}
+async function ensureKnowledgeTable(db) {
+  await db.prepare("CREATE TABLE IF NOT EXISTS daga_knowledge_entries (id TEXT PRIMARY KEY, title TEXT NOT NULL, category TEXT NOT NULL, content TEXT NOT NULL, is_active INTEGER NOT NULL DEFAULT 1, created_by TEXT NOT NULL, updated_by TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)").run();
+  await db.prepare("CREATE INDEX IF NOT EXISTS idx_daga_knowledge_active_updated ON daga_knowledge_entries (is_active, updated_at)").run();
+}
 async function audit(db,actor,action,targetType,targetId,details){
   try{await db.prepare("INSERT INTO daga_audit_log (actor_account_id,action,target_type,target_id,details_json) VALUES (?,?,?,?,?)").bind(actor,action,targetType,targetId,JSON.stringify(details||{}).slice(0,4000)).run()}catch(_){}
 }
