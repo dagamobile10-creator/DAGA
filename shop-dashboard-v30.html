@@ -145,6 +145,48 @@ button{transition:filter .15s,transform .15s;border-radius:14px}button:active{tr
  .reconGrid b{font-size:14px;line-height:1.2;overflow-wrap:anywhere}
  .title{margin-top:14px;margin-bottom:7px}
 }
+
+/* Refined premium hierarchy for summary area */
+@media(max-width:600px){
+ .hero{
+  min-height:76px!important;padding:8px 12px!important;
+  background:radial-gradient(ellipse at 12% 10%,rgba(202,163,83,.10),transparent 52%),linear-gradient(115deg,#17160f,#10100e)!important;
+  border:1px solid #403622!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.035),0 5px 16px rgba(0,0,0,.18)
+ }
+ .hero h1{font-size:18px!important;letter-spacing:-.2px}
+ .hero img,.hero .avatar{border:1px solid #796039!important;box-shadow:0 0 0 3px rgba(215,174,88,.07)}
+ .summaryPair{
+  margin-top:9px!important;border:1px solid #51432b!important;
+  background:linear-gradient(135deg,#19170f 0%,#11110f 55%,#17140e 100%)!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.045),0 6px 18px rgba(0,0,0,.2)
+ }
+ .summaryPair .balance{min-height:88px!important;padding:11px 9px!important}
+ .summaryPair .balance+.balance{border-right:1px solid rgba(215,174,88,.32)!important}
+ .summaryPair .label{color:#b8ad96!important;font-size:10px!important;font-weight:600;letter-spacing:.1px}
+ .summaryPair .num{color:#f2eee4!important;font-size:clamp(18px,5vw,24px)!important;font-weight:850!important}
+ .summaryPair #liveWordBalanceCard .num{color:#dfb85f!important}
+ #reconBox{
+  margin-top:9px!important;padding:10px 10px 11px!important;
+  background:linear-gradient(145deg,#17160f,#10100e)!important;
+  border:1px solid #403622!important;border-radius:19px!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.035)
+ }
+ #reconBox .reconTitle{
+  display:flex;align-items:center;gap:7px;color:#e0ba68!important;
+  font-size:15px!important;font-weight:800!important;margin:0 0 8px!important
+ }
+ #reconBox .reconTitle:before{content:"";width:3px;height:17px;border-radius:4px;background:linear-gradient(#f1d48a,#b78a3d);display:inline-block}
+ #reconBox .reconGrid{gap:6px!important}
+ #reconBox .reconGrid div{
+  min-width:0;padding:8px 6px!important;border-radius:12px!important;
+  background:linear-gradient(180deg,#0c0c0b,#090909)!important;
+  border:1px solid #302b21!important;text-align:center;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.025)
+ }
+ #reconBox .reconGrid span{color:#a9a194!important;font-size:9px!important;font-weight:600;min-height:22px}
+ #reconBox .reconGrid b{display:block;color:#f1eee6!important;font-size:clamp(11px,3.2vw,14px)!important;font-weight:800;overflow-wrap:anywhere}
+ #reconBox .reconGrid div:last-child b{color:#e2b75d!important}
+}
 </style>
 </head>
 <body>
