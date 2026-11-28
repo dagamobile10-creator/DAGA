@@ -788,7 +788,8 @@ function confirmDelete(i,j){
   const amount=num(e[1]),name=String((e[2]&&e[2].adminLabel)||e[0]);
   if(!money){alert('مش لاقي بند الفلوس الأساسية في عمود الكروت. لم يتم حذف أي حاجة.');return;}
   if(money.entry[1]!==undefined&&num(money.entry[1])-amount<0){alert('التسوية هتخلي الفلوس الأساسية بالسالب. راجع المبلغ قبل الحذف.');return;}
-  open(`<h2>تأكيد تسوية المندوب</h2><div class="reconMini"><div>حساب المندوب / الشركة <b>${esc(name)}</b></div><div>المبلغ المستحق <b>${fmt(amount)} ج.م</b></div><div>الفلوس الأساسية حاليًا <b>${fmt(num(money.entry[1]))} ج.م</b></div><div>الفلوس الأساسية بعد التسوية <b>${fmt(num(money.entry[1])-amount)} ج.م</b></div></div><p class="small">هل تم حساب المندوب وصرف مستحقاته بالفعل؟</p><div class="grid"><button class="primary" onclick="doDelete(${i},${j},-${amount},${num(money.entry[1])},'',0,null)">أيوه، اتحسب — احذف وسوّي</button><button onclick="closeModal()">لأ، لسه ما اتحسبش — احتفظ بالبند</button><button onclick="closeModal()">إلغاء</button></div>`);
+  const moneyBefore=num(money.entry[1]);
+  open(`<h2>تأكيد تسوية المندوب</h2><div class="reconMini"><div>حساب المندوب / الشركة <b>${esc(name)}</b></div><div>المبلغ المستحق <b>${fmt(amount)} ج.م</b></div><div>الفلوس الأساسية حاليًا <b>${fmt(moneyBefore)} ج.م</b></div><div>الفلوس الأساسية بعد التسوية <b>${fmt(moneyBefore-amount)} ج.م</b></div></div><p class="small">هل تم حساب المندوب وصرف مستحقاته بالفعل؟</p><div class="grid"><button class="primary" onclick="reviewCompanyBalanceSettlement(${i},${j},${amount},${moneyBefore})">أيوة اتحاسب</button><button onclick="closeModal()">لأ، لسه ما اتحسبش — احتفظ بالبند</button><button onclick="closeModal()">إلغاء</button></div>`);
   return;
  }
  const impact=moneyImpactForManualEdit(i,e[0],-num(e[1]),e);
@@ -799,6 +800,39 @@ function confirmDelete(i,j){
  const agentBefore=impact.agentName?getCardAgentBalance(impact.agentName).value:null;
  if(impact.agentDelta&&agentBefore+impact.agentDelta<0){alert('الحذف هيخلي رصيد '+impact.agentName+' بالسالب. لم يتم الحذف.');return;}
  open(`<h2>مراجعة حذف بند</h2><div class="reconMini"><div>وقت المراجعة <b>${esc(localStamp())}</b></div><div>البند <b>${esc((e[2]&&e[2].adminLabel)||e[0])} — ${esc(cols[i].name)}</b></div><div>القيمة المراد حذفها <b>${fmt(num(e[1]))} ج.م</b></div><div>تأثير الفلوس الأساسية <b>${impact.delta>0?'+':''}${fmt(impact.delta)} ج.م</b></div>${impact.agentName?`<div>تسوية حساب ${esc(impact.agentName)} <b>${impact.agentDelta>0?'+':''}${fmt(impact.agentDelta)} ج.م</b></div>`:''}${money?`<div>الفلوس قبل <b>${fmt(num(money.entry[1]))} ج.م</b></div><div>الفلوس بعد <b>${fmt(num(money.entry[1])+impact.delta)} ج.م</b></div>`:''}</div><p class="small">${esc(impact.description)} لن يتم الحذف قبل التأكيد.</p><div class="grid"><button class="primary" onclick="doDelete(${i},${j},${impact.delta},${money?num(money.entry[1]):'null'},${esc(JSON.stringify(impact.agentName||''))},${impact.agentDelta||0},${agentBefore===null?'null':agentBefore})">تأكيد الحذف</button><button onclick="removeEntry(${i})">رجوع</button></div>`);
+}
+function reviewCompanyBalanceSettlement(i,j,amount,moneyBefore){
+ const entry=cols[i]?.entries[j],money=findMoneyEntry();
+ if(!entry||!isCompanyLinkedBalanceEntry(cols[i],entry)||num(entry[1])!==amount||!money||num(money.entry[1])!==moneyBefore){
+  alert('بيانات البند أو الفلوس الأساسية اتغيرت من وقت المراجعة. افتح التسوية من جديد.');render();return;
+ }
+ if(moneyBefore-amount<0){alert('التسوية هتخلي الفلوس الأساسية بالسالب. لم يتم تنفيذ أي تغيير.');return;}
+ const companyName=String((entry[2]&&entry[2].adminLabel)||entry[0]);
+ const moneyName=String((money.entry[2]&&money.entry[2].adminLabel)||money.entry[0]);
+ open(`<h2>مراجعة نهائية قبل تنفيذ التسوية</h2>
+ <p class="small">راجع تفاصيل العملية التالية. لم يتم حذف البند أو تغيير أي رصيد حتى الآن.</p>
+ <div class="reconMini">
+  <div>نوع العملية <b>تسوية وحذف بند شركة من عمود الرصيد</b></div>
+  <div>اسم الشركة / الحساب <b>${esc(companyName)}</b></div>
+  <div>العمود <b>${esc(cols[i].adminLabel||cols[i].name)}</b></div>
+  <div>قيمة البند التي سيتم حذفها <b>${fmt(amount)} ج.م</b></div>
+  <div>بند الخصم في عمود الكروت <b>${esc(moneyName)}</b></div>
+  <div>رصيد الفلوس قبل العملية <b>${fmt(moneyBefore)} ج.م</b></div>
+  <div>قيمة الخصم من الفلوس <b>− ${fmt(amount)} ج.م</b></div>
+  <div>رصيد الفلوس بعد العملية <b>${fmt(moneyBefore-amount)} ج.م</b></div>
+  <div>باقي بنود الكروت <b>لن تتغير</b></div>
+  <div>سجل الحركات <b>سيتم تسجيل الحذف والتسوية بالتاريخ والوقت</b></div>
+ </div>
+ <p class="small">بالضغط على «تأكيد العملية والحذف» سيتم تنفيذ الخصم وحذف بند ${esc(companyName)} في عملية واحدة. لا يمكن التراجع عنها من هذه الشاشة.</p>
+ <div class="grid"><button class="primary" onclick="confirmCompanyBalanceSettlement(${i},${j},${amount},${moneyBefore})">تأكيد العملية والحذف</button><button onclick="confirmDelete(${i},${j})">رجوع للمراجعة</button><button onclick="closeModal()">إلغاء</button></div>`);
+}
+function confirmCompanyBalanceSettlement(i,j,amount,moneyBefore){
+ const entry=cols[i]?.entries[j],money=findMoneyEntry();
+ if(!entry||!isCompanyLinkedBalanceEntry(cols[i],entry)||num(entry[1])!==amount||!money||num(money.entry[1])!==moneyBefore){
+  alert('بيانات الحساب اتغيرت قبل التأكيد النهائي. لم يتم تنفيذ العملية. راجع التسوية من جديد.');render();return;
+ }
+ if(moneyBefore-amount<0){alert('العملية هتخلي الفلوس الأساسية بالسالب. لم يتم تنفيذها.');return;}
+ doDelete(i,j,-amount,moneyBefore,'',0,null);
 }
 function doDelete(i,j,impactDelta=0,moneyBefore=null,agentName='',agentDelta=0,agentBefore=null){
  const backup={cols:JSON.parse(JSON.stringify(cols)),ledger:JSON.parse(JSON.stringify(ledger)),closedDays:JSON.parse(JSON.stringify(closedDays))};
