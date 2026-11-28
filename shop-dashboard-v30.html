@@ -1316,7 +1316,7 @@ function review(){
 }
 function answerClarificationFromText(text){
  if(pendingClarification?.type==='outsideAddDuplicate'){
-  const q=pendingClarification,answer=String(text||''),makeSeparate=/(بند مستقل|اضافه مستقله|لوحده|منفصل)/.test(answer),merge=/(ادمج|دمج|على الموجود)/.test(answer),mergeIndexMatch=answer.match(/ادمج على الموجود رقم (\\d+)/),mergeIndex=mergeIndexMatch?Number(mergeIndexMatch[1]):-1;
+  const q=pendingClarification,answer=String(text||''),makeSeparate=/(بند مستقل|اضافه مستقله|لوحده|منفصل)/.test(answer),merge=/(ادمج|دمج|على الموجود)/.test(answer),mergeIndexMatch=answer.match(/ادمج على الموجود رقم (\d+)/),mergeIndex=mergeIndexMatch?Number(mergeIndexMatch[1]):-1;
   if(/^(الغاء|الغي|وقف)$/i.test(String(text||'').trim())){pendingClarification=null;pendingOrder=null;const box=document.getElementById('orderPreview');if(box)box.innerHTML='<p class="status">تم إلغاء العملية؛ لم يتغير أي رصيد.</p>';return;}
   if(!makeSeparate&&!merge){const box=document.getElementById('orderPreview');if(box)box.innerHTML='<p class="small">اختار: بند مستقل ولا دمج مع الموجود؟</p><button class="primary" onclick="answerClarificationFromText(\'بند مستقل\')">إضافة مستقلة</button><button onclick="answerClarificationFromText(\'ادمج على الموجود\')">دمج مع الموجود</button><button onclick="answerClarificationFromText(\'إلغاء\')">إلغاء</button>';return;}
   const order={...q.order,duplicateMode:makeSeparate?'separate':'merge'};
